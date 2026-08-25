@@ -3,6 +3,16 @@ interface Attempt {
   resetAt: number;
 }
 
+// Traefik ANEXA o IP real do cliente ao X-Forwarded-For recebido (em vez de
+// substituí-lo) — um cliente pode mandar qualquer valor forjado como
+// primeira entrada, então só a ÚLTIMA entrada (a que o proxy anexou a partir
+// da conexão TCP real) é confiável como chave do rate limit.
+export function extractClientIp(xForwardedFor: string | null): string {
+  if (!xForwardedFor) return 'unknown';
+  const parts = xForwardedFor.split(',').map((p) => p.trim()).filter((p) => p.length > 0);
+  return parts[parts.length - 1] ?? 'unknown';
+}
+
 const attempts = new Map<string, Attempt>();
 const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 15 * 60 * 1000;

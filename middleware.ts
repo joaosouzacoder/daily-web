@@ -11,8 +11,11 @@ export async function middleware(request: NextRequest) {
   }
 
   const token = request.cookies.get('daily_web_session')?.value;
-  const secret = process.env.SESSION_SECRET ?? '';
-  const session = token ? await verifySessionToken(token, secret, SESSION_MAX_AGE_MS) : null;
+  const secret = process.env.SESSION_SECRET;
+  // Fail closed: sem SESSION_SECRET configurado, nenhum token pode ser
+  // considerado válido — verificar contra um segredo vazio aceitaria
+  // qualquer token forjado com esse mesmo segredo vazio, conhecido.
+  const session = token && secret ? await verifySessionToken(token, secret, SESSION_MAX_AGE_MS) : null;
 
   if (!session) {
     if (pathname.startsWith('/api')) {

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyPassword, verifyUsername } from '@/lib/auth/password';
 import { createSessionToken } from '@/lib/auth/session';
-import { isRateLimited, registerFailedAttempt, clearAttempts } from '@/lib/auth/rateLimit';
+import { isRateLimited, registerFailedAttempt, clearAttempts, extractClientIp } from '@/lib/auth/rateLimit';
 
 const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 
 export async function POST(request: NextRequest) {
-  const ip = request.headers.get('x-forwarded-for') ?? 'unknown';
+  const ip = extractClientIp(request.headers.get('x-forwarded-for'));
   if (isRateLimited(ip)) {
     return NextResponse.json({ error: 'muitas tentativas, tente mais tarde' }, { status: 429 });
   }
