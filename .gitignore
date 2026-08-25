@@ -17,6 +17,9 @@ data/
 .env.local
 .env.*.local
 
+# Next.js generated types
+next-env.d.ts
+
 # Editor / OS
 .DS_Store
 
