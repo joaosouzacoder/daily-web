@@ -65,7 +65,7 @@ function looksLikeHtml(raw: string): boolean {
   return /<\s*(html|body|table|div|p|br)\b/i.test(raw);
 }
 
-const BLOCK_TAGS_RE = /<\/?(p|br|div|tr|li|h[1-6]|table|ul|ol)\b[^>]*>/gi;
+const BLOCK_TAGS_RE = /<\/?(p|br|div|tr|td|th|li|h[1-6]|table|ul|ol)\b[^>]*>/gi;
 
 export function readable(raw: string): string {
   if (!looksLikeHtml(raw)) {
@@ -73,8 +73,10 @@ export function readable(raw: string): string {
   }
   const withoutScripts = raw
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '');
-  const withBreaks = withoutScripts.replace(BLOCK_TAGS_RE, '\n');
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '');
+  const withoutHidden = withoutScripts.replace(/<([a-z][a-z0-9]*)\b[^>]*\bstyle\s*=\s*["'][^"']*display\s*:\s*none[^"']*["'][^>]*>[\s\S]*?<\/\1>/gi, '');
+  const withBreaks = withoutHidden.replace(BLOCK_TAGS_RE, '\n');
   const withoutTags = withBreaks.replace(/<[^>]+>/g, '');
   return collapseBlankLines(decodeEntities(withoutTags));
 }

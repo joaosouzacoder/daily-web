@@ -62,6 +62,21 @@ describe('readable', () => {
     const html = '<p>Escritório &amp; equipe</p>';
     expect(readable(html)).toBe('Escritório & equipe');
   });
+
+  it('remove conteúdo oculto com display:none', () => {
+    const html = '<div style="display:none">preheader text aqui</div><p>Conteúdo real</p>';
+    expect(readable(html)).toBe('Conteúdo real');
+  });
+
+  it('separa células de tabela com quebras de linha', () => {
+    const html = '<table><tr><td>Total</td><td>$50.00</td></tr></table>';
+    expect(readable(html)).toBe('Total\n\n$50.00');
+  });
+
+  it('remove comentários HTML MSO', () => {
+    const html = '<p>Início</p><!--[if mso]><style>table{}</style><![endif]--><p>Fim</p>';
+    expect(readable(html)).toBe('Início\n\nFim');
+  });
 });
 
 describe('parseMessageId', () => {
