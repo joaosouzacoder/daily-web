@@ -1,0 +1,8 @@
+    daily-web-app:
+      rule: "Host(`dashboard.joaosouzacoder.com.br`)"
+      priority: 200
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: daily-web-app

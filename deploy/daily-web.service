@@ -1,0 +1,19 @@
+[Unit]
+Description=daily-web dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=jgabr
+WorkingDirectory=/home/jgabr/projects/daily-web
+EnvironmentFile=/etc/daily-web/env
+# npm aqui vem do asdf (shims), que não está no PATH padrão do systemd.
+# Se o Node.js desta máquina for instalado de outra forma (nvm, apt, etc.),
+# ajuste o PATH e o ExecStart abaixo para o caminho real do `npm` (`which npm`).
+Environment=PATH=/home/jgabr/.asdf/shims:/home/jgabr/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/home/jgabr/.asdf/shims/npm start
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
