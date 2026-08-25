@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { parseAgendaTsv } from '@/lib/parsers/gcalcli';
+import { parseAgendaTsv, computeAgendaWindow } from '@/lib/parsers/gcalcli';
 
 const fixture = readFileSync(path.join(__dirname, '../../fixtures/gcalcli-agenda.tsv'), 'utf8');
 
@@ -23,5 +23,27 @@ describe('parseAgendaTsv', () => {
 
   it('ignora linhas em branco', () => {
     expect(parseAgendaTsv('', 'work')).toEqual([]);
+  });
+});
+
+describe('computeAgendaWindow', () => {
+  const ORIGINAL_TZ = process.env.TZ;
+
+  beforeEach(() => {
+    process.env.TZ = 'America/Sao_Paulo';
+  });
+
+  afterEach(() => {
+    process.env.TZ = ORIGINAL_TZ;
+  });
+
+  it('começa na data LOCAL de "now", não na data UTC (23:30 em São Paulo já é dia seguinte em UTC)', () => {
+    const lateLocalNow = new Date('2026-08-25T23:30:00-03:00');
+    expect(computeAgendaWindow(lateLocalNow).start).toBe('2026-08-25');
+  });
+
+  it('termina 7 dias depois da data local de início', () => {
+    const now = new Date('2026-08-25T12:00:00-03:00');
+    expect(computeAgendaWindow(now)).toEqual({ start: '2026-08-25', end: '2026-09-01' });
   });
 });
