@@ -2,30 +2,39 @@ import type { Account, EmailEnvelope } from '@/lib/types';
 
 interface RawAddr {
   name?: string | null;
-  addr?: string | null;
+  email?: string | null;
+}
+
+interface RawFlag {
+  iana?: string | null;
 }
 
 interface RawEnvelope {
   id: string;
-  flags?: string[] | null;
+  flags?: RawFlag[] | null;
   subject?: string | null;
-  from?: RawAddr | null;
+  from?: RawAddr[] | null;
   date?: string | null;
 }
 
+interface RawEnvelopeList {
+  envelopes?: RawEnvelope[] | null;
+}
+
 export function parseEnvelopes(json: string, account: Account): EmailEnvelope[] {
-  const raw: RawEnvelope[] = JSON.parse(json);
+  const parsed: RawEnvelopeList = JSON.parse(json);
+  const raw = parsed.envelopes ?? [];
   return raw.map((env) => {
     const flags = env.flags ?? [];
-    const from = env.from ?? {};
+    const from = env.from?.[0] ?? {};
     const name = from.name ?? '';
-    const addr = from.addr ?? '';
+    const addr = from.email ?? '';
     return {
       id: env.id,
       account,
       from: name.trim() ? name : addr,
       subject: env.subject ?? '',
-      unread: !flags.some((f) => f.toLowerCase() === 'seen'),
+      unread: !flags.some((f) => f.iana === 'seen'),
       date: env.date ?? '',
     };
   });
@@ -117,15 +126,38 @@ export function readable(raw: string): string {
   return collapseBlankLines(decodeEntities(withoutTags));
 }
 
-export function parseMessageId(raw: string): string | null {
-  for (const line of raw.split('\n')) {
-    const match = /^(message-id):\s*(.+)$/i.exec(line.trim());
-    if (match) {
-      const value = match[2].trim().replace(/^</, '').replace(/>$/, '');
-      return value || null;
+interface RawMessageHeader {
+  name?: string | { other?: string } | null;
+  value?: { Text?: string | null } | null;
+}
+
+interface RawMessagePart {
+  headers?: RawMessageHeader[] | null;
+}
+
+interface RawMessageRead {
+  parts?: RawMessagePart[] | null;
+}
+
+export function parseMessageIdFromJson(json: string): string | null {
+  const parsed: RawMessageRead = JSON.parse(json);
+  for (const part of parsed.parts ?? []) {
+    for (const header of part.headers ?? []) {
+      if (header.name === 'message_id') {
+        return header.value?.Text ?? null;
+      }
     }
   }
   return null;
+}
+
+export function stripMessageReadHeader(raw: string): string {
+  const lines = raw.split('\n');
+  const markerIndex = lines.findIndex((l) => /^\[\d+\]\s/.test(l));
+  if (markerIndex === -1) return raw;
+  const blankIndex = lines.findIndex((l, i) => i > markerIndex && l.trim() === '');
+  if (blankIndex === -1) return raw;
+  return lines.slice(blankIndex + 1).join('\n');
 }
 
 const FOLDER_ALIASES = ['inbox', 'sent', 'drafts', 'trash', 'spam', 'all'];

@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { parseEnvelopes, sortRecentFirst, readable, parseMessageId } from '@/lib/parsers/himalaya';
+import {
+  parseEnvelopes,
+  sortRecentFirst,
+  readable,
+  parseMessageIdFromJson,
+  stripMessageReadHeader,
+} from '@/lib/parsers/himalaya';
 
 const fixture = readFileSync(
   path.join(__dirname, '../../fixtures/himalaya-envelopes.json'),
@@ -84,13 +90,47 @@ describe('readable', () => {
   });
 });
 
-describe('parseMessageId', () => {
-  it('extrai o Message-ID sem os colchetes', () => {
-    const raw = 'Message-ID: <abc123@mail.example.com>\n\ncorpo aqui';
-    expect(parseMessageId(raw)).toBe('abc123@mail.example.com');
+describe('parseMessageIdFromJson', () => {
+  it('extrai o message_id de dentro dos headers da primeira part', () => {
+    const json = JSON.stringify({
+      parts: [
+        {
+          headers: [
+            { name: { other: 'Delivered-To' }, value: { Text: 'a@b.com' } },
+            { name: 'message_id', value: { Text: 'abc123@mail.example.com' } },
+          ],
+        },
+      ],
+    });
+    expect(parseMessageIdFromJson(json)).toBe('abc123@mail.example.com');
   });
 
-  it('devolve null quando não há header', () => {
-    expect(parseMessageId('sem header aqui')).toBeNull();
+  it('devolve null quando não há header message_id', () => {
+    const json = JSON.stringify({ parts: [{ headers: [] }] });
+    expect(parseMessageIdFromJson(json)).toBeNull();
+  });
+
+  it('devolve null quando não há parts', () => {
+    expect(parseMessageIdFromJson(JSON.stringify({}))).toBeNull();
+  });
+});
+
+describe('stripMessageReadHeader', () => {
+  it('remove o bloco de cabeçalho (Date/From/To/Subject) e o marcador da part', () => {
+    const raw = [
+      'Date: Tue, 25 Aug 2026 14:31:13 -0700',
+      'From: GitHub <noreply@github.com>',
+      'Subject: Assunto',
+      '',
+      '[1] text/plain (10 B)',
+      '    Content-Type: text/plain; charset=UTF-8',
+      '',
+      'Corpo real aqui',
+    ].join('\n');
+    expect(stripMessageReadHeader(raw)).toBe('Corpo real aqui');
+  });
+
+  it('devolve o texto original quando não há marcador de part', () => {
+    expect(stripMessageReadHeader('texto simples sem marcador')).toBe('texto simples sem marcador');
   });
 });
