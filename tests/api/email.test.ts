@@ -52,6 +52,45 @@ describe('POST /api/email/batch', () => {
     await batchRoute(jsonRequest({ targets: [{ account: 'work', id: '1' }], action: 'move', folder: 'Arquivo' }));
     expect(moveTo).toHaveBeenCalledWith('work', '1', 'Arquivo');
   });
+
+  it('pasta inválida ao mover devolve 400', async () => {
+    const res = await batchRoute(jsonRequest({ targets: [{ account: 'work', id: '1' }], action: 'move', folder: '-rf' }));
+    expect(res.status).toBe(400);
+    expect(moveTo).not.toHaveBeenCalled();
+  });
+
+  it('falha em um alvo não impede os demais e reporta resultado por item', async () => {
+    vi.mocked(setSeen).mockImplementation(async (_account, id) => {
+      if (id === 'fail') throw new Error('cli error');
+    });
+    const res = await batchRoute(jsonRequest({
+      targets: [{ account: 'work', id: '1' }, { account: 'work', id: 'fail' }, { account: 'personal', id: '2' }],
+      action: 'read',
+    }));
+    const data = await res.json();
+    expect(setSeen).toHaveBeenCalledWith('work', '1', true);
+    expect(setSeen).toHaveBeenCalledWith('work', 'fail', true);
+    expect(setSeen).toHaveBeenCalledWith('personal', '2', true);
+    expect(data.results).toEqual([
+      { account: 'work', id: '1', ok: true },
+      { account: 'work', id: 'fail', ok: false, error: 'cli error' },
+      { account: 'personal', id: '2', ok: true },
+    ]);
+  });
+});
+
+describe('validação de entrada', () => {
+  it('conta inválida no /mark devolve 400', async () => {
+    const res = await markRoute(jsonRequest({ account: 'invalida', id: '1', seen: true }));
+    expect(res.status).toBe(400);
+    expect(setSeen).not.toHaveBeenCalled();
+  });
+
+  it('id com traço inicial no /mark devolve 400', async () => {
+    const res = await markRoute(jsonRequest({ account: 'work', id: '-rf', seen: true }));
+    expect(res.status).toBe(400);
+    expect(setSeen).not.toHaveBeenCalled();
+  });
 });
 
 describe('GET /api/email/folders', () => {

@@ -1,10 +1,17 @@
 import { NextResponse } from 'next/server';
 import { setSeen, moveTo, deleteEmail } from '@/lib/cli/himalaya';
-import type { Account } from '@/lib/types';
+import { isValidAccount, isValidEmailId, isValidFolder } from '@/lib/api/validation';
 
 interface Target {
-  account: Account;
+  account: unknown;
+  id: unknown;
+}
+
+interface BatchTargetResult {
+  account: string;
   id: string;
+  ok: boolean;
+  error?: string;
 }
 
 export async function POST(request: Request) {
@@ -13,15 +20,36 @@ export async function POST(request: Request) {
   const action: 'read' | 'unread' | 'move' | 'delete' = body.action;
   const folder: string | undefined = body.folder;
 
-  if (action === 'move' && !folder) {
+  if (action === 'move' && !isValidFolder(folder)) {
     return NextResponse.json({ error: 'pasta obrigatória' }, { status: 400 });
   }
 
-  for (const target of targets) {
-    if (action === 'read') await setSeen(target.account, target.id, true);
-    else if (action === 'unread') await setSeen(target.account, target.id, false);
-    else if (action === 'delete') await deleteEmail(target.account, target.id);
-    else if (action === 'move') await moveTo(target.account, target.id, folder as string);
-  }
-  return NextResponse.json({ ok: true });
+  const settled = await Promise.allSettled(
+    targets.map(async (target): Promise<BatchTargetResult> => {
+      const account = String(target.account);
+      const id = String(target.id);
+
+      if (!isValidAccount(target.account) || !isValidEmailId(target.id)) {
+        return { account, id, ok: false, error: 'conta ou id inválido' };
+      }
+
+      try {
+        if (action === 'read') await setSeen(target.account, target.id, true);
+        else if (action === 'unread') await setSeen(target.account, target.id, false);
+        else if (action === 'delete') await deleteEmail(target.account, target.id);
+        else if (action === 'move') await moveTo(target.account, target.id, folder as string);
+        return { account, id, ok: true };
+      } catch (err) {
+        return { account, id, ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    }),
+  );
+
+  const results: BatchTargetResult[] = settled.map((r) =>
+    r.status === 'fulfilled'
+      ? r.value
+      : { account: 'unknown', id: 'unknown', ok: false, error: r.reason instanceof Error ? r.reason.message : String(r.reason) },
+  );
+
+  return NextResponse.json({ results });
 }

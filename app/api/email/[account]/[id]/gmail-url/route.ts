@@ -1,12 +1,15 @@
 import { NextResponse } from 'next/server';
 import { gmailUrl } from '@/lib/cli/himalaya';
-import type { Account } from '@/lib/types';
+import { isValidAccount, isValidEmailId } from '@/lib/api/validation';
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ account: string; id: string }> },
 ) {
   const { account, id } = await params;
-  const url = await gmailUrl(account as Account, id);
+  if (!isValidAccount(account) || !isValidEmailId(id)) {
+    return NextResponse.json({ error: 'conta ou id inválido' }, { status: 400 });
+  }
+  const url = await gmailUrl(account, id);
   return NextResponse.json({ url });
 }
