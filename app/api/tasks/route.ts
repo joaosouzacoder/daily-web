@@ -1,13 +1,16 @@
 import { NextResponse } from 'next/server';
 import { addTask, editTask } from '@/lib/cli/mstodo';
 import { parseDueInput } from '@/lib/dateParsing';
-import { isValidTaskPriority, isValidRecur } from '@/lib/api/validation';
+import { isValidTaskPriority, isValidRecur, isSafePositionalValue } from '@/lib/api/validation';
 
 export async function POST(request: Request) {
   const body = await request.json();
   const title: string = body.title ?? '';
   if (!title.trim()) {
     return NextResponse.json({ error: 'título obrigatório' }, { status: 400 });
+  }
+  if (!isSafePositionalValue(title.trim())) {
+    return NextResponse.json({ error: 'título inválido' }, { status: 400 });
   }
 
   if (body.priority !== undefined && !isValidTaskPriority(body.priority)) {

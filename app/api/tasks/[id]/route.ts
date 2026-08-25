@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { editTask, completeTask, reopenTask, deleteTask } from '@/lib/cli/mstodo';
 import { parseDueInput } from '@/lib/dateParsing';
-import { isValidTaskId, isValidTaskPriority, isValidRecur } from '@/lib/api/validation';
+import { isValidTaskId, isValidTaskPriority, isValidRecur, isSafePositionalValue } from '@/lib/api/validation';
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -19,6 +19,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ ok: true });
   }
 
+  if (body.title !== undefined && !isSafePositionalValue(body.title)) {
+    return NextResponse.json({ error: 'título inválido' }, { status: 400 });
+  }
   if (body.priority !== undefined && !isValidTaskPriority(body.priority)) {
     return NextResponse.json({ error: 'prioridade inválida' }, { status: 400 });
   }

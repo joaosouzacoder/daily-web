@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { editSubtask, checkSubtask, deleteSubtask } from '@/lib/cli/mstodo';
-import { isValidTaskId } from '@/lib/api/validation';
+import { isValidTaskId, isSafePositionalValue } from '@/lib/api/validation';
 
 export async function PATCH(
   request: Request,
@@ -11,6 +11,9 @@ export async function PATCH(
     return NextResponse.json({ error: 'id inválido' }, { status: 400 });
   }
   const body = await request.json();
+  if (typeof body.title === 'string' && body.title.trim() && !isSafePositionalValue(body.title.trim())) {
+    return NextResponse.json({ error: 'título inválido' }, { status: 400 });
+  }
   if (typeof body.completed === 'boolean') {
     await checkSubtask(id, itemId, body.completed);
   }

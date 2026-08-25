@@ -33,3 +33,12 @@ export function isValidTaskPriority(value: unknown): value is TaskPriority {
 export function isValidRecur(value: unknown): value is Recur {
   return typeof value === 'string' && (VALID_RECURS as string[]).includes(value);
 }
+
+// Guarda mínima para valores de texto livre (ex.: title) que acabam como
+// argumento posicional ou valor de flag em uma chamada execFile. Não aplica
+// o charset restrito de isValidTaskId (title precisa aceitar espaços,
+// acentos, pontuação) — apenas recusa um "-" inicial, que um parser de CLI
+// poderia interpretar como início de outra flag.
+export function isSafePositionalValue(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && !value.startsWith('-');
+}

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { addSubtask } from '@/lib/cli/mstodo';
-import { isValidTaskId } from '@/lib/api/validation';
+import { isValidTaskId, isSafePositionalValue } from '@/lib/api/validation';
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -11,6 +11,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const title: string = body.title ?? '';
   if (!title.trim()) {
     return NextResponse.json({ error: 'título obrigatório' }, { status: 400 });
+  }
+  if (!isSafePositionalValue(title.trim())) {
+    return NextResponse.json({ error: 'título inválido' }, { status: 400 });
   }
   await addSubtask(id, title.trim());
   return NextResponse.json({ ok: true });
