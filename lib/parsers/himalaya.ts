@@ -67,6 +67,42 @@ function looksLikeHtml(raw: string): boolean {
 
 const BLOCK_TAGS_RE = /<\/?(p|br|div|tr|td|th|li|h[1-6]|table|ul|ol)\b[^>]*>/gi;
 
+function stripHiddenElements(html: string): string {
+  const openTagWithDisplayNone = /<([a-z][a-z0-9]*)\b[^>]*\bstyle\s*=\s*["'][^"']*display\s*:\s*none[^"']*["'][^>]*>/gi;
+  let result = html;
+  let match: RegExpExecArray | null;
+  while ((match = openTagWithDisplayNone.exec(result))) {
+    const tagName = match[1].toLowerCase();
+    const startIndex = match.index;
+    const openRe = new RegExp(`<${tagName}\\b[^>]*>`, 'gi');
+    const closeRe = new RegExp(`</${tagName}>`, 'gi');
+    let depth = 1;
+    let cursor = openTagWithDisplayNone.lastIndex;
+    let endIndex = result.length;
+    while (depth > 0) {
+      openRe.lastIndex = cursor;
+      closeRe.lastIndex = cursor;
+      const nextOpen = openRe.exec(result);
+      const nextClose = closeRe.exec(result);
+      if (!nextClose) {
+        endIndex = result.length;
+        break;
+      }
+      if (nextOpen && nextOpen.index < nextClose.index) {
+        depth += 1;
+        cursor = nextOpen.index + nextOpen[0].length;
+      } else {
+        depth -= 1;
+        cursor = nextClose.index + nextClose[0].length;
+        if (depth === 0) endIndex = cursor;
+      }
+    }
+    result = result.slice(0, startIndex) + result.slice(endIndex);
+    openTagWithDisplayNone.lastIndex = 0;
+  }
+  return result;
+}
+
 export function readable(raw: string): string {
   if (!looksLikeHtml(raw)) {
     return collapseBlankLines(raw);
@@ -75,7 +111,7 @@ export function readable(raw: string): string {
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
     .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
     .replace(/<!--[\s\S]*?-->/g, '');
-  const withoutHidden = withoutScripts.replace(/<([a-z][a-z0-9]*)\b[^>]*\bstyle\s*=\s*["'][^"']*display\s*:\s*none[^"']*["'][^>]*>[\s\S]*?<\/\1>/gi, '');
+  const withoutHidden = stripHiddenElements(withoutScripts);
   const withBreaks = withoutHidden.replace(BLOCK_TAGS_RE, '\n');
   const withoutTags = withBreaks.replace(/<[^>]+>/g, '');
   return collapseBlankLines(decodeEntities(withoutTags));

@@ -77,6 +77,11 @@ describe('readable', () => {
     const html = '<p>Início</p><!--[if mso]><style>table{}</style><![endif]--><p>Fim</p>';
     expect(readable(html)).toBe('Início\n\nFim');
   });
+
+  it('remove bloco display:none mesmo com tag aninhada do mesmo nome dentro', () => {
+    const html = '<div style="display:none">preview <div>nested</div> more hidden text should not leak</div><p>Real content</p>';
+    expect(readable(html)).toBe('Real content');
+  });
 });
 
 describe('parseMessageId', () => {
