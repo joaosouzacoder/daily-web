@@ -4,6 +4,7 @@ import type { Recur } from '@/lib/cli/mstodo';
 const VALID_ACCOUNTS: Account[] = ['work', 'personal'];
 const ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 const FOLDER_PATTERN = /^[A-Za-z0-9 _\-/]+$/;
+const REPO_PATTERN = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
 const VALID_TASK_PRIORITIES: TaskPriority[] = ['low', 'normal', 'high'];
 const VALID_RECURS: Recur[] = ['none', 'daily', 'weekly', 'monthly'];
 
@@ -41,4 +42,8 @@ export function isValidRecur(value: unknown): value is Recur {
 // poderia interpretar como início de outra flag.
 export function isSafePositionalValue(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && !value.startsWith('-');
+}
+
+export function isValidRepo(value: unknown): value is string {
+  return typeof value === 'string' && REPO_PATTERN.test(value);
 }

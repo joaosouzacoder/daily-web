@@ -35,7 +35,11 @@ export default function DashboardPage() {
         <AgendaPanel agenda={state?.agenda ?? { data: [], error: null }} />
         <JiraPanel jira={state?.jira ?? { data: [], error: null }} />
         <TasksPanel tasks={state?.tasks ?? { data: [], error: null }} onChanged={reload} />
-        <PullsPanel pulls={state?.pulls ?? { data: { lines: [] }, error: null }} className="span-2" />
+        <PullsPanel
+          pulls={state?.pulls ?? { data: { lines: [] }, error: null }}
+          className="span-2"
+          onChanged={reload}
+        />
       </div>
     </main>
   );
