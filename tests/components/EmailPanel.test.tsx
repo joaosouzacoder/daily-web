@@ -96,7 +96,7 @@ describe('EmailPanel', () => {
 
   it('abre o e-mail no acordeão em vez de um diálogo', async () => {
     render(<EmailPanel email={{ data: items, error: null }} onChanged={() => {}} />);
-    const row = screen.getByRole('button', { name: /Revisão do PR/ });
+    const row = screen.getByRole('button', { name: /^Revisão do PR/ });
     expect(row).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(row);
     await waitFor(() => expect(screen.getByLabelText('corpo do e-mail')).toBeInTheDocument());
@@ -116,7 +116,7 @@ describe('EmailPanel', () => {
     });
     const onChanged = vi.fn();
     render(<EmailPanel email={{ data: items, error: null }} onChanged={onChanged} />);
-    fireEvent.click(screen.getByRole('button', { name: /Revisão do PR/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Revisão do PR/ }));
 
     const send = await screen.findByRole('button', { name: 'Enviar resposta' });
     expect(send).toBeDisabled();
@@ -144,10 +144,82 @@ describe('EmailPanel', () => {
       return new Response(JSON.stringify({ folders: [] }));
     });
     render(<EmailPanel email={{ data: items, error: null }} onChanged={() => {}} />);
-    fireEvent.click(screen.getByRole('button', { name: /Revisão do PR/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Revisão do PR/ }));
     fireEvent.click(await screen.findByRole('button', { name: 'Responder com IA' }));
     await waitFor(() =>
       expect(screen.getByRole('alert').textContent).toContain('ANTHROPIC_API_KEY'),
     );
+  });
+
+  it('etiqueta pelo ícone da linha, sem abrir o e-mail', async () => {
+    const calls: string[] = [];
+    vi.mocked(global.fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/api/email/tag')) {
+        calls.push(String((init as RequestInit).body));
+        return new Response(JSON.stringify({ ok: true }));
+      }
+      return new Response(JSON.stringify({ folders: ['Financeiro', 'Recibos'] }));
+    });
+    const onChanged = vi.fn();
+    render(<EmailPanel email={{ data: items, error: null }} onChanged={onChanged} />);
+
+    const tagger = screen.getByRole('button', { name: 'etiquetar Revisão do PR' });
+    expect(tagger).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(tagger);
+
+    const option = await screen.findByRole('menuitem', { name: 'Recibos' });
+    fireEvent.click(option);
+
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(JSON.parse(calls[0])).toEqual({ account: 'work', id: '1', tag: 'Recibos' });
+    // O menu fecha e o corpo do e-mail nunca é carregado.
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+    expect(screen.queryByLabelText('corpo do e-mail')).toBeNull();
+    expect(onChanged).toHaveBeenCalled();
+  });
+
+  it('o e-mail aberto não traz mais os botões Etiquetar, Excluir e Fechar', async () => {
+    render(<EmailPanel email={{ data: items, error: null }} onChanged={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: /^Revisão do PR/ }));
+    await waitFor(() => expect(screen.getByLabelText('corpo do e-mail')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'Etiquetar' })).toBeNull();
+    expect(screen.queryByLabelText('etiqueta')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Fechar' })).toBeNull();
+    // "Excluir" ainda existe na barra de ações em lote, mas não dentro do e-mail.
+    expect(screen.queryByRole('button', { name: 'Excluir' })).toBeNull();
+  });
+
+  it('exclui pela lixeira da linha, depois de confirmar', async () => {
+    const bodies: string[] = [];
+    vi.mocked(global.fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/api/email/batch')) {
+        bodies.push(String((init as RequestInit).body));
+        return new Response(JSON.stringify({ results: [{ account: 'work', id: '1', ok: true }] }));
+      }
+      return new Response(JSON.stringify({ folders: [] }));
+    });
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const onChanged = vi.fn();
+    render(<EmailPanel email={{ data: items, error: null }} onChanged={onChanged} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'excluir Revisão do PR' }));
+
+    await waitFor(() => expect(bodies).toHaveLength(1));
+    expect(JSON.parse(bodies[0])).toEqual({
+      targets: [{ account: 'work', id: '1' }],
+      action: 'delete',
+    });
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(onChanged).toHaveBeenCalled();
+  });
+
+  it('cancelar a confirmação não exclui nada', () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<EmailPanel email={{ data: items, error: null }} onChanged={() => {}} />);
+    const before = vi.mocked(global.fetch).mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: 'excluir Revisão do PR' }));
+    expect(vi.mocked(global.fetch).mock.calls.length).toBe(before);
   });
 });

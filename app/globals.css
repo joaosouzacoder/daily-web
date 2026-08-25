@@ -665,17 +665,6 @@ input[type='checkbox']:checked {
   gap: var(--s2);
 }
 
-.mail-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-  flex-wrap: wrap;
-}
-
-.mail-actions-spacer {
-  flex: 1;
-}
-
 .mail-reply {
   display: flex;
   flex-direction: column;
@@ -719,6 +708,99 @@ textarea.mail-reply-input {
   border-radius: 4px;
   padding: 1px 5px;
   flex: none;
+}
+
+/* ---------- etiqueta na linha ---------- */
+
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+.row-tagger {
+  position: relative;
+  display: flex;
+}
+
+.icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition:
+    color var(--fast) var(--ease),
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+
+.icon-btn:hover,
+.icon-btn[aria-expanded='true'] {
+  color: var(--text);
+  background: var(--surface);
+  border-color: var(--hairline);
+}
+
+.icon-btn.is-tagged {
+  color: var(--accent);
+}
+
+.icon-btn-danger:hover {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+}
+
+/* Mesmo par scrim + popover do sino: o scrim fecha no clique fora e o menu
+   sobe acima das linhas seguintes. */
+.tag-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
+.tag-menu {
+  position: absolute;
+  top: calc(100% + var(--s2));
+  right: 0;
+  z-index: 41;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: var(--s2);
+  background: var(--surface);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 12px;
+  box-shadow: 0 24px 60px rgba(4, 2, 10, 0.55);
+  animation: modal-in var(--med) var(--ease);
+}
+
+.tag-menu-item {
+  padding: var(--s2) var(--s3);
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-muted);
+  font-size: var(--step--1);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    color var(--fast) var(--ease),
+    background var(--fast) var(--ease);
+}
+
+.tag-menu-item:hover {
+  color: var(--text);
+  background: var(--surface-hover);
 }
 
 /* ---------- tarefas ---------- */

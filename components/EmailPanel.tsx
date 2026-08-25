@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { Label, Trash } from 'iconoir-react';
 import type { Account, EmailEnvelope, PanelResult } from '@/lib/types';
 import type { ActiveFilter } from '@/lib/filters';
 import { matchesQuery, relativeTime } from '@/lib/filters';
@@ -61,6 +62,8 @@ async function postBatch(
 export function EmailPanel({ email, onChanged, loading = false }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openKey, setOpenKey] = useState<string | null>(null);
+  const [tagMenuKey, setTagMenuKey] = useState<string | null>(null);
+  const [appliedTags, setAppliedTags] = useState<Record<string, string[]>>({});
   const [batchError, setBatchError] = useState<string | null>(null);
   const [folders, setFolders] = useState<string[]>([]);
   const [targetFolder, setTargetFolder] = useState('');
@@ -79,6 +82,50 @@ export function EmailPanel({ email, onChanged, loading = false }: Props) {
     if (!res.ok) return;
     const data = await res.json();
     setTagFolders((prev) => ({ ...prev, [acc]: (data.folders ?? []) as string[] }));
+  };
+
+  useEffect(() => {
+    if (tagMenuKey === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setTagMenuKey(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [tagMenuKey]);
+
+  const applyTag = async (m: EmailEnvelope, tag: string) => {
+    const res = await fetch('/api/email/tag', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account: m.account, id: m.id, tag }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setTagMenuKey(null);
+    if (!res.ok) {
+      setBatchError(data.error ?? 'Falha ao aplicar etiqueta');
+      return;
+    }
+    setBatchError(null);
+    setAppliedTags((prev) => {
+      const current = prev[key(m)] ?? [];
+      if (current.includes(tag)) return prev;
+      return { ...prev, [key(m)]: [...current, tag] };
+    });
+    onChanged();
+  };
+
+  const removeEmail = async (m: EmailEnvelope) => {
+    if (!window.confirm('Excluir este e-mail?')) return;
+    const [result] = await postBatch([{ account: m.account, id: m.id }], 'delete');
+    if (result && !result.ok) {
+      setBatchError(result.error ?? 'Falha ao excluir');
+      return;
+    }
+    setBatchError(null);
+    // A linha some do próximo refresh; fechar o acordeão evita ficar com o
+    // corpo de um e-mail que não existe mais na tela.
+    setOpenKey((prev) => (prev === key(m) ? null : prev));
+    onChanged();
   };
 
   const all = useMemo(() => email.data ?? [], [email.data]);
@@ -306,13 +353,60 @@ export function EmailPanel({ email, onChanged, loading = false }: Props) {
                   </button>
                   <span className="row-time mono">{relativeTime(m.date)}</span>
                   <span className="row-tag mono">{m.account === 'work' ? 'W' : 'P'}</span>
+                  <div className="row-actions">
+                    <div className="row-tagger">
+                      <button
+                        type="button"
+                        className={`icon-btn${(appliedTags[key(m)] ?? []).length > 0 ? ' is-tagged' : ''}`}
+                        aria-label={`etiquetar ${m.subject || '(sem assunto)'}`}
+                        aria-expanded={tagMenuKey === key(m)}
+                        onClick={() => {
+                          const next = tagMenuKey === key(m) ? null : key(m);
+                          setTagMenuKey(next);
+                          if (next) void loadTagFolders(m.account);
+                        }}
+                      >
+                        <Label width={16} height={16} />
+                      </button>
+                      {tagMenuKey === key(m) && (
+                        <>
+                          <div className="tag-scrim" onClick={() => setTagMenuKey(null)} />
+                          <div className="tag-menu" role="menu" aria-label="etiquetas">
+                            {(tagFolders[m.account] ?? []).length === 0 ? (
+                              <p className="empty">Carregando etiquetas…</p>
+                            ) : (
+                              (tagFolders[m.account] ?? []).map((f) => (
+                                <button
+                                  key={f}
+                                  type="button"
+                                  role="menuitem"
+                                  className="tag-menu-item"
+                                  onClick={() => void applyTag(m, f)}
+                                >
+                                  {f}
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className="icon-btn icon-btn-danger"
+                      aria-label={`excluir ${m.subject || '(sem assunto)'}`}
+                      onClick={() => void removeEmail(m)}
+                    >
+                      <Trash width={16} height={16} />
+                    </button>
+                  </div>
                 </div>
                 {isOpen && (
                   <EmailDetail
                     email={m}
                     onClose={() => setOpenKey(null)}
                     onChanged={onChanged}
-                    folders={tagFolders[m.account] ?? []}
+                    appliedTags={appliedTags[key(m)] ?? []}
                   />
                 )}
               </li>
@@ -328,26 +422,19 @@ function EmailDetail({
   email,
   onClose,
   onChanged,
-  folders,
+  appliedTags,
 }: {
   email: EmailEnvelope;
   onClose: () => void;
   onChanged: () => void;
-  folders: string[];
+  appliedTags: string[];
 }) {
   const [body, setBody] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tag, setTag] = useState('');
-  const [appliedTags, setAppliedTags] = useState<string[]>([]);
   const [reply, setReply] = useState('');
   const [drafting, setDrafting] = useState(false);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
-  const tagOptions = folders;
-
-  useEffect(() => {
-    setTag((prev) => (prev && folders.includes(prev) ? prev : (folders[0] ?? '')));
-  }, [folders]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -403,23 +490,6 @@ function EmailDetail({
     onChanged();
   };
 
-  const applyTag = async () => {
-    if (!tag) return;
-    const res = await fetch('/api/email/tag', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ account: email.account, id: email.id, tag }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setError(data.error ?? 'Falha ao aplicar etiqueta');
-      return;
-    }
-    setError(null);
-    setAppliedTags((prev) => (prev.includes(tag) ? prev : [...prev, tag]));
-    onChanged();
-  };
-
   useEffect(() => {
     let cancelled = false;
     void fetch(`/api/email/${email.account}/${email.id}/body`)
@@ -441,17 +511,6 @@ function EmailDetail({
       cancelled = true;
     };
   }, [email.account, email.id, email.unread, onChanged]);
-
-  const remove = async () => {
-    if (!window.confirm('Excluir este e-mail?')) return;
-    const [result] = await postBatch([{ account: email.account, id: email.id }], 'delete');
-    if (result && !result.ok) {
-      setError(result.error ?? 'Falha ao excluir');
-      return;
-    }
-    onChanged();
-    onClose();
-  };
 
   // Abre logo abaixo da linha clicada, não no meio da tela: o e-mail fica
   // no lugar onde o olho já estava.
@@ -503,34 +562,6 @@ function EmailDetail({
         </div>
       </div>
 
-      <div className="mail-actions">
-        {tagOptions.length > 0 && (
-          <>
-            <select
-              className="field"
-              aria-label="etiqueta"
-              value={tag}
-              onChange={(e) => setTag(e.target.value)}
-            >
-              {tagOptions.map((f) => (
-                <option key={f} value={f}>
-                  {f}
-                </option>
-              ))}
-            </select>
-            <button type="button" className="btn" onClick={() => void applyTag()}>
-              Etiquetar
-            </button>
-          </>
-        )}
-        <span className="mail-actions-spacer" />
-        <button type="button" className="btn btn-danger" onClick={() => void remove()}>
-          Excluir
-        </button>
-        <button type="button" className="btn" onClick={onClose}>
-          Fechar
-        </button>
-      </div>
     </div>
   );
 }

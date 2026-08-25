@@ -14,6 +14,7 @@
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^11.3.0",
     "geist": "^1.7.2",
+    "iconoir-react": "^7.12.1",
     "next": "16.0.0",
     "react": "19.0.0",
     "react-dom": "19.0.0"
