@@ -44,4 +44,16 @@ describe('NotificationsBell', () => {
     await waitFor(() => expect(fetchSpy).toHaveBeenCalledWith('/api/notifications/A-1/read', { method: 'POST' }));
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
   });
+
+  it('marcar como lida com resposta não-ok mostra erro visível e não chama onChanged', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ error: 'db falhou' }), { status: 502 }),
+    );
+    const onChanged = vi.fn();
+    render(<NotificationsBell notifications={{ data: items, error: null }} onChanged={onChanged} />);
+    fireEvent.click(screen.getByLabelText('notificações'));
+    fireEvent.click(screen.getByText('marcar como lida'));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('db falhou'));
+    expect(onChanged).not.toHaveBeenCalled();
+  });
 });

@@ -39,4 +39,15 @@ describe('Pomodoro', () => {
     render(<Pomodoro pomodoro={{ ...base, running: true }} onChanged={() => {}} />);
     expect(screen.getByText('pausar')).toBeInTheDocument();
   });
+
+  it('resposta de start não-ok mostra erro visível e não chama onChanged', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ error: 'pomodoro falhou' }), { status: 502 }),
+    );
+    const onChanged = vi.fn();
+    render(<Pomodoro pomodoro={base} onChanged={onChanged} />);
+    fireEvent.click(screen.getByText('iniciar'));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('pomodoro falhou'));
+    expect(onChanged).not.toHaveBeenCalled();
+  });
 });

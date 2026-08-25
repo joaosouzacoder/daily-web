@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { PomodoroPhase, PomodoroState } from '@/lib/types';
 
 interface Props {
@@ -14,6 +14,12 @@ function formatRemaining(seconds: number): string {
   return `${m}:${s}`;
 }
 
+// A instrumentation.ts server-side já dispara o push do ntfy de forma
+// incondicional a cada transição de fase real (funciona mesmo sem nenhuma
+// aba aberta) — este caminho client-side é só a notificação PRIMÁRIA via
+// Notification API para quando a aba está aberta e a permissão foi
+// concedida. Não há mais um POST de fallback aqui: ele duplicaria (ou seria
+// redundante com) o push do servidor em todo caso.
 function notifyPhaseChange(phase: PomodoroPhase): void {
   const message = phase === 'focus' ? 'Hora de focar' : 'Hora de descansar';
   if (typeof Notification === 'undefined') return;
@@ -24,15 +30,11 @@ function notifyPhaseChange(phase: PomodoroPhase): void {
   if (Notification.permission === 'default') {
     void Notification.requestPermission();
   }
-  void fetch('/api/pomodoro/notify-fallback', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phase }),
-  });
 }
 
 export function Pomodoro({ pomodoro, onChanged }: Props) {
   const lastPhase = useRef<PomodoroPhase | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!pomodoro) return;
@@ -45,12 +47,24 @@ export function Pomodoro({ pomodoro, onChanged }: Props) {
   if (!pomodoro || !pomodoro.enabled) return null;
 
   const toggle = async () => {
-    await fetch(pomodoro.running ? '/api/pomodoro/pause' : '/api/pomodoro/start', { method: 'POST' });
+    const res = await fetch(pomodoro.running ? '/api/pomodoro/pause' : '/api/pomodoro/start', { method: 'POST' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? 'falha ao atualizar pomodoro');
+      return;
+    }
+    setError(null);
     onChanged();
   };
 
   const reset = async () => {
-    await fetch('/api/pomodoro/reset', { method: 'POST' });
+    const res = await fetch('/api/pomodoro/reset', { method: 'POST' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? 'falha ao zerar pomodoro');
+      return;
+    }
+    setError(null);
     onChanged();
   };
 
@@ -61,6 +75,7 @@ export function Pomodoro({ pomodoro, onChanged }: Props) {
       <span>{pomodoro.completedFocusCount} focos</span>
       <button onClick={() => void toggle()}>{pomodoro.running ? 'pausar' : 'iniciar'}</button>
       <button onClick={() => void reset()}>zerar</button>
+      {error && <span role="alert">{error}</span>}
     </div>
   );
 }

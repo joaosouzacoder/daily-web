@@ -11,11 +11,18 @@ export function NotificationsBell({
   onChanged: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const items = notifications.data ?? [];
   const unreadCount = items.filter((n) => !n.read).length;
 
   const markRead = async (item: NotificationItem) => {
-    await fetch(`/api/notifications/${item.id}/read`, { method: 'POST' });
+    const res = await fetch(`/api/notifications/${item.id}/read`, { method: 'POST' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? 'falha ao marcar como lida');
+      return;
+    }
+    setError(null);
     onChanged();
   };
 
@@ -27,6 +34,7 @@ export function NotificationsBell({
       {open && (
         <div role="dialog" aria-label="central de notificações" className="card">
           {notifications.error && <p role="alert">{notifications.error}</p>}
+          {error && <p role="alert">{error}</p>}
           <ul>
             {items.map((item) => (
               <li key={item.id} style={{ opacity: item.read ? 0.6 : 1 }}>
