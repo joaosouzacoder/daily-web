@@ -7,6 +7,8 @@ interface Target {
   id: unknown;
 }
 
+const VALID_ACTIONS = ['read', 'unread', 'move', 'delete'] as const;
+
 interface BatchTargetResult {
   account: string;
   id: string;
@@ -31,6 +33,10 @@ export async function POST(request: Request) {
 
       if (!isValidAccount(target.account) || !isValidEmailId(target.id)) {
         return { account, id, ok: false, error: 'conta ou id inválido' };
+      }
+
+      if (!(VALID_ACTIONS as readonly string[]).includes(action)) {
+        return { account, id, ok: false, error: 'ação inválida' };
       }
 
       try {

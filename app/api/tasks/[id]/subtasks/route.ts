@@ -15,6 +15,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!isSafePositionalValue(title.trim())) {
     return NextResponse.json({ error: 'título inválido' }, { status: 400 });
   }
-  await addSubtask(id, title.trim());
-  return NextResponse.json({ ok: true });
+  try {
+    await addSubtask(id, title.trim());
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 502 });
+  }
 }

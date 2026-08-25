@@ -59,6 +59,17 @@ describe('POST /api/email/batch', () => {
     expect(moveTo).not.toHaveBeenCalled();
   });
 
+  it('ação desconhecida devolve ok:false por item, em vez de reportar sucesso silencioso', async () => {
+    const res = await batchRoute(
+      jsonRequest({ targets: [{ account: 'work', id: '1' }], action: 'arquivar' }),
+    );
+    const data = await res.json();
+    expect(data.results).toEqual([{ account: 'work', id: '1', ok: false, error: 'ação inválida' }]);
+    expect(setSeen).not.toHaveBeenCalled();
+    expect(deleteEmail).not.toHaveBeenCalled();
+    expect(moveTo).not.toHaveBeenCalled();
+  });
+
   it('falha em um alvo não impede os demais e reporta resultado por item', async () => {
     vi.mocked(setSeen).mockImplementation(async (_account, id) => {
       if (id === 'fail') throw new Error('cli error');

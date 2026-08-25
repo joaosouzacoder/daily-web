@@ -7,6 +7,10 @@ export async function POST(request: Request) {
   if (!isValidAccount(body.account) || !isValidEmailId(body.id)) {
     return NextResponse.json({ error: 'conta ou id inválido' }, { status: 400 });
   }
-  await setSeen(body.account, body.id, body.seen as boolean);
-  return NextResponse.json({ ok: true });
+  try {
+    await setSeen(body.account, body.id, body.seen as boolean);
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 502 });
+  }
 }

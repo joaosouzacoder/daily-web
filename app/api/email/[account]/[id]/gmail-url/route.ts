@@ -10,6 +10,10 @@ export async function GET(
   if (!isValidAccount(account) || !isValidEmailId(id)) {
     return NextResponse.json({ error: 'conta ou id inválido' }, { status: 400 });
   }
-  const url = await gmailUrl(account, id);
-  return NextResponse.json({ url });
+  try {
+    const url = await gmailUrl(account, id);
+    return NextResponse.json({ url });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 502 });
+  }
 }

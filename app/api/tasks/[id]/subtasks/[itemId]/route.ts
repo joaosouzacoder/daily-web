@@ -14,13 +14,17 @@ export async function PATCH(
   if (typeof body.title === 'string' && body.title.trim() && !isSafePositionalValue(body.title.trim())) {
     return NextResponse.json({ error: 'título inválido' }, { status: 400 });
   }
-  if (typeof body.completed === 'boolean') {
-    await checkSubtask(id, itemId, body.completed);
+  try {
+    if (typeof body.completed === 'boolean') {
+      await checkSubtask(id, itemId, body.completed);
+    }
+    if (typeof body.title === 'string' && body.title.trim()) {
+      await editSubtask(id, itemId, body.title.trim());
+    }
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 502 });
   }
-  if (typeof body.title === 'string' && body.title.trim()) {
-    await editSubtask(id, itemId, body.title.trim());
-  }
-  return NextResponse.json({ ok: true });
 }
 
 export async function DELETE(
@@ -31,6 +35,10 @@ export async function DELETE(
   if (!isValidTaskId(id) || !isValidTaskId(itemId)) {
     return NextResponse.json({ error: 'id inválido' }, { status: 400 });
   }
-  await deleteSubtask(id, itemId);
-  return NextResponse.json({ ok: true });
+  try {
+    await deleteSubtask(id, itemId);
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 502 });
+  }
 }

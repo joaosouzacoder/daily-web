@@ -7,6 +7,10 @@ export async function GET(request: Request) {
   if (account !== 'work' && account !== 'personal') {
     return NextResponse.json({ error: 'conta inválida' }, { status: 400 });
   }
-  const folders = await listFolders(account as Account);
-  return NextResponse.json({ folders });
+  try {
+    const folders = await listFolders(account as Account);
+    return NextResponse.json({ folders });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 502 });
+  }
 }

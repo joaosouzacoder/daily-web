@@ -32,10 +32,14 @@ export async function POST(request: Request) {
     }
   }
 
-  const id = await addTask(title.trim());
+  try {
+    const id = await addTask(title.trim());
 
-  if (due !== undefined || body.priority !== undefined || body.recur !== undefined) {
-    await editTask(id, { due, time, priority: body.priority, recur: body.recur });
+    if (due !== undefined || body.priority !== undefined || body.recur !== undefined) {
+      await editTask(id, { due, time, priority: body.priority, recur: body.recur });
+    }
+    return NextResponse.json({ id });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 502 });
   }
-  return NextResponse.json({ id });
 }

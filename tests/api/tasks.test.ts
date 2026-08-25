@@ -119,6 +119,14 @@ describe('DELETE /api/tasks/[id]', () => {
     expect(res.status).toBe(400);
     expect(deleteTask).not.toHaveBeenCalled();
   });
+
+  it('falha do CLI devolve 502 com mensagem estruturada, em vez de propagar um erro genérico', async () => {
+    vi.mocked(deleteTask).mockRejectedValueOnce(new Error('mstodo falhou: sem credenciais'));
+    const res = await deleteRoute(req({}), params({ id: 'T1' }));
+    expect(res.status).toBe(502);
+    const data = await res.json();
+    expect(data.error).toBe('mstodo falhou: sem credenciais');
+  });
 });
 
 describe('POST /api/tasks/[id]/subtasks', () => {
