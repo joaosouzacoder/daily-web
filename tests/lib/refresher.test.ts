@@ -65,4 +65,15 @@ describe('refreshAll', () => {
     expect(fetchAgenda).toHaveBeenCalledWith('work');
     expect(fetchAgenda).toHaveBeenCalledWith('personal');
   });
+
+  it('mantém os dados da conta que funcionou quando a outra conta falha', async () => {
+    vi.mocked(listEnvelopes).mockImplementation(async (account) => {
+      if (account === 'work') throw new Error('work OAuth expirado');
+      return [{ id: '1', account: 'personal', from: 'a@b.com', subject: 'x', unread: false, date: '2026-08-25' }];
+    });
+    const state = await refreshAll();
+    expect(state.email.data).toHaveLength(1);
+    expect(state.email.data?.[0].account).toBe('personal');
+    expect(state.email.error).toContain('work OAuth expirado');
+  });
 });

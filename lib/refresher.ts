@@ -18,22 +18,37 @@ async function panel<T>(fn: () => Promise<T>): Promise<PanelResult<T>> {
   }
 }
 
+async function mergedAccountsPanel<T>(
+  work: () => Promise<T[]>,
+  personal: () => Promise<T[]>,
+): Promise<PanelResult<T[]>> {
+  const [workResult, personalResult] = await Promise.allSettled([work(), personal()]);
+  const data: T[] = [
+    ...(workResult.status === 'fulfilled' ? workResult.value : []),
+    ...(personalResult.status === 'fulfilled' ? personalResult.value : []),
+  ];
+  const errors = [workResult, personalResult]
+    .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+    .map((r) => (r.reason instanceof Error ? r.reason.message : String(r.reason)));
+
+  if (errors.length === 0) return { data, error: null };
+  if (data.length === 0) return { data: null, error: errors.join('; ') };
+  return { data, error: errors.join('; ') };
+}
+
 let cache: DashboardState | null = null;
 let timer: ReturnType<typeof setInterval> | null = null;
 
 export async function refreshAll(): Promise<DashboardState> {
   const [email, agenda, pulls, jira, tasks, notifications] = await Promise.all([
-    panel(async () => {
-      const [work, personal] = await Promise.all([
-        listEnvelopes('work', EMAIL_LIMIT),
-        listEnvelopes('personal', EMAIL_LIMIT),
-      ]);
-      return [...work, ...personal];
-    }),
-    panel(async () => {
-      const [work, personal] = await Promise.all([fetchAgenda('work'), fetchAgenda('personal')]);
-      return [...work, ...personal];
-    }),
+    mergedAccountsPanel(
+      () => listEnvelopes('work', EMAIL_LIMIT),
+      () => listEnvelopes('personal', EMAIL_LIMIT),
+    ),
+    mergedAccountsPanel(
+      () => fetchAgenda('work'),
+      () => fetchAgenda('personal'),
+    ),
     panel(() => fetchPulls()),
     panel(() => fetchIssues(JIRA_FILTER)),
     panel(() => fetchTasks()),
