@@ -1,0 +1,14 @@
+[
+  {
+    "id": "T1", "title": "Trocar a instalação elétrica", "completed": false, "due": "", "notes": "",
+    "priority": "high", "time": "", "recur": "",
+    "subtasks": [
+      { "id": "S1", "title": "Medir a fiação", "completed": true },
+      { "id": "S2", "title": "Comprar disjuntor", "completed": false }
+    ]
+  },
+  {
+    "id": "T2", "title": "Sem etapas", "completed": false, "due": "2026-08-30", "notes": "",
+    "priority": "normal", "time": "14:00", "recur": "weekly", "subtasks": []
+  }
+]
