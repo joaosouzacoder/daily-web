@@ -151,13 +151,52 @@ export function parseMessageIdFromJson(json: string): string | null {
   return null;
 }
 
+const PART_MARKER_RE = /^\[\d+\]\s+(\S+\/\S+)/;
+
+interface MessagePart {
+  mime: string;
+  content: string;
+}
+
+// Cada part vem como `[n] tipo (tamanho)`, os cabeçalhos dela indentados,
+// uma linha em branco e o conteúdo, que vai até o próximo marcador.
+function splitParts(lines: string[]): MessagePart[] {
+  const parts: MessagePart[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const marker = PART_MARKER_RE.exec(lines[i]);
+    if (!marker) {
+      i += 1;
+      continue;
+    }
+    i += 1;
+    while (i < lines.length && lines[i].trim() !== '') i += 1;
+    i += 1;
+    const content: string[] = [];
+    while (i < lines.length && !PART_MARKER_RE.test(lines[i])) {
+      content.push(lines[i]);
+      i += 1;
+    }
+    parts.push({ mime: marker[1].toLowerCase(), content: content.join('\n') });
+  }
+  return parts;
+}
+
+// `himalaya message read` imprime os cabeçalhos RFC e depois uma seção por
+// part MIME. Ficar só com o conteúdo das parts de texto: antes recortávamos
+// no primeiro marcador, então os marcadores e cabeçalhos das parts seguintes
+// (`[3] text/html`, `Content-Transfer-Encoding: ...`) apareciam no meio do
+// corpo. Anexos não têm nada para mostrar e ficam de fora.
 export function stripMessageReadHeader(raw: string): string {
-  const lines = raw.split('\n');
-  const markerIndex = lines.findIndex((l) => /^\[\d+\]\s/.test(l));
-  if (markerIndex === -1) return raw;
-  const blankIndex = lines.findIndex((l, i) => i > markerIndex && l.trim() === '');
-  if (blankIndex === -1) return raw;
-  return lines.slice(blankIndex + 1).join('\n');
+  const parts = splitParts(raw.split('\n'));
+  if (parts.length === 0) return raw;
+  const withText = (mime: string) =>
+    parts.filter((part) => part.mime === mime && part.content.trim() !== '');
+  // O text/plain é a versão que o remetente escreveu para leitura; só caímos
+  // no HTML (que `readable` ainda precisa limpar) quando ele não existe.
+  const chosen = withText('text/plain').length > 0 ? withText('text/plain') : withText('text/html');
+  if (chosen.length === 0) return '';
+  return chosen.map((part) => part.content).join('\n').trim();
 }
 
 const FOLDER_ALIASES = ['inbox', 'sent', 'drafts', 'trash', 'spam', 'all'];

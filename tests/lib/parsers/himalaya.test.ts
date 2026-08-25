@@ -133,4 +133,56 @@ describe('stripMessageReadHeader', () => {
   it('devolve o texto original quando não há marcador de part', () => {
     expect(stripMessageReadHeader('texto simples sem marcador')).toBe('texto simples sem marcador');
   });
+
+  // Regressão: o corte no primeiro marcador deixava `[3] text/html` e os
+  // Content-* da part seguinte visíveis no fim do corpo.
+  it('descarta os marcadores e cabeçalhos das parts seguintes', () => {
+    const raw = [
+      'Date: Tue, 25 Aug 2026 20:40:43 -0300',
+      'From: Luan <luan@exemplo.com>',
+      'Subject: Me aceita no seu time',
+      '',
+      '[2] text/plain (16 B)',
+      '    Content-Type: text/plain; charset=UTF-8',
+      '',
+      'Por favorzinho',
+      '',
+      '[3] text/html (18 B)',
+      '    Content-Type: text/html; charset=UTF-8',
+      '    Content-Transfer-Encoding: quoted-printable',
+      '',
+      '<p>Por favorzinho</p>',
+    ].join('\n');
+    expect(stripMessageReadHeader(raw)).toBe('Por favorzinho');
+  });
+
+  it('usa o HTML quando a part de texto puro está vazia', () => {
+    const raw = [
+      '[1] text/plain (0 B)',
+      '    Content-Type: text/plain; charset=UTF-8',
+      '',
+      '',
+      '[2] text/html (20 B)',
+      '    Content-Type: text/html; charset=UTF-8',
+      '',
+      '<p>Só no HTML</p>',
+    ].join('\n');
+    expect(stripMessageReadHeader(raw)).toBe('<p>Só no HTML</p>');
+  });
+
+  it('ignora as parts de anexo', () => {
+    const raw = [
+      '[1] text/plain (9 B)',
+      '    Content-Type: text/plain; charset=UTF-8',
+      '',
+      'Segue anexo',
+      '',
+      '[2] image/png (4 KB)',
+      '    Content-Type: image/png',
+      '    Content-Disposition: attachment; filename="foto.png"',
+      '',
+      'PNG binário',
+    ].join('\n');
+    expect(stripMessageReadHeader(raw)).toBe('Segue anexo');
+  });
 });
