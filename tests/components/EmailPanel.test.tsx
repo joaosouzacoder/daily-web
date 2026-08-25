@@ -53,15 +53,15 @@ describe('EmailPanel', () => {
 
   it('filtra por não lidos e mostra o contador de resultados', () => {
     render(<EmailPanel email={{ data: items, error: null }} onChanged={() => {}} />);
-    fireEvent.click(screen.getByRole('button', { name: 'não lidos' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Não lidos' }));
     expect(screen.getByText('1 de 2')).toBeInTheDocument();
     expect(screen.queryByText('Token adicionado')).toBeNull();
   });
 
   it('remove um filtro ativo pelo chip', () => {
     render(<EmailPanel email={{ data: items, error: null }} onChanged={() => {}} />);
-    fireEvent.click(screen.getByRole('button', { name: 'não lidos' }));
-    fireEvent.click(screen.getByRole('button', { name: 'remover filtro não lidos' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Não lidos' }));
+    fireEvent.click(screen.getByRole('button', { name: 'remover filtro Não lidos' }));
     expect(screen.getByText('Token adicionado')).toBeInTheDocument();
   });
 
@@ -89,7 +89,7 @@ describe('EmailPanel', () => {
     const onChanged = vi.fn();
     render(<EmailPanel email={{ data: items, error: null }} onChanged={onChanged} />);
     fireEvent.click(screen.getByLabelText('selecionar Revisão do PR'));
-    fireEvent.click(screen.getByRole('button', { name: 'marcar lido' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Marcar lido' }));
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('falharam'));
     expect(onChanged).toHaveBeenCalled();
   });

@@ -13,16 +13,16 @@ const RECUR_CYCLE = ['none', 'daily', 'weekly', 'monthly'] as const;
 const PRIORITY_CYCLE: TaskPriority[] = ['normal', 'high', 'low'];
 
 const RECUR_LABEL: Record<(typeof RECUR_CYCLE)[number], string> = {
-  none: 'não repete',
-  daily: 'diária',
-  weekly: 'semanal',
-  monthly: 'mensal',
+  none: 'Não repete',
+  daily: 'Diária',
+  weekly: 'Semanal',
+  monthly: 'Mensal',
 };
 
 const PRIORITY_LABEL: Record<TaskPriority, string> = {
-  normal: 'normal',
-  high: 'alta',
-  low: 'baixa',
+  normal: 'Normal',
+  high: 'Alta',
+  low: 'Baixa',
 };
 
 function initialRecur(task: TodoTask | null): (typeof RECUR_CYCLE)[number] {
@@ -74,12 +74,12 @@ export function TaskFormModal({ task, onClose, onSaved }: Props) {
           });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError(data.error ?? 'falha ao salvar');
+        setError(data.error ?? 'Falha ao salvar');
         return;
       }
       onSaved();
     } catch {
-      setError('falha ao salvar');
+      setError('Falha ao salvar');
     }
   };
 
@@ -136,10 +136,10 @@ export function TaskFormModal({ task, onClose, onSaved }: Props) {
 
         <div className="modal-actions">
           <button type="button" className="btn" onClick={onClose}>
-            cancelar
+            Cancelar
           </button>
           <button type="button" className="btn btn-primary" onClick={() => void save()}>
-            salvar
+            Salvar
           </button>
         </div>
       </div>

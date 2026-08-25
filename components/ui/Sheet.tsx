@@ -33,7 +33,7 @@ export function Sheet({ open, title, onClose, children }: Props) {
         <header className="sheet-head">
           <h2 className="eyebrow">{title}</h2>
           <button type="button" className="btn btn-primary" onClick={onClose}>
-            aplicar
+            Aplicar
           </button>
         </header>
         {children}

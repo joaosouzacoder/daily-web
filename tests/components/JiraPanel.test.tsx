@@ -36,7 +36,7 @@ describe('JiraPanel', () => {
         }}
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'minhas' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Minhas' }));
     expect(screen.getByText('A-2')).toBeInTheDocument();
     expect(screen.queryByText('A-1')).toBeNull();
   });
@@ -50,7 +50,7 @@ describe('JiraPanel', () => {
         }}
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'relator' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Relator' }));
     expect(screen.getByText('A-2')).toBeInTheDocument();
     expect(screen.queryByText('A-1')).toBeNull();
   });
@@ -72,17 +72,55 @@ describe('JiraPanel', () => {
     expect(screen.queryByText('A-2')).toBeNull();
   });
 
-  it('agrupa por pai quando solicitado', () => {
+  it('separa os projetos em blocos próprios na hierarquia', () => {
     render(
       <JiraPanel
         jira={{
-          data: [issue({ key: 'A-9', parent: { key: 'A-1', summary: 'Épico pai' } })],
+          data: [
+            issue({ key: 'PDS-1', project: 'PDS', summary: 'Chamado' }),
+            issue({ key: 'TT-1', project: 'TT', summary: 'História' }),
+          ],
           error: null,
         }}
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'agrupar por pai' }));
-    expect(screen.getByText('Épico pai')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /PDS/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /TT/ })).toBeInTheDocument();
+  });
+
+  it('aninha a filha sob a mãe quando as duas estão na lista', () => {
+    render(
+      <JiraPanel
+        jira={{
+          data: [
+            issue({ key: 'TT-1', project: 'TT', summary: 'Épico mãe' }),
+            issue({
+              key: 'TT-9',
+              project: 'TT',
+              summary: 'História filha',
+              parent: { key: 'TT-1', summary: 'Épico mãe' },
+            }),
+          ],
+          error: null,
+        }}
+      />,
+    );
+    const rows = screen.getAllByRole('listitem');
+    // A mãe vem primeiro e a filha logo abaixo, recuada.
+    expect(rows[0].textContent).toContain('TT-1');
+    expect(rows[1].textContent).toContain('TT-9');
+    expect(rows[1].getAttribute('style')).toContain('padding-left');
+  });
+
+  it('alterna para lista simples quando pedido', () => {
+    render(
+      <JiraPanel
+        jira={{ data: [issue({ key: 'TT-1', project: 'TT' })], error: null }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Hierarquia' }));
+    expect(screen.queryByRole('heading', { name: /TT/ })).toBeNull();
+    expect(screen.getByText('TT-1')).toBeInTheDocument();
   });
 
   it('mostra o contador quando um filtro está ativo', () => {
@@ -94,7 +132,7 @@ describe('JiraPanel', () => {
         }}
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'minhas' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Minhas' }));
     expect(screen.getByText('1 de 2')).toBeInTheDocument();
   });
 

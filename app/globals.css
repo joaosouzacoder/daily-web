@@ -267,6 +267,51 @@ textarea {
   transition: border-color var(--fast) var(--ease);
 }
 
+/* Selects nativos trazem uma seta do sistema que destoa do resto; desenhamos
+   a nossa em SVG inline para o controle ficar coerente com os chips. */
+select.field {
+  appearance: none;
+  padding-right: calc(var(--s3) + 14px);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239891ac' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--s3) center;
+  cursor: pointer;
+}
+
+select.field option {
+  background: var(--surface);
+  color: var(--text);
+}
+
+/* O checkbox do sistema é a peça que mais destoa numa interface escura:
+   redesenhado do zero, com o check desenhado em SVG. */
+input[type='checkbox'] {
+  appearance: none;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 5px;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+
+input[type='checkbox']:hover {
+  border-color: var(--accent-dim);
+}
+
+input[type='checkbox']:checked {
+  background-color: var(--accent);
+  border-color: var(--accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='8' viewBox='0 0 10 8'%3E%3Cpath d='M1 4l2.5 2.5L9 1' fill='none' stroke='%2316101f' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
 .field::placeholder {
   color: var(--text-faint);
 }
@@ -572,6 +617,73 @@ textarea {
   white-space: nowrap;
 }
 
+/* ---------- e-mail aberto (inline) ---------- */
+
+.mail-item.is-open {
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  border-radius: 8px;
+}
+
+.mail-item.is-open > .row {
+  border-bottom-color: var(--hairline-strong);
+}
+
+.mail-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  padding: var(--s4) var(--s4) var(--s4) calc(var(--s5) + var(--s2));
+  border-bottom: 1px solid var(--hairline);
+  animation: mail-open var(--med) var(--ease);
+}
+
+@keyframes mail-open {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.mail-body {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: var(--step--1);
+  color: var(--text-muted);
+  line-height: 1.65;
+  max-height: 340px;
+  overflow-y: auto;
+  padding-right: var(--s3);
+}
+
+.mail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+}
+
+.mail-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex-wrap: wrap;
+}
+
+.mail-actions-spacer {
+  flex: 1;
+}
+
+.row-time {
+  font-size: var(--step--1);
+  color: var(--text-faint);
+  flex: none;
+  min-width: 3.5ch;
+  text-align: right;
+}
+
 .row-tag {
   font-size: 0.6875rem;
   color: var(--text-faint);
@@ -628,10 +740,16 @@ textarea {
 }
 
 .subtasks {
-  margin: 0 0 var(--s3) calc(var(--s6) + var(--s2));
+  margin: 0 0 0 calc(var(--s6) + var(--s2));
   display: flex;
   flex-direction: column;
   gap: var(--s1);
+}
+
+/* Só reserva respiro embaixo quando há de fato subtarefas listadas —
+   senão uma tarefa simples ganharia um vão sem conteúdo. */
+.subtasks:has(.subtask) {
+  margin-bottom: var(--s3);
 }
 
 .subtask {
@@ -664,6 +782,38 @@ textarea {
 .subtask-add .field {
   flex: 1;
   min-width: 0;
+}
+
+/* Um campo "nova subtarefa" sob cada tarefa polui a lista inteira. Onde há
+   ponteiro, ele só aparece na tarefa sob o cursor ou com foco de teclado;
+   em telas de toque (sem hover) ele fica sempre visível, senão não haveria
+   como alcançá-lo. */
+/* Um "+" discreto antes do checkbox abre o campo de subtarefa só quando
+   pedido — economiza uma linha inteira por tarefa na lista. */
+.subtask-toggle {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+
+.subtask-toggle:hover {
+  background: var(--surface-hover);
+  color: var(--accent);
+}
+
+.subtask-toggle[aria-expanded='true'] {
+  color: var(--accent);
 }
 
 /* ---------- jira ---------- */
@@ -724,8 +874,21 @@ textarea {
   margin: var(--s4) 0 var(--s2);
 }
 
-.jira-group-label:first-child {
+.jira-project:first-child .jira-group-label {
   margin-top: 0;
+}
+
+/* Marca de ramo: dá a leitura de hierarquia sem desenhar uma árvore
+   inteira de linhas guia. */
+.jira-branch {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-right: calc(var(--s2) * -1);
+  border-left: 1px solid var(--hairline-strong);
+  border-bottom: 1px solid var(--hairline-strong);
+  border-bottom-left-radius: 3px;
+  transform: translateY(-2px);
 }
 
 /* ---------- agenda ---------- */
@@ -846,8 +1009,8 @@ textarea {
   top: calc(100% + var(--s2));
   right: 0;
   z-index: 41;
-  width: min(340px, calc(100vw - var(--s6)));
-  max-height: 60vh;
+  width: min(460px, calc(100vw - var(--s5)));
+  max-height: 70vh;
   overflow-y: auto;
   padding: var(--s4);
   background: var(--surface);
@@ -860,9 +1023,17 @@ textarea {
 .bell-item {
   display: flex;
   flex-direction: column;
-  gap: var(--s1);
+  gap: var(--s2);
   padding: var(--s3) 0;
   border-bottom: 1px solid var(--hairline);
+}
+
+/* Títulos de menção do Jira são longos: precisam quebrar em várias linhas
+   em vez de esticar a caixa ou passar por cima do que vem depois. */
+.bell-item a {
+  display: block;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .bell-item:last-child {
@@ -1025,10 +1196,19 @@ textarea {
   font-size: var(--step--1);
 }
 
+/* Um painel sem credencial é informação, não alarme: o erro fica contido
+   num bloco discreto com marcador lateral, em vez de texto vermelho solto
+   competindo com o conteúdo real das outras seções. */
 .panel-error {
-  padding: var(--s3) 0;
-  color: var(--danger);
+  margin: var(--s2) 0;
+  padding: var(--s3);
+  border-left: 2px solid var(--warn);
+  border-radius: 0 6px 6px 0;
+  background: color-mix(in srgb, var(--warn) 7%, transparent);
+  color: var(--text-muted);
   font-size: var(--step--1);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 /* ---------- login ---------- */
@@ -1109,16 +1289,20 @@ textarea {
   }
 }
 
+/* `backwards` em vez de `both`: o transform vale só até a animação acabar.
+   Com `both` ele fica grudado, cada bloco vira contexto de empilhamento e
+   o popover do sino some atrás da coluna seguinte (e o scrim `fixed` passa
+   a se ancorar no cabeçalho em vez da viewport). */
 .now {
-  animation: rise 420ms var(--ease) both;
+  animation: rise 420ms var(--ease) backwards;
 }
 
 .columns > .col:first-child {
-  animation: rise 420ms var(--ease) 60ms both;
+  animation: rise 420ms var(--ease) 60ms backwards;
 }
 
 .columns > .col:last-child {
-  animation: rise 420ms var(--ease) 120ms both;
+  animation: rise 420ms var(--ease) 120ms backwards;
 }
 
 /* ---------- responsivo ---------- */
@@ -1144,18 +1328,45 @@ textarea {
   }
 
   .now {
-    padding: var(--s6) 0 var(--s5);
+    padding: var(--s5) 0 var(--s4);
     align-items: flex-start;
     flex-direction: column;
+    gap: var(--s4);
+    margin-bottom: var(--s6);
   }
 
   .now-main {
-    gap: var(--s5);
+    gap: var(--s4);
+    width: 100%;
+  }
+
+  /* No celular a altura é o recurso escasso: o pomodoro vira uma linha só,
+     com medidor, tempo e ações lado a lado. */
+  .now-pomodoro {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--s3);
+    padding-bottom: 0;
+    width: 100%;
+  }
+
+  .now-pomo-meter {
+    width: 100%;
+    order: -1;
+  }
+
+  .now-pomo-info {
+    flex: 1;
   }
 
   .now-aside {
     width: 100%;
     justify-content: space-between;
+  }
+
+  .now-sync {
+    flex: 1;
   }
 
   .btn,
@@ -1171,8 +1382,16 @@ textarea {
     display: none;
   }
 
+  /* O gatilho de filtro não merece uma linha inteira num celular: fica
+     compacto e alinhado à direita, encostado no topo da lista. */
   .filter-trigger {
     display: inline-flex;
+    min-height: 36px;
+    margin: calc(var(--s3) * -1) 0 var(--s2) auto;
+  }
+
+  .col {
+    gap: var(--s6);
   }
 
   .modal-backdrop {

@@ -33,7 +33,7 @@ export function NowBand({ pomodoro, loading, onRefresh, onChanged, bell, updated
       <div className="now-aside">
         <span className="now-sync mono">{formatUpdatedAt(updatedAt)}</span>
         <button type="button" className="btn" onClick={onRefresh} disabled={loading}>
-          {loading ? 'atualizando' : 'atualizar'}
+          {loading ? 'Atualizando' : 'Atualizar'}
         </button>
         {bell}
       </div>

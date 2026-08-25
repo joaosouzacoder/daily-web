@@ -57,7 +57,7 @@ export function PullsPanel({ pulls, className, onChanged, loading = false }: Pro
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      setReposError(data.error ?? 'falha ao adicionar repositório');
+      setReposError(data.error ?? 'Falha ao adicionar repositório');
       return;
     }
     setRepos(data.repos ?? []);
@@ -74,7 +74,7 @@ export function PullsPanel({ pulls, className, onChanged, loading = false }: Pro
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      setReposError(data.error ?? 'falha ao remover repositório');
+      setReposError(data.error ?? 'Falha ao remover repositório');
       return;
     }
     setRepos(data.repos ?? []);
@@ -101,7 +101,7 @@ export function PullsPanel({ pulls, className, onChanged, loading = false }: Pro
         {lines.length > 0 && <div>{lines.map((line, i) => renderLine(line, i))}</div>}
 
         <details className="pulls-repos">
-          <summary>repositórios rastreados</summary>
+          <summary>Repositórios rastreados</summary>
           <div className="pulls-repo-list">
             {repos.map((repo) => (
               <span key={repo} className="chip chip-removable">
@@ -125,7 +125,7 @@ export function PullsPanel({ pulls, className, onChanged, loading = false }: Pro
               }}
             />
             <button type="button" className="btn" onClick={() => void addRepo()}>
-              adicionar
+              Adicionar
             </button>
           </div>
           {reposError && (

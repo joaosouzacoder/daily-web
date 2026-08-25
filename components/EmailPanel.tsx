@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import type { EmailEnvelope, PanelResult } from '@/lib/types';
+import type { Account, EmailEnvelope, PanelResult } from '@/lib/types';
 import type { ActiveFilter } from '@/lib/filters';
-import { matchesQuery } from '@/lib/filters';
+import { matchesQuery, relativeTime } from '@/lib/filters';
 import { Section } from './ui/Section';
 import { FilterBar } from './ui/FilterBar';
 import { SearchInput } from './ui/SearchInput';
@@ -69,6 +69,17 @@ export function EmailPanel({ email, onChanged, loading = false }: Props) {
   const [onlyUnread, setOnlyUnread] = useState(false);
   const [account, setAccount] = useState<AccountFilter>('all');
   const [sort, setSort] = useState<Sort>('recent');
+  // Listar pastas é uma ida ao IMAP: faz uma vez por conta e reaproveita,
+  // para o seletor de etiqueta já abrir pronto.
+  const [tagFolders, setTagFolders] = useState<Record<string, string[]>>({});
+
+  const loadTagFolders = async (acc: Account) => {
+    if (tagFolders[acc]) return;
+    const res = await fetch(`/api/email/folders?account=${acc}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    setTagFolders((prev) => ({ ...prev, [acc]: (data.folders ?? []) as string[] }));
+  };
 
   const all = useMemo(() => email.data ?? [], [email.data]);
 
@@ -85,10 +96,10 @@ export function EmailPanel({ email, onChanged, loading = false }: Props) {
   }, [all, query, onlyUnread, account, sort]);
 
   const activeFilters: ActiveFilter[] = [
-    ...(query.trim() ? [{ id: 'query', label: `busca: ${query.trim()}` }] : []),
-    ...(onlyUnread ? [{ id: 'unread', label: 'não lidos' }] : []),
+    ...(query.trim() ? [{ id: 'query', label: `Busca: ${query.trim()}` }] : []),
+    ...(onlyUnread ? [{ id: 'unread', label: 'Não lidos' }] : []),
     ...(account !== 'all'
-      ? [{ id: 'account', label: account === 'work' ? 'trabalho' : 'pessoal' }]
+      ? [{ id: 'account', label: account === 'work' ? 'Trabalho' : 'Pessoal' }]
       : []),
   ];
 
@@ -175,10 +186,10 @@ export function EmailPanel({ email, onChanged, loading = false }: Props) {
       <>
         <span className="section-count mono">{selected.size} selecionados</span>
         <button type="button" className="btn" onClick={() => void runBatch('read')}>
-          marcar lido
+          Marcar lido
         </button>
         <button type="button" className="btn" onClick={() => void runBatch('unread')}>
-          marcar não lido
+          Marcar não lido
         </button>
         {folders.length > 0 && (
           <>
@@ -195,7 +206,7 @@ export function EmailPanel({ email, onChanged, loading = false }: Props) {
               ))}
             </select>
             <button type="button" className="btn" onClick={() => void runBatch('move', targetFolder)}>
-              mover
+              Mover
             </button>
           </>
         )}
@@ -204,7 +215,7 @@ export function EmailPanel({ email, onChanged, loading = false }: Props) {
           className="btn btn-danger"
           onClick={() => void runBatch('delete')}
         >
-          excluir
+          Excluir
         </button>
       </>
     ) : null;
@@ -223,16 +234,16 @@ export function EmailPanel({ email, onChanged, loading = false }: Props) {
           placeholder="assunto ou remetente"
         />
         <Chip active={onlyUnread} onClick={() => setOnlyUnread((v) => !v)}>
-          não lidos
+          Não lidos
         </Chip>
         <Chip active={account === 'work'} onClick={() => setAccount(account === 'work' ? 'all' : 'work')}>
-          trabalho
+          Trabalho
         </Chip>
         <Chip
           active={account === 'personal'}
           onClick={() => setAccount(account === 'personal' ? 'all' : 'personal')}
         >
-          pessoal
+          Pessoal
         </Chip>
         <select
           className="field"
@@ -240,8 +251,8 @@ export function EmailPanel({ email, onChanged, loading = false }: Props) {
           value={sort}
           onChange={(e) => setSort(e.target.value as Sort)}
         >
-          <option value="recent">mais recentes</option>
-          <option value="oldest">mais antigos</option>
+          <option value="recent">Mais recentes</option>
+          <option value="oldest">Mais antigos</option>
         </select>
       </FilterBar>
 
@@ -270,26 +281,44 @@ export function EmailPanel({ email, onChanged, loading = false }: Props) {
 
       {visible.length > 0 && (
         <ul>
-          {visible.map((m) => (
-            <li key={key(m)} className={`row${m.unread ? ' row-unread' : ''}`}>
-              <input
-                type="checkbox"
-                checked={selected.has(key(m))}
-                onChange={() => toggleSelect(m)}
-                aria-label={`selecionar ${m.subject || '(sem assunto)'}`}
-              />
-              <button type="button" className="row-main" onClick={() => setOpenKey(key(m))}>
-                <span className="row-title">{m.subject || '(sem assunto)'}</span>
-                <span className="row-meta">{m.from}</span>
-              </button>
-              <span className="row-tag mono">{m.account === 'work' ? 'W' : 'P'}</span>
-            </li>
-          ))}
+          {visible.map((m) => {
+            const isOpen = key(m) === openKey;
+            return (
+              <li key={key(m)} className={`mail-item${isOpen ? ' is-open' : ''}`}>
+                <div className={`row${m.unread ? ' row-unread' : ''}`}>
+                  <input
+                    type="checkbox"
+                    checked={selected.has(key(m))}
+                    onChange={() => toggleSelect(m)}
+                    aria-label={`selecionar ${m.subject || '(sem assunto)'}`}
+                  />
+                  <button
+                    type="button"
+                    className="row-main"
+                    aria-expanded={isOpen}
+                    onClick={() => {
+                      setOpenKey(isOpen ? null : key(m));
+                      if (!isOpen) void loadTagFolders(m.account);
+                    }}
+                  >
+                    <span className="row-title">{m.subject || '(sem assunto)'}</span>
+                    <span className="row-meta">{m.from}</span>
+                  </button>
+                  <span className="row-time mono">{relativeTime(m.date)}</span>
+                  <span className="row-tag mono">{m.account === 'work' ? 'W' : 'P'}</span>
+                </div>
+                {isOpen && (
+                  <EmailDetail
+                    email={m}
+                    onClose={() => setOpenKey(null)}
+                    onChanged={onChanged}
+                    folders={tagFolders[m.account] ?? []}
+                  />
+                )}
+              </li>
+            );
+          })}
         </ul>
-      )}
-
-      {openMessageData && (
-        <EmailDetail email={openMessageData} onClose={() => setOpenKey(null)} onChanged={onChanged} />
       )}
     </Section>
   );
@@ -299,13 +328,22 @@ function EmailDetail({
   email,
   onClose,
   onChanged,
+  folders,
 }: {
   email: EmailEnvelope;
   onClose: () => void;
   onChanged: () => void;
+  folders: string[];
 }) {
   const [body, setBody] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [tag, setTag] = useState('');
+  const [appliedTags, setAppliedTags] = useState<string[]>([]);
+  const tagOptions = folders;
+
+  useEffect(() => {
+    setTag((prev) => (prev && folders.includes(prev) ? prev : (folders[0] ?? '')));
+  }, [folders]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -314,6 +352,23 @@ function EmailDetail({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  const applyTag = async () => {
+    if (!tag) return;
+    const res = await fetch('/api/email/tag', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account: email.account, id: email.id, tag }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setError(data.error ?? 'Falha ao aplicar etiqueta');
+      return;
+    }
+    setError(null);
+    setAppliedTags((prev) => (prev.includes(tag) ? prev : [...prev, tag]));
+    onChanged();
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -341,40 +396,62 @@ function EmailDetail({
     if (!window.confirm('Excluir este e-mail?')) return;
     const [result] = await postBatch([{ account: email.account, id: email.id }], 'delete');
     if (result && !result.ok) {
-      setError(result.error ?? 'falha ao excluir');
+      setError(result.error ?? 'Falha ao excluir');
       return;
     }
     onChanged();
     onClose();
   };
 
+  // Abre logo abaixo da linha clicada, não no meio da tela: o e-mail fica
+  // no lugar onde o olho já estava.
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div
-        className="modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label="corpo do e-mail"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div>
-          <span className="eyebrow">{email.from}</span>
-          <h3 className="modal-title">{email.subject || '(sem assunto)'}</h3>
+    <div className="mail-detail" aria-label="corpo do e-mail">
+      <div className="mail-body">{body ?? 'Carregando…'}</div>
+
+      {appliedTags.length > 0 && (
+        <div className="mail-tags">
+          {appliedTags.map((t) => (
+            <span key={t} className="chip">
+              {t}
+            </span>
+          ))}
         </div>
-        <div className="modal-body">{body ?? 'carregando…'}</div>
-        {error && (
-          <p role="alert" className="login-error">
-            {error}
-          </p>
+      )}
+
+      {error && (
+        <p role="alert" className="panel-error">
+          {error}
+        </p>
+      )}
+
+      <div className="mail-actions">
+        {tagOptions.length > 0 && (
+          <>
+            <select
+              className="field"
+              aria-label="etiqueta"
+              value={tag}
+              onChange={(e) => setTag(e.target.value)}
+            >
+              {tagOptions.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+            </select>
+            <button type="button" className="btn" onClick={() => void applyTag()}>
+              Etiquetar
+            </button>
+          </>
         )}
-        <div className="modal-actions">
-          <button type="button" className="btn btn-danger" onClick={() => void remove()}>
-            excluir
-          </button>
-          <button type="button" className="btn" onClick={onClose}>
-            fechar
-          </button>
-        </div>
+        <span className="mail-actions-spacer" />
+        <button type="button" className="btn btn-danger" onClick={() => void remove()}>
+          Excluir
+        </button>
+        <button type="button" className="btn" onClick={onClose}>
+          Fechar
+        </button>
       </div>
     </div>
   );

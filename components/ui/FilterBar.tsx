@@ -13,7 +13,7 @@ export function FilterBar({ label, children }: { label: string; children: ReactN
     <>
       <div className="filter-bar">{children}</div>
       <button type="button" className="btn filter-trigger" onClick={() => setSheetOpen(true)}>
-        filtrar
+        Filtrar
       </button>
       <Sheet open={sheetOpen} title={label} onClose={() => setSheetOpen(false)}>
         <div className="filter-sheet-body">{children}</div>

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { parseIssues, typeMarker, issueMarker, groupByParent } from '@/lib/parsers/jira';
+import { parseIssues, typeMarker, issueMarker, groupByParent, buildJiraTree } from '@/lib/parsers/jira';
+import type { JiraItem } from '@/lib/types';
 
 const real = readFileSync(path.join(__dirname, '../../fixtures/jira-issues.json'), 'utf8');
 const tree = readFileSync(path.join(__dirname, '../../fixtures/jira-issues-tree.json'), 'utf8');
@@ -65,5 +66,65 @@ describe('groupByParent', () => {
     expect(withParent?.issues.map((i) => i.key)).toEqual(['ENG-101']);
     const orphanGroup = groups.find((g) => g.parentKey === null);
     expect(orphanGroup?.issues.map((i) => i.key).sort()).toEqual(['OPS-55', 'OPS-56']);
+  });
+});
+
+describe('buildJiraTree', () => {
+  function item(over: Partial<JiraItem>): JiraItem {
+    return {
+      key: 'A-1',
+      summary: 'Resumo',
+      status: 'Aberto',
+      project: 'A',
+      url: 'u',
+      parent: null,
+      role: 'assignee',
+      kind: 'História',
+      subtask: false,
+      ...over,
+    };
+  }
+
+  it('separa cada projeto em seu próprio grupo, em ordem alfabética', () => {
+    const groups = buildJiraTree([
+      item({ key: 'TT-1', project: 'TT' }),
+      item({ key: 'PDS-1', project: 'PDS' }),
+    ]);
+    expect(groups.map((g) => g.project)).toEqual(['PDS', 'TT']);
+  });
+
+  it('aninha a filha sob a mãe quando as duas estão na lista', () => {
+    const groups = buildJiraTree([
+      item({ key: 'TT-1', project: 'TT' }),
+      item({ key: 'TT-9', project: 'TT', parent: { key: 'TT-1', summary: 'mãe' } }),
+    ]);
+    expect(groups[0].roots).toHaveLength(1);
+    expect(groups[0].roots[0].issue.key).toBe('TT-1');
+    expect(groups[0].roots[0].children[0].issue.key).toBe('TT-9');
+  });
+
+  it('trata como raiz a issue cuja mãe não está na lista', () => {
+    const groups = buildJiraTree([
+      item({ key: 'TT-9', project: 'TT', parent: { key: 'TT-1', summary: 'ausente' } }),
+    ]);
+    expect(groups[0].roots).toHaveLength(1);
+    expect(groups[0].roots[0].issue.key).toBe('TT-9');
+  });
+
+  it('conta a árvore inteira, não só as raízes', () => {
+    const groups = buildJiraTree([
+      item({ key: 'TT-1', project: 'TT' }),
+      item({ key: 'TT-9', project: 'TT', parent: { key: 'TT-1', summary: 'mãe' } }),
+      item({ key: 'TT-10', project: 'TT', parent: { key: 'TT-9', summary: 'filha' } }),
+    ]);
+    expect(groups[0].count).toBe(3);
+  });
+
+  it('ignora uma issue que aponta para si mesma como mãe', () => {
+    const groups = buildJiraTree([
+      item({ key: 'TT-1', project: 'TT', parent: { key: 'TT-1', summary: 'ela mesma' } }),
+    ]);
+    expect(groups[0].roots[0].issue.key).toBe('TT-1');
+    expect(groups[0].roots[0].children).toHaveLength(0);
   });
 });

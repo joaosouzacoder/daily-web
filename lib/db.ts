@@ -24,6 +24,14 @@ export function getDb(): Database.Database {
       read_at TEXT NOT NULL,
       PRIMARY KEY (source, external_id)
     );
+
+    CREATE TABLE IF NOT EXISTS email_bodies (
+      account TEXT NOT NULL,
+      message_id TEXT NOT NULL,
+      body TEXT NOT NULL,
+      cached_at TEXT NOT NULL,
+      PRIMARY KEY (account, message_id)
+    );
   `);
   return db;
 }

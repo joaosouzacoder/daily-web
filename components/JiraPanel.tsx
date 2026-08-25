@@ -4,7 +4,8 @@ import { useMemo, useState } from 'react';
 import type { JiraItem, PanelResult } from '@/lib/types';
 import type { ActiveFilter } from '@/lib/filters';
 import { matchesQuery } from '@/lib/filters';
-import { groupByParent, issueMarker } from '@/lib/parsers/jira';
+import { buildJiraTree, issueMarker } from '@/lib/parsers/jira';
+import type { JiraNode } from '@/lib/parsers/jira';
 import { Section } from './ui/Section';
 import { FilterBar } from './ui/FilterBar';
 import { SearchInput } from './ui/SearchInput';
@@ -16,9 +17,9 @@ import { SkeletonRows } from './ui/Skeleton';
 type Filter = 'both' | 'assignee' | 'reporter';
 
 const FILTER_LABEL: Record<Filter, string> = {
-  both: 'ambas',
-  assignee: 'minhas',
-  reporter: 'relator',
+  both: 'Ambas',
+  assignee: 'Minhas',
+  reporter: 'Relator',
 };
 
 interface Props {
@@ -45,10 +46,10 @@ export function JiraPanel({ jira, loading = false }: Props) {
     [all, query, filter],
   );
 
-  const groups = useMemo(() => groupByParent(visible), [visible]);
+  const projects = useMemo(() => buildJiraTree(visible), [visible]);
 
   const activeFilters: ActiveFilter[] = [
-    ...(query.trim() ? [{ id: 'query', label: `busca: ${query.trim()}` }] : []),
+    ...(query.trim() ? [{ id: 'query', label: `Busca: ${query.trim()}` }] : []),
     ...(filter !== 'both' ? [{ id: 'role', label: FILTER_LABEL[filter] }] : []),
   ];
 
@@ -74,8 +75,8 @@ export function JiraPanel({ jira, loading = false }: Props) {
             {FILTER_LABEL[f]}
           </Chip>
         ))}
-        <Chip active={grouped} onClick={() => setGrouped((g) => !g)}>
-          agrupar por pai
+        <Chip active={!grouped} onClick={() => setGrouped((g) => !g)}>
+          {grouped ? 'Lista simples' : 'Hierarquia'}
         </Chip>
       </FilterBar>
 
@@ -95,22 +96,25 @@ export function JiraPanel({ jira, loading = false }: Props) {
         <EmptyState message="Nenhuma issue com esses filtros." />
       )}
 
-      {!grouped && visible.length > 0 && (
+      {grouped && visible.length > 0 && (
         <ul>
           {visible.map((issue) => (
-            <JiraRow key={issue.key} issue={issue} showRole={filter === 'both'} />
+            <JiraRow key={issue.key} issue={issue} showRole={filter === 'both'} depth={0} />
           ))}
         </ul>
       )}
 
-      {grouped &&
+      {!grouped &&
         visible.length > 0 &&
-        groups.map((group) => (
-          <div key={group.parentKey ?? 'sem-pai'}>
-            <h3 className="jira-group-label eyebrow">{group.parentSummary}</h3>
+        projects.map((group) => (
+          <div key={group.project} className="jira-project">
+            <h3 className="jira-group-label eyebrow">
+              {group.project}
+              <span className="section-count mono"> {group.count}</span>
+            </h3>
             <ul>
-              {group.issues.map((issue) => (
-                <JiraRow key={issue.key} issue={issue} showRole={filter === 'both'} />
+              {group.roots.map((node) => (
+                <JiraBranch key={node.issue.key} node={node} showRole={filter === 'both'} depth={0} />
               ))}
             </ul>
           </div>
@@ -119,10 +123,38 @@ export function JiraPanel({ jira, loading = false }: Props) {
   );
 }
 
-function JiraRow({ issue, showRole }: { issue: JiraItem; showRole: boolean }) {
+function JiraBranch({
+  node,
+  showRole,
+  depth,
+}: {
+  node: JiraNode;
+  showRole: boolean;
+  depth: number;
+}) {
+  return (
+    <>
+      <JiraRow issue={node.issue} showRole={showRole} depth={depth} />
+      {node.children.map((child) => (
+        <JiraBranch key={child.issue.key} node={child} showRole={showRole} depth={depth + 1} />
+      ))}
+    </>
+  );
+}
+
+function JiraRow({
+  issue,
+  showRole,
+  depth,
+}: {
+  issue: JiraItem;
+  showRole: boolean;
+  depth: number;
+}) {
   const isReporter = issue.role === 'reporter';
   return (
-    <li className="jira-row">
+    <li className="jira-row" style={{ paddingLeft: depth > 0 ? `calc(${depth} * var(--s4))` : undefined }}>
+      {depth > 0 && <span className="jira-branch" aria-hidden="true" />}
       <span className="jira-kind mono">{issueMarker(issue)}</span>
       <a className="jira-key mono" href={issue.url} target="_blank" rel="noreferrer">
         {issue.key}

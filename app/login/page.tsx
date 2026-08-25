@@ -22,7 +22,7 @@ export default function LoginPage() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError(data.error ?? 'falha ao entrar');
+        setError(data.error ?? 'Falha ao entrar');
         return;
       }
       router.push('/');
@@ -68,7 +68,7 @@ export default function LoginPage() {
         )}
 
         <button type="submit" className="btn btn-primary login-submit" disabled={submitting}>
-          {submitting ? 'entrando' : 'entrar'}
+          {submitting ? 'Entrando' : 'Entrar'}
         </button>
       </form>
     </main>

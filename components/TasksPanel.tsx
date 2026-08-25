@@ -22,9 +22,9 @@ interface Props {
 }
 
 const PRIORITY_LABEL: Record<TaskPriority, string> = {
-  high: 'alta',
-  normal: 'normal',
-  low: 'baixa',
+  high: 'Alta',
+  normal: 'Normal',
+  low: 'Baixa',
 };
 
 async function readErrorMessage(res: Response, fallback: string): Promise<string> {
@@ -32,14 +32,33 @@ async function readErrorMessage(res: Response, fallback: string): Promise<string
   return data.error ?? fallback;
 }
 
+// As faixas vêm em caixa alta para servirem de cabeçalho da lista; no chip
+// elas viram texto normal, com só a primeira letra maiúscula.
+export function chipCase(label: string): string {
+  const lower = label.toLocaleLowerCase('pt-BR');
+  return lower.charAt(0).toLocaleUpperCase('pt-BR') + lower.slice(1);
+}
+
+// A faixa já diz de que período a tarefa é (hoje, esta semana…), então o
+// ano é redundante na linha: dia/mês basta, com a hora quando existir.
+export function formatDue(due: string, time: string): string {
+  const [, month, day] = due.split('-');
+  if (!month || !day) return due;
+  return time ? `${day}/${month} ${time}` : `${day}/${month}`;
+}
+
 function SubtaskList({
   task,
   onChanged,
   onError,
+  adding,
+  onDoneAdding,
 }: {
   task: TodoTask;
   onChanged: () => void;
   onError: (message: string) => void;
+  adding: boolean;
+  onDoneAdding: () => void;
 }) {
   const [newTitle, setNewTitle] = useState('');
 
@@ -50,7 +69,7 @@ function SubtaskList({
       body: JSON.stringify({ completed }),
     });
     if (!res.ok) {
-      onError(await readErrorMessage(res, 'falha ao atualizar subtarefa'));
+      onError(await readErrorMessage(res, 'Falha ao atualizar subtarefa'));
       return;
     }
     onChanged();
@@ -64,17 +83,18 @@ function SubtaskList({
       body: JSON.stringify({ title: newTitle.trim() }),
     });
     if (!res.ok) {
-      onError(await readErrorMessage(res, 'falha ao adicionar subtarefa'));
+      onError(await readErrorMessage(res, 'Falha ao adicionar subtarefa'));
       return;
     }
     setNewTitle('');
+    onDoneAdding();
     onChanged();
   };
 
   const removeSubtask = async (subtaskId: string) => {
     const res = await fetch(`/api/tasks/${task.id}/subtasks/${subtaskId}`, { method: 'DELETE' });
     if (!res.ok) {
-      onError(await readErrorMessage(res, 'falha ao apagar subtarefa'));
+      onError(await readErrorMessage(res, 'Falha ao apagar subtarefa'));
       return;
     }
     onChanged();
@@ -101,21 +121,25 @@ function SubtaskList({
           </button>
         </div>
       ))}
-      <div className="subtask-add">
-        <input
-          className="field"
-          value={newTitle}
-          onChange={(e) => setNewTitle(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') void addSubtask();
-          }}
-          placeholder="nova subtarefa"
-          aria-label={`nova subtarefa de ${task.title}`}
-        />
-        <button type="button" className="btn" onClick={() => void addSubtask()}>
-          adicionar
-        </button>
-      </div>
+      {adding && (
+        <div className="subtask-add">
+          <input
+            className="field"
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void addSubtask();
+              if (e.key === 'Escape') onDoneAdding();
+            }}
+            placeholder="nova subtarefa"
+            aria-label={`nova subtarefa de ${task.title}`}
+            autoFocus
+          />
+          <button type="button" className="btn" onClick={() => void addSubtask()}>
+            Adicionar
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -127,15 +151,21 @@ export function TasksPanel({ tasks, onChanged, loading = false }: Props) {
   const [query, setQuery] = useState('');
   const [priority, setPriority] = useState<TaskPriority | 'all'>('all');
   const [windowKey, setWindowKey] = useState<TaskGroupKey | 'all'>('all');
+  // Concluída é ruído no dia a dia: some por padrão e só volta se pedirem.
+  const [showCompleted, setShowCompleted] = useState(false);
+  const [addingSubtaskFor, setAddingSubtaskFor] = useState<string | null>(null);
 
   const all = useMemo(() => tasks.data ?? [], [tasks.data]);
 
   const filtered = useMemo(
     () =>
       all.filter(
-        (t) => matchesQuery([t.title], query) && (priority === 'all' || t.priority === priority),
+        (t) =>
+          matchesQuery([t.title], query) &&
+          (priority === 'all' || t.priority === priority) &&
+          (showCompleted || !t.completed),
       ),
-    [all, query, priority],
+    [all, query, priority, showCompleted],
   );
 
   const groups = useMemo(() => {
@@ -147,7 +177,7 @@ export function TasksPanel({ tasks, onChanged, loading = false }: Props) {
   const visibleCount = groups.reduce((sum, g) => sum + g.tasks.length, 0);
 
   const activeFilters: ActiveFilter[] = [
-    ...(query.trim() ? [{ id: 'query', label: `busca: ${query.trim()}` }] : []),
+    ...(query.trim() ? [{ id: 'query', label: `Busca: ${query.trim()}` }] : []),
     ...(priority !== 'all' ? [{ id: 'priority', label: PRIORITY_LABEL[priority] }] : []),
     ...(windowKey !== 'all'
       ? [
@@ -178,7 +208,7 @@ export function TasksPanel({ tasks, onChanged, loading = false }: Props) {
       body: JSON.stringify({ completed: !task.completed }),
     });
     if (!res.ok) {
-      setActionError(await readErrorMessage(res, 'falha ao atualizar tarefa'));
+      setActionError(await readErrorMessage(res, 'Falha ao atualizar tarefa'));
       return;
     }
     setActionError(null);
@@ -188,7 +218,7 @@ export function TasksPanel({ tasks, onChanged, loading = false }: Props) {
   const remove = async (task: TodoTask) => {
     const res = await fetch(`/api/tasks/${task.id}`, { method: 'DELETE' });
     if (!res.ok) {
-      setActionError(await readErrorMessage(res, 'falha ao apagar tarefa'));
+      setActionError(await readErrorMessage(res, 'Falha ao apagar tarefa'));
       return;
     }
     setActionError(null);
@@ -201,17 +231,20 @@ export function TasksPanel({ tasks, onChanged, loading = false }: Props) {
       count={activeFilters.length > 0 ? `${visibleCount} de ${all.length}` : undefined}
       actions={
         <button type="button" className="btn btn-primary" onClick={() => setEditing('new')}>
-          nova tarefa
+          Nova tarefa
         </button>
       }
     >
       <FilterBar label="Filtrar tarefas">
         <SearchInput value={query} onChange={setQuery} label="buscar tarefas" placeholder="título" />
         <Chip active={priority === 'high'} onClick={() => setPriority(priority === 'high' ? 'all' : 'high')}>
-          alta
+          Alta
         </Chip>
         <Chip active={priority === 'low'} onClick={() => setPriority(priority === 'low' ? 'all' : 'low')}>
-          baixa
+          Baixa
+        </Chip>
+        <Chip active={showCompleted} onClick={() => setShowCompleted((v) => !v)}>
+          Concluídas
         </Chip>
         {availableWindows.map((g) => (
           <Chip
@@ -219,7 +252,7 @@ export function TasksPanel({ tasks, onChanged, loading = false }: Props) {
             active={windowKey === g.key}
             onClick={() => setWindowKey(windowKey === g.key ? 'all' : g.key)}
           >
-            {g.label.toLowerCase()}
+            {chipCase(g.label)}
           </Chip>
         ))}
       </FilterBar>
@@ -254,6 +287,17 @@ export function TasksPanel({ tasks, onChanged, loading = false }: Props) {
             {group.tasks.map((task) => (
               <li key={task.id} className="task-item">
                 <div className={`row task-row${task.completed ? ' is-done' : ''}`}>
+                  <button
+                    type="button"
+                    className="subtask-toggle"
+                    aria-label={`adicionar subtarefa em ${task.title}`}
+                    aria-expanded={addingSubtaskFor === task.id}
+                    onClick={() =>
+                      setAddingSubtaskFor((cur) => (cur === task.id ? null : task.id))
+                    }
+                  >
+                    +
+                  </button>
                   <input
                     type="checkbox"
                     checked={task.completed}
@@ -273,12 +317,7 @@ export function TasksPanel({ tasks, onChanged, loading = false }: Props) {
                       repete
                     </span>
                   )}
-                  {task.due && (
-                    <span className="task-due mono">
-                      {task.due}
-                      {task.time ? ` ${task.time}` : ''}
-                    </span>
-                  )}
+                  {task.due && <span className="task-due mono">{formatDue(task.due, task.time)}</span>}
                   {task.subtasks.length > 0 && (
                     <span className="task-due mono" title="subtarefas concluídas">
                       {task.subtasks.filter((s) => s.completed).length}/{task.subtasks.length}
@@ -290,10 +329,18 @@ export function TasksPanel({ tasks, onChanged, loading = false }: Props) {
                     onClick={() => void remove(task)}
                     aria-label={`apagar ${task.title}`}
                   >
-                    apagar
+                    Apagar
                   </button>
                 </div>
-                <SubtaskList task={task} onChanged={onChanged} onError={setActionError} />
+                {(task.subtasks.length > 0 || addingSubtaskFor === task.id) && (
+                  <SubtaskList
+                    task={task}
+                    onChanged={onChanged}
+                    onError={setActionError}
+                    adding={addingSubtaskFor === task.id}
+                    onDoneAdding={() => setAddingSubtaskFor(null)}
+                  />
+                )}
               </li>
             ))}
           </ul>

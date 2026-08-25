@@ -36,6 +36,13 @@ export async function moveTo(account: Account, id: string, folder: string): Prom
   await runCli('himalaya', ['message', 'move', '--to', folder, id, '-a', account]);
 }
 
+// No Gmail sobre IMAP, uma "etiqueta" é uma pasta e aplicar a etiqueta é
+// copiar a mensagem para lá — ela continua na caixa de entrada, ganhando
+// mais um rótulo, que é exatamente a semântica de label do Gmail.
+export async function applyTag(account: Account, id: string, tag: string): Promise<void> {
+  await runCli('himalaya', ['message', 'copy', '--to', tag, id, '-a', account]);
+}
+
 export async function deleteEmail(account: Account, id: string): Promise<void> {
   await moveTo(account, id, DELETE_FOLDER);
 }

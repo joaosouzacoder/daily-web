@@ -47,7 +47,7 @@ describe('PullsPanel', () => {
     const onChanged = vi.fn();
     render(<PullsPanel pulls={{ data: { lines: [] }, error: null }} onChanged={onChanged} />);
     fireEvent.change(screen.getByLabelText('novo repositório'), { target: { value: 'a/b' } });
-    fireEvent.click(screen.getByText('adicionar'));
+    fireEvent.click(screen.getByText('Adicionar'));
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
     expect(global.fetch).toHaveBeenCalledWith(
       '/api/pulls/repos',
@@ -61,7 +61,7 @@ describe('PullsPanel', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'repositório inválido' }), { status: 400 }));
     render(<PullsPanel pulls={{ data: { lines: [] }, error: null }} />);
     fireEvent.change(screen.getByLabelText('novo repositório'), { target: { value: '-x' } });
-    fireEvent.click(screen.getByText('adicionar'));
+    fireEvent.click(screen.getByText('Adicionar'));
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('repositório inválido'));
   });
 

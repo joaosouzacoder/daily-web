@@ -18,7 +18,7 @@ export function ActiveFilters({ filters, onRemove, onClearAll }: Props) {
       ))}
       {filters.length > 1 && (
         <button type="button" className="btn btn-ghost" onClick={onClearAll}>
-          limpar tudo
+          Limpar tudo
         </button>
       )}
     </div>

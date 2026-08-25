@@ -27,7 +27,7 @@ export function NotificationsBell({ notifications, onChanged }: Props) {
     const res = await fetch(`/api/notifications/${item.id}/read`, { method: 'POST' });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      setError(data.error ?? 'falha ao marcar como lida');
+      setError(data.error ?? 'Falha ao marcar como lida');
       return;
     }
     setError(null);
@@ -43,7 +43,7 @@ export function NotificationsBell({ notifications, onChanged }: Props) {
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
       >
-        notificações
+        Notificações
         {unreadCount > 0 && <span className="bell-badge">{unreadCount}</span>}
       </button>
 
@@ -79,7 +79,7 @@ export function NotificationsBell({ notifications, onChanged }: Props) {
                         aria-label={`marcar ${item.title} como lida`}
                         onClick={() => void markRead(item)}
                       >
-                        marcar como lida
+                        Marcar como lida
                       </button>
                     )}
                   </div>

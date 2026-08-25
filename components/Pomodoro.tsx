@@ -37,6 +37,27 @@ export function Pomodoro({ pomodoro, onChanged }: Props) {
   const lastPhase = useRef<PomodoroPhase | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // O servidor só é consultado a cada 20s: sem um tique local o contador
+  // ficaria parado e depois saltaria 20 segundos de uma vez. Aqui ele corre
+  // de segundo em segundo e cada resposta do servidor reancora o valor.
+  const [ticked, setTicked] = useState(0);
+  const anchor = useRef({ seconds: 0, at: Date.now() });
+
+  useEffect(() => {
+    if (!pomodoro) return;
+    anchor.current = { seconds: pomodoro.remainingSeconds, at: Date.now() };
+    setTicked(pomodoro.remainingSeconds);
+  }, [pomodoro?.remainingSeconds, pomodoro?.phase, pomodoro?.running]);
+
+  useEffect(() => {
+    if (!pomodoro?.running) return;
+    const timer = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - anchor.current.at) / 1000);
+      setTicked(Math.max(anchor.current.seconds - elapsed, 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [pomodoro?.running]);
+
   useEffect(() => {
     if (!pomodoro) return;
     if (lastPhase.current !== null && lastPhase.current !== pomodoro.phase) {
@@ -66,7 +87,8 @@ export function Pomodoro({ pomodoro, onChanged }: Props) {
 
   const isFocus = pomodoro.phase === 'focus';
   const total = (isFocus ? pomodoro.focusMinutes : pomodoro.restMinutes) * 60;
-  const progress = total > 0 ? 1 - pomodoro.remainingSeconds / total : 0;
+  const remaining = pomodoro.running ? ticked : pomodoro.remainingSeconds;
+  const progress = total > 0 ? 1 - remaining / total : 0;
 
   return (
     <div className="now-pomodoro" data-testid="pomodoro">
@@ -78,7 +100,7 @@ export function Pomodoro({ pomodoro, onChanged }: Props) {
       </div>
       <div className="now-pomo-info">
         <span className="now-pomo-phase">{isFocus ? 'foco' : 'descanso'}</span>
-        <span className="now-pomo-time mono">{formatRemaining(pomodoro.remainingSeconds)}</span>
+        <span className="now-pomo-time mono">{formatRemaining(remaining)}</span>
         <span className="now-pomo-count mono" title="focos concluídos">
           {pomodoro.completedFocusCount} focos
         </span>
@@ -91,19 +113,19 @@ export function Pomodoro({ pomodoro, onChanged }: Props) {
           onClick={() =>
             void post(
               pomodoro.running ? '/api/pomodoro/pause' : '/api/pomodoro/start',
-              'falha ao atualizar pomodoro',
+              'Falha ao atualizar pomodoro',
             )
           }
         >
-          {pomodoro.running ? 'pausar' : 'iniciar'}
+          {pomodoro.running ? 'Pausar' : 'Iniciar'}
         </button>
         <button
           type="button"
           className="btn btn-ghost"
           aria-label="zerar pomodoro"
-          onClick={() => void post('/api/pomodoro/reset', 'falha ao zerar pomodoro')}
+          onClick={() => void post('/api/pomodoro/reset', 'Falha ao zerar pomodoro')}
         >
-          zerar
+          Zerar
         </button>
       </div>
       {error && (

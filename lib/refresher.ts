@@ -6,6 +6,7 @@ import { fetchIssues } from './cli/jira';
 import { fetchTasks } from './cli/mstodo';
 import { getNotifications } from './notifications';
 import { getPomodoroState } from './pomodoro';
+import { warmBodyCache, pruneOldBodies } from './emailCache';
 
 const EMAIL_LIMIT = 30;
 const JIRA_FILTER = 'both' as const;
@@ -65,6 +66,17 @@ export async function refreshAll(): Promise<DashboardState> {
     notifications,
     pomodoro: getPomodoroState(),
   };
+
+  // Baixa os corpos que ainda faltam em segundo plano, sem segurar a
+  // resposta: quando o usuário clicar, o e-mail já estará no banco.
+  if (email.data && email.data.length > 0) {
+    void warmBodyCache(email.data)
+      .then(() => pruneOldBodies())
+      .catch(() => {
+        // Aquecimento é oportunista: uma falha aqui não afeta o painel.
+      });
+  }
+
   return cache;
 }
 

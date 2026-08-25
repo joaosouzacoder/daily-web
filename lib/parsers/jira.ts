@@ -79,3 +79,54 @@ export function groupByParent(items: JiraItem[]): JiraGroup[] {
 }
 
 export type JiraFilter = 'assignee' | 'reporter' | 'both';
+
+export interface JiraNode {
+  issue: JiraItem;
+  children: JiraNode[];
+}
+
+export interface JiraProjectGroup {
+  project: string;
+  roots: JiraNode[];
+  count: number;
+}
+
+function countNode(node: JiraNode): number {
+  return 1 + node.children.reduce((sum, child) => sum + countNode(child), 0);
+}
+
+// Uma lista plana esconde a relação entre iniciativa, épico e história.
+// Aqui cada issue vira um nó sob o seu pai (quando o pai está na lista) e o
+// resultado é separado por projeto — assim PDS, que é chamado de serviço,
+// não se mistura com as histórias de produto.
+export function buildJiraTree(items: JiraItem[]): JiraProjectGroup[] {
+  const byKey = new Map(items.map((i) => [i.key, i]));
+  const nodes = new Map<string, JiraNode>(
+    items.map((i) => [i.key, { issue: i, children: [] }]),
+  );
+  const roots: JiraItem[] = [];
+
+  for (const item of items) {
+    const parentKey = item.parent?.key;
+    if (parentKey && parentKey !== item.key && byKey.has(parentKey)) {
+      nodes.get(parentKey)!.children.push(nodes.get(item.key)!);
+    } else {
+      roots.push(item);
+    }
+  }
+
+  const groups = new Map<string, JiraNode[]>();
+  for (const root of roots) {
+    const list = groups.get(root.project) ?? [];
+    list.push(nodes.get(root.key)!);
+    groups.set(root.project, list);
+  }
+
+  return [...groups.entries()]
+    .map(([project, rootNodes]) => ({
+      project,
+      roots: rootNodes,
+      count: rootNodes.reduce((sum, node) => sum + countNode(node), 0),
+    }))
+    .sort((a, b) => a.project.localeCompare(b.project));
+}

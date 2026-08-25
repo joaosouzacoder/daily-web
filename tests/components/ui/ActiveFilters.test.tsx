@@ -29,7 +29,7 @@ describe('ActiveFilters', () => {
     const { rerender } = render(
       <ActiveFilters filters={[{ id: 'a', label: 'a' }]} onRemove={() => {}} onClearAll={() => {}} />,
     );
-    expect(screen.queryByRole('button', { name: 'limpar tudo' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Limpar tudo' })).toBeNull();
 
     rerender(
       <ActiveFilters
@@ -41,6 +41,6 @@ describe('ActiveFilters', () => {
         onClearAll={() => {}}
       />,
     );
-    expect(screen.getByRole('button', { name: 'limpar tudo' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Limpar tudo' })).toBeInTheDocument();
   });
 });
