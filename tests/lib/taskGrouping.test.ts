@@ -47,4 +47,25 @@ describe('groupTasksByDueWindow', () => {
     const groups = groupTasksByDueWindow([task({ due: '', completed: true })], today);
     expect(groups[0].key).toBe('noDate');
   });
+
+  it('classifica corretamente mesmo tarde da noite em fuso horário negativo (ex.: Brasil, UTC-3)', () => {
+    // getFullYear/getMonth/getDate resolvem contra o fuso horário LOCAL do processo, não o
+    // offset embutido na string ISO abaixo — então, para reproduzir de forma determinística
+    // "22h em São Paulo" independente do TZ da máquina que roda o teste (aqui, UTC), fixamos
+    // o TZ do processo para a janela do teste e restauramos em seguida.
+    const originalTz = process.env.TZ;
+    process.env.TZ = 'America/Sao_Paulo';
+    try {
+      const today = new Date('2026-08-25T22:00:00-03:00'); // 22h em São Paulo, ainda dia 25 local
+      const tasks = [
+        task({ id: '1', title: 'Tarefa de hoje', due: '2026-08-25' }),
+      ];
+      const groups = groupTasksByDueWindow(tasks, today);
+      const todayGroup = groups.find((g) => g.key === 'today');
+      expect(todayGroup?.tasks.map((t) => t.id)).toEqual(['1']);
+      expect(groups.find((g) => g.key === 'overdue')).toBeUndefined();
+    } finally {
+      process.env.TZ = originalTz;
+    }
+  });
 });

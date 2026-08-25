@@ -19,6 +19,13 @@ function addDays(iso: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+function toLocalDateString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function groupOf(due: string, todayIso: string, weekEndIso: string, monthEndIso: string): TaskGroupKey {
   if (due === '') return 'noDate';
   if (due < todayIso) return 'overdue';
@@ -37,7 +44,7 @@ export interface TaskGroupResult {
 }
 
 export function groupTasksByDueWindow(tasks: TodoTask[], today: Date = new Date()): TaskGroupResult[] {
-  const todayIso = today.toISOString().slice(0, 10);
+  const todayIso = toLocalDateString(today);
   const weekEndIso = addDays(todayIso, 6);
   const monthEndIso = addDays(todayIso, 29);
 
