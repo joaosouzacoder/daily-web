@@ -1,0 +1,27 @@
+[
+  {
+    "key": "ENG-101",
+    "summary": "[Painel] - Melhorias no dashboard de métricas",
+    "status": "Em andamento",
+    "project": "ENG",
+    "url": "https://example.atlassian.net/browse/ENG-101",
+    "type": "História",
+    "parent": { "key": "ENG-1", "summary": "Iniciativa de Engenharia" }
+  },
+  {
+    "key": "OPS-55",
+    "summary": "Revisão de configuração de acesso",
+    "status": "Em Andamento",
+    "project": "OPS",
+    "url": "https://example.atlassian.net/browse/OPS-55",
+    "parent": null
+  },
+  {
+    "key": "OPS-56",
+    "summary": "Atualização de rotina de backup",
+    "status": "Em Andamento",
+    "project": "OPS",
+    "url": "https://example.atlassian.net/browse/OPS-56",
+    "parent": null
+  }
+]

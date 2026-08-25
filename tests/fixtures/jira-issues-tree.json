@@ -1,0 +1,16 @@
+[
+  {
+    "key": "ENG-1", "summary": "Plataforma", "status": "Em andamento", "project": "ENG",
+    "url": "u", "type": "Iniciativa", "parent": null, "subtask": false, "role": "assignee"
+  },
+  {
+    "key": "ENG-9", "summary": "Ajustar o import", "status": "Em andamento", "project": "ENG",
+    "url": "u", "type": "Subtarefa", "subtask": true, "role": "both",
+    "parent": { "key": "ENG-7", "summary": "Importar planilha" }
+  },
+  {
+    "key": "ENG-7", "summary": "Importar planilha", "status": "Em andamento", "project": "ENG",
+    "url": "u", "type": "História", "subtask": false, "role": "reporter",
+    "parent": { "key": "ENG-1", "summary": "Plataforma" }
+  }
+]
