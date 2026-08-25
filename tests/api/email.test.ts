@@ -7,9 +7,23 @@ vi.mock('@/lib/cli/himalaya', () => ({
   listFolders: vi.fn(),
   fetchBody: vi.fn(),
   gmailUrl: vi.fn(),
+  sendReply: vi.fn(),
 }));
 
-import { setSeen, moveTo, deleteEmail, listFolders } from '@/lib/cli/himalaya';
+vi.mock('@/lib/emailCache', () => ({
+  getCachedBody: vi.fn(() => 'corpo do e-mail'),
+  putCachedBody: vi.fn(),
+}));
+
+vi.mock('@/lib/ai/replyDraft', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/ai/replyDraft')>('@/lib/ai/replyDraft');
+  return { ...actual, draftReply: vi.fn(async () => 'rascunho gerado') };
+});
+
+import { setSeen, moveTo, deleteEmail, listFolders, sendReply } from '@/lib/cli/himalaya';
+import { draftReply, MissingApiKeyError } from '@/lib/ai/replyDraft';
+import { POST as replyRoute } from '@/app/api/email/reply/route';
+import { POST as draftRoute } from '@/app/api/email/reply/draft/route';
 import { POST as markRoute } from '@/app/api/email/mark/route';
 import { POST as batchRoute } from '@/app/api/email/batch/route';
 import { GET as foldersRoute } from '@/app/api/email/folders/route';
@@ -116,5 +130,49 @@ describe('GET /api/email/folders', () => {
     const res = await foldersRoute(new Request('http://localhost/api/email/folders?account=work'));
     const data = await res.json();
     expect(data.folders).toEqual(['INBOX', 'Trash']);
+  });
+});
+
+describe('POST /api/email/reply', () => {
+  it('envia a resposta pelo himalaya', async () => {
+    const res = await replyRoute(jsonRequest({ account: 'work', id: '1', body: 'Confirmado.' }) as never);
+    expect(res.status).toBe(200);
+    expect(sendReply).toHaveBeenCalledWith('work', '1', 'Confirmado.');
+  });
+
+  it('resposta vazia devolve 400 sem chamar o CLI', async () => {
+    const res = await replyRoute(jsonRequest({ account: 'work', id: '1', body: '   ' }) as never);
+    expect(res.status).toBe(400);
+    expect(sendReply).not.toHaveBeenCalled();
+  });
+
+  it('conta inválida devolve 400', async () => {
+    const res = await replyRoute(jsonRequest({ account: 'x', id: '1', body: 'oi' }) as never);
+    expect(res.status).toBe(400);
+    expect(sendReply).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/email/reply/draft', () => {
+  it('gera o rascunho a partir do corpo em cache', async () => {
+    const res = await draftRoute(
+      jsonRequest({ account: 'work', id: '1', from: 'Milton', subject: 'PR', instruction: 'aceita' }) as never,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ text: 'rascunho gerado' });
+    expect(draftReply).toHaveBeenCalledWith({
+      from: 'Milton',
+      subject: 'PR',
+      body: 'corpo do e-mail',
+      instruction: 'aceita',
+    });
+  });
+
+  // Sem chave a falha é de configuração, não do IMAP: 503 deixa a mensagem
+  // "ANTHROPIC_API_KEY não configurada" chegar à tela em vez de virar 502.
+  it('sem ANTHROPIC_API_KEY devolve 503', async () => {
+    vi.mocked(draftReply).mockRejectedValueOnce(new MissingApiKeyError());
+    const res = await draftRoute(jsonRequest({ account: 'work', id: '1' }) as never);
+    expect(res.status).toBe(503);
   });
 });

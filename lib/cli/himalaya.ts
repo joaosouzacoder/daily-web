@@ -58,3 +58,14 @@ export async function gmailUrl(account: Account, id: string): Promise<string | n
   if (!messageId) return null;
   return `https://mail.google.com/mail/u/0/#search/rfc822msgid%3A${encodeURIComponent(messageId)}`;
 }
+
+// `--body=<texto>` em vez de `--body <texto>`: a forma com "=" faz o clap
+// tratar o valor como literal, então uma resposta que começa com "-" não é
+// confundida com outra flag.
+export async function sendReply(account: Account, id: string, body: string): Promise<void> {
+  await runCli(
+    'himalaya',
+    ['message', 'reply', id, '-a', account, `--body=${body}`, '--send'],
+    { timeoutMs: 60_000 },
+  );
+}

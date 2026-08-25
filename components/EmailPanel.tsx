@@ -339,6 +339,10 @@ function EmailDetail({
   const [error, setError] = useState<string | null>(null);
   const [tag, setTag] = useState('');
   const [appliedTags, setAppliedTags] = useState<string[]>([]);
+  const [reply, setReply] = useState('');
+  const [drafting, setDrafting] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
   const tagOptions = folders;
 
   useEffect(() => {
@@ -352,6 +356,52 @@ function EmailDetail({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  // O que já estiver escrito na caixa vira instrução para o rascunho ("diz que
+  // eu confirmo terça"); vazia, a IA escreve a resposta do zero.
+  const draftWithAi = async () => {
+    setDrafting(true);
+    const res = await fetch('/api/email/reply/draft', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        account: email.account,
+        id: email.id,
+        from: email.from,
+        subject: email.subject,
+        instruction: reply,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setDrafting(false);
+    if (!res.ok) {
+      setError(data.error ?? 'Falha ao gerar a resposta');
+      return;
+    }
+    setError(null);
+    setSent(false);
+    setReply(data.text ?? '');
+  };
+
+  const sendReply = async () => {
+    if (!reply.trim()) return;
+    setSending(true);
+    const res = await fetch('/api/email/reply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account: email.account, id: email.id, body: reply }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setSending(false);
+    if (!res.ok) {
+      setError(data.error ?? 'Falha ao enviar a resposta');
+      return;
+    }
+    setError(null);
+    setSent(true);
+    setReply('');
+    onChanged();
+  };
 
   const applyTag = async () => {
     if (!tag) return;
@@ -424,6 +474,34 @@ function EmailDetail({
           {error}
         </p>
       )}
+
+      <div className="mail-reply">
+        <textarea
+          className="field mail-reply-input"
+          aria-label="resposta"
+          rows={4}
+          placeholder="Escreva sua resposta — ou descreva o que dizer e peça o rascunho para a IA."
+          value={reply}
+          onChange={(e) => {
+            setReply(e.target.value);
+            setSent(false);
+          }}
+        />
+        <div className="mail-reply-actions">
+          <button type="button" className="btn" disabled={drafting} onClick={() => void draftWithAi()}>
+            {drafting ? 'Gerando…' : 'Responder com IA'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={sending || reply.trim().length === 0}
+            onClick={() => void sendReply()}
+          >
+            {sending ? 'Enviando…' : 'Enviar resposta'}
+          </button>
+          {sent && <span className="mail-reply-sent">Resposta enviada.</span>}
+        </div>
+      </div>
 
       <div className="mail-actions">
         {tagOptions.length > 0 && (

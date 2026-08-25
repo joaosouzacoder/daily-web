@@ -93,4 +93,61 @@ describe('EmailPanel', () => {
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('falharam'));
     expect(onChanged).toHaveBeenCalled();
   });
+
+  it('abre o e-mail no acordeão em vez de um diálogo', async () => {
+    render(<EmailPanel email={{ data: items, error: null }} onChanged={() => {}} />);
+    const row = screen.getByRole('button', { name: /Revisão do PR/ });
+    expect(row).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(row);
+    await waitFor(() => expect(screen.getByLabelText('corpo do e-mail')).toBeInTheDocument());
+    expect(row).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('gera o rascunho com IA e envia a resposta', async () => {
+    vi.mocked(global.fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/api/email/reply/draft')) {
+        return new Response(JSON.stringify({ text: 'Perfeito, revisado.' }));
+      }
+      if (url.includes('/api/email/reply')) return new Response(JSON.stringify({ ok: true }));
+      if (url.includes('/body')) return new Response(JSON.stringify({ text: 'corpo' }));
+      return new Response(JSON.stringify({ folders: [] }));
+    });
+    const onChanged = vi.fn();
+    render(<EmailPanel email={{ data: items, error: null }} onChanged={onChanged} />);
+    fireEvent.click(screen.getByRole('button', { name: /Revisão do PR/ }));
+
+    const send = await screen.findByRole('button', { name: 'Enviar resposta' });
+    expect(send).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Responder com IA' }));
+    await waitFor(() =>
+      expect(screen.getByLabelText('resposta')).toHaveValue('Perfeito, revisado.'),
+    );
+    expect(send).toBeEnabled();
+
+    fireEvent.click(send);
+    await waitFor(() => expect(screen.getByText('Resposta enviada.')).toBeInTheDocument());
+    expect(screen.getByLabelText('resposta')).toHaveValue('');
+  });
+
+  it('mostra o erro quando a geração com IA falha', async () => {
+    vi.mocked(global.fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/api/email/reply/draft')) {
+        return new Response(JSON.stringify({ error: 'ANTHROPIC_API_KEY não configurada' }), {
+          status: 503,
+        });
+      }
+      if (url.includes('/body')) return new Response(JSON.stringify({ text: 'corpo' }));
+      return new Response(JSON.stringify({ folders: [] }));
+    });
+    render(<EmailPanel email={{ data: items, error: null }} onChanged={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: /Revisão do PR/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Responder com IA' }));
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toContain('ANTHROPIC_API_KEY'),
+    );
+  });
 });

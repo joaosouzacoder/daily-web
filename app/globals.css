@@ -676,6 +676,34 @@ input[type='checkbox']:checked {
   flex: 1;
 }
 
+.mail-reply {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+
+/* `.field` é dimensionada para controles de uma linha; a caixa de resposta
+   precisa crescer em altura e respeitar a fonte do restante do painel. */
+textarea.mail-reply-input {
+  min-height: 88px;
+  padding: var(--s3);
+  font-family: inherit;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.mail-reply-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex-wrap: wrap;
+}
+
+.mail-reply-sent {
+  font-size: var(--step--1);
+  color: var(--text-muted);
+}
+
 .row-time {
   font-size: var(--step--1);
   color: var(--text-faint);
