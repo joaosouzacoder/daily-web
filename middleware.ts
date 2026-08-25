@@ -18,9 +18,9 @@ export async function middleware(request: NextRequest) {
     if (pathname.startsWith('/api')) {
       return NextResponse.json({ error: 'não autenticado' }, { status: 401 });
     }
-    const host = request.headers.get('host') ?? request.nextUrl.host;
-    const proto = request.headers.get('x-forwarded-proto') ?? request.nextUrl.protocol.replace(':', '');
-    return NextResponse.redirect(`${proto}://${host}/login`);
+    const publicOrigin = process.env.PUBLIC_ORIGIN;
+    const loginUrl = publicOrigin ? new URL('/login', publicOrigin) : new URL('/login', request.nextUrl.origin);
+    return NextResponse.redirect(loginUrl);
   }
 
   return NextResponse.next();
