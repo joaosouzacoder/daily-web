@@ -17,7 +17,9 @@ export function JiraPanel({ jira }: { jira: PanelResult<JiraItem[]> }) {
   const [filter, setFilter] = useState<Filter>('both');
   const [grouped, setGrouped] = useState(false);
 
-  const filtered = (jira.data ?? []).filter((i) => filter === 'both' || i.role === filter);
+  const filtered = (jira.data ?? []).filter(
+    (i) => filter === 'both' || i.role === filter || i.role === 'both',
+  );
   const groups = useMemo(() => groupByParent(filtered), [filtered]);
 
   const cycleFilter = () =>
