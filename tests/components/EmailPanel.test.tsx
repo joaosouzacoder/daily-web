@@ -26,6 +26,7 @@ describe('EmailPanel', () => {
   });
 
   it('selecionar um e-mail habilita as ações em lote', () => {
+    vi.spyOn(global, 'fetch').mockResolvedValue(new Response(JSON.stringify({ folders: [] })));
     render(<EmailPanel email={{ data: messages, error: null }} onChanged={() => {}} />);
     fireEvent.click(screen.getByLabelText('selecionar Oi'));
     expect(screen.getByText('excluir')).toBeInTheDocument();
@@ -48,9 +49,14 @@ describe('EmailPanel', () => {
   // item (contrato real após o fix do Task 16) — a UI precisa ler esse
   // array em vez de assumir sucesso geral.
   it('ação em lote bem-sucedida limpa a seleção usando o resultado por item', async () => {
-    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValueOnce(
-      new Response(JSON.stringify({ results: [{ account: 'work', id: '1', ok: true }] })),
-    );
+    const fetchSpy = vi.spyOn(global, 'fetch').mockImplementation((input) => {
+      if (String(input).startsWith('/api/email/folders')) {
+        return Promise.resolve(new Response(JSON.stringify({ folders: [] })));
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ results: [{ account: 'work', id: '1', ok: true }] })),
+      );
+    });
     const onChanged = vi.fn();
     render(<EmailPanel email={{ data: messages, error: null }} onChanged={onChanged} />);
     fireEvent.click(screen.getByLabelText('selecionar Oi'));
@@ -67,12 +73,108 @@ describe('EmailPanel', () => {
     );
   });
 
-  it('ação em lote com falha parcial mostra o erro e mantém selecionado o item que falhou', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({ results: [{ account: 'work', id: '1', ok: false, error: 'cli error' }] }),
+  it('excluir um e-mail aberto pede confirmação e NÃO chama a API se o usuário recusar', async () => {
+    const fetchSpy = vi
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({ text: 'corpo do e-mail' })))
+      .mockResolvedValueOnce(new Response('{}'));
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<EmailPanel email={{ data: messages, error: null }} onChanged={() => {}} />);
+    fireEvent.click(screen.getByText(/Oi — Alice/));
+    await waitFor(() => expect(screen.getByText('corpo do e-mail')).toBeInTheDocument());
+    fetchSpy.mockClear();
+
+    fireEvent.click(screen.getByText('excluir'));
+
+    expect(window.confirm).toHaveBeenCalledWith('Excluir este e-mail?');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('excluir um e-mail aberto chama a API de exclusão quando o usuário confirma', async () => {
+    const fetchSpy = vi
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({ text: 'corpo do e-mail' })))
+      .mockResolvedValueOnce(new Response('{}'))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ results: [{ account: 'work', id: '1', ok: true }] })),
+      );
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const onChanged = vi.fn();
+    render(<EmailPanel email={{ data: messages, error: null }} onChanged={onChanged} />);
+    fireEvent.click(screen.getByText(/Oi — Alice/));
+    await waitFor(() => expect(screen.getByText('corpo do e-mail')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('excluir'));
+
+    await waitFor(() =>
+      expect(fetchSpy).toHaveBeenCalledWith(
+        '/api/email/batch',
+        expect.objectContaining({
+          body: JSON.stringify({ targets: [{ account: 'work', id: '1' }], action: 'delete' }),
+        }),
       ),
     );
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+  });
+
+  it('selecionar um e-mail busca as pastas da conta e as renderiza como opções', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch').mockImplementation((input) => {
+      if (String(input).startsWith('/api/email/folders')) {
+        return Promise.resolve(new Response(JSON.stringify({ folders: ['INBOX', 'Arquivo'] })));
+      }
+      return Promise.resolve(new Response('{}'));
+    });
+    render(<EmailPanel email={{ data: messages, error: null }} onChanged={() => {}} />);
+    fireEvent.click(screen.getByLabelText('selecionar Oi'));
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledWith('/api/email/folders?account=work'));
+    expect(screen.getByRole('option', { name: 'INBOX' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Arquivo' })).toBeInTheDocument();
+  });
+
+  it('escolher uma pasta e clicar em "mover" chama o batch com action "move" e a pasta escolhida', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch').mockImplementation((input) => {
+      if (String(input).startsWith('/api/email/folders')) {
+        return Promise.resolve(new Response(JSON.stringify({ folders: ['INBOX', 'Arquivo'] })));
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ results: [{ account: 'work', id: '1', ok: true }] })),
+      );
+    });
+    const onChanged = vi.fn();
+    render(<EmailPanel email={{ data: messages, error: null }} onChanged={onChanged} />);
+    fireEvent.click(screen.getByLabelText('selecionar Oi'));
+    await waitFor(() => expect(screen.getByLabelText('pasta de destino')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText('pasta de destino'), { target: { value: 'Arquivo' } });
+    fireEvent.click(screen.getByText('mover'));
+
+    await waitFor(() =>
+      expect(fetchSpy).toHaveBeenCalledWith(
+        '/api/email/batch',
+        expect.objectContaining({
+          body: JSON.stringify({
+            targets: [{ account: 'work', id: '1' }],
+            action: 'move',
+            folder: 'Arquivo',
+          }),
+        }),
+      ),
+    );
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+  });
+
+  it('ação em lote com falha parcial mostra o erro e mantém selecionado o item que falhou', async () => {
+    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+      if (String(input).startsWith('/api/email/folders')) {
+        return Promise.resolve(new Response(JSON.stringify({ folders: [] })));
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ results: [{ account: 'work', id: '1', ok: false, error: 'cli error' }] }),
+        ),
+      );
+    });
     render(<EmailPanel email={{ data: messages, error: null }} onChanged={() => {}} />);
     fireEvent.click(screen.getByLabelText('selecionar Oi'));
     fireEvent.click(screen.getByText('excluir'));

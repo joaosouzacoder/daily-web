@@ -25,12 +25,13 @@ async function postJson(url: string, body: unknown) {
 // sucesso ou falha geral da chamada.
 async function postBatch(
   targets: { account: string; id: string }[],
-  action: 'read' | 'unread' | 'delete',
+  action: 'read' | 'unread' | 'delete' | 'move',
+  folder?: string,
 ): Promise<BatchTargetResult[]> {
   const res = await fetch('/api/email/batch', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ targets, action }),
+    body: JSON.stringify(folder !== undefined ? { targets, action, folder } : { targets, action }),
   });
   const data = await res.json();
   return (data.results ?? []) as BatchTargetResult[];
@@ -44,6 +45,8 @@ export function EmailPanel({ email, onChanged }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [batchError, setBatchError] = useState<string | null>(null);
+  const [folders, setFolders] = useState<string[]>([]);
+  const [targetFolder, setTargetFolder] = useState('');
 
   const toggleSelect = (m: EmailEnvelope) => {
     setSelected((prev) => {
@@ -55,12 +58,45 @@ export function EmailPanel({ email, onChanged }: Props) {
     });
   };
 
-  const runBatch = async (action: 'read' | 'unread' | 'delete') => {
+  useEffect(() => {
+    if (selected.size === 0) {
+      setFolders([]);
+      setTargetFolder('');
+      return;
+    }
+    const accounts = Array.from(
+      new Set((email.data ?? []).filter((m) => selected.has(key(m))).map((m) => m.account)),
+    );
+    let cancelled = false;
+    Promise.all(
+      accounts.map((account) =>
+        fetch(`/api/email/folders?account=${account}`)
+          .then((r) => r.json())
+          .then((data) => (data.folders ?? []) as string[]),
+      ),
+    )
+      .then((lists) => {
+        if (cancelled) return;
+        const merged = Array.from(new Set(lists.flat()));
+        setFolders(merged);
+        setTargetFolder((prev) => (merged.includes(prev) ? prev : (merged[0] ?? '')));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setFolders([]);
+        setTargetFolder('');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected, email.data]);
+
+  const runBatch = async (action: 'read' | 'unread' | 'delete' | 'move', folder?: string) => {
     const targets = (email.data ?? [])
       .filter((m) => selected.has(key(m)))
       .map((m) => ({ account: m.account, id: m.id }));
     if (targets.length === 0) return;
-    const results = await postBatch(targets, action);
+    const results = await postBatch(targets, action, folder);
     const failed = results.filter((r) => !r.ok);
     if (failed.length > 0) {
       setBatchError(
@@ -91,6 +127,22 @@ export function EmailPanel({ email, onChanged }: Props) {
             <button onClick={() => void runBatch('read')}>marcar lido</button>
             <button onClick={() => void runBatch('unread')}>marcar não lido</button>
             <button onClick={() => void runBatch('delete')}>excluir</button>
+            {folders.length > 0 && (
+              <>
+                <select
+                  aria-label="pasta de destino"
+                  value={targetFolder}
+                  onChange={(e) => setTargetFolder(e.target.value)}
+                >
+                  {folders.map((f) => (
+                    <option key={f} value={f}>
+                      {f}
+                    </option>
+                  ))}
+                </select>
+                <button onClick={() => void runBatch('move', targetFolder)}>mover</button>
+              </>
+            )}
           </div>
         )}
       </header>
@@ -152,6 +204,7 @@ function EmailDetail({
   }, [email.account, email.id, email.unread, onChanged]);
 
   const remove = async () => {
+    if (!window.confirm('Excluir este e-mail?')) return;
     const [result] = await postBatch([{ account: email.account, id: email.id }], 'delete');
     if (result && !result.ok) {
       setError(result.error ?? 'falha ao excluir');
