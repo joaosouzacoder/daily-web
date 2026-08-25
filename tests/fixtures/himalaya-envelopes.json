@@ -1,0 +1,16 @@
+[
+  {
+    "id": "142",
+    "flags": ["Seen"],
+    "subject": "Re: revisão do PR #482",
+    "from": { "name": "Milton Yoshida", "addr": "milton.yoshida@example.com" },
+    "date": "2026-08-24 09:15+00:00"
+  },
+  {
+    "id": "143",
+    "flags": [],
+    "subject": null,
+    "from": { "name": "", "addr": "no-reply@github.com" },
+    "date": "2026-08-24 10:02+00:00"
+  }
+]
