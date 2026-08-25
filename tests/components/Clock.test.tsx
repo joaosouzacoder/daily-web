@@ -7,7 +7,13 @@ afterEach(cleanup);
 describe('Clock', () => {
   it('renderiza a hora no formato HH:MM:SS', () => {
     render(<Clock />);
-    const text = screen.getByTestId('clock').textContent ?? '';
-    expect(text).toMatch(/\d{2}:\d{2}:\d{2}/);
+    expect(screen.getByTestId('clock-time').textContent).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+  });
+
+  it('renderiza a data por extenso em português', () => {
+    render(<Clock />);
+    expect(screen.getByTestId('clock-date').textContent).toMatch(
+      /(domingo|segunda|terça|quarta|quinta|sexta|sábado)/,
+    );
   });
 });

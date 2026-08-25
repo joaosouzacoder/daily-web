@@ -2,15 +2,32 @@
 
 import { useEffect, useState } from 'react';
 
-const WEEKDAYS_PT = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
-const MONTHS_PT = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+const WEEKDAYS = [
+  'domingo',
+  'segunda-feira',
+  'terça-feira',
+  'quarta-feira',
+  'quinta-feira',
+  'sexta-feira',
+  'sábado',
+];
+const MONTHS = [
+  'janeiro',
+  'fevereiro',
+  'março',
+  'abril',
+  'maio',
+  'junho',
+  'julho',
+  'agosto',
+  'setembro',
+  'outubro',
+  'novembro',
+  'dezembro',
+];
 
-function formatDateLong(date: Date): string {
-  return `${WEEKDAYS_PT[date.getDay()]}, ${date.getDate()} de ${MONTHS_PT[date.getMonth()]} de ${date.getFullYear()}`;
-}
-
-function formatTime(date: Date): string {
-  return date.toLocaleTimeString('pt-BR', { hour12: false });
+function pad(value: number): string {
+  return value.toString().padStart(2, '0');
 }
 
 export function Clock() {
@@ -18,16 +35,33 @@ export function Clock() {
 
   useEffect(() => {
     setNow(new Date());
-    const interval = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(interval);
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
   }, []);
 
-  if (!now) return null;
+  // Reserva a altura final desde o primeiro render para não causar salto de
+  // layout quando o relógio começa a marcar.
+  if (!now) {
+    return (
+      <div className="now-clock">
+        <span className="now-time mono" data-testid="clock-time">
+          &nbsp;
+        </span>
+        <span className="now-date" data-testid="clock-date">
+          &nbsp;
+        </span>
+      </div>
+    );
+  }
 
   return (
-    <div data-testid="clock">
-      <div style={{ fontSize: '2rem' }}>{formatTime(now)}</div>
-      <div style={{ color: 'var(--ctp-subtext0)' }}>{formatDateLong(now)}</div>
+    <div className="now-clock">
+      <time className="now-time mono" data-testid="clock-time">
+        {pad(now.getHours())}:{pad(now.getMinutes())}:{pad(now.getSeconds())}
+      </time>
+      <span className="now-date" data-testid="clock-date">
+        {WEEKDAYS[now.getDay()]}, {now.getDate()} de {MONTHS[now.getMonth()]}
+      </span>
     </div>
   );
 }

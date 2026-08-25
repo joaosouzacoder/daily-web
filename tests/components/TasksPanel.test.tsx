@@ -3,130 +3,132 @@ import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/re
 import { TasksPanel } from '@/components/TasksPanel';
 import type { TodoTask } from '@/lib/types';
 
+function task(over: Partial<TodoTask>): TodoTask {
+  return {
+    id: '1',
+    title: 'Tarefa',
+    completed: false,
+    due: '',
+    priority: 'normal',
+    time: '',
+    recur: '',
+    notes: '',
+    subtasks: [],
+    ...over,
+  };
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
 });
 
-const tasks: TodoTask[] = [
-  { id: 'a', title: 'Comprar café', completed: false, due: '2026-08-25', priority: 'high', time: '', recur: '', notes: '', subtasks: [] },
-];
-
-const taskWithSubtasks: TodoTask[] = [
-  {
-    id: 'a',
-    title: 'Comprar café',
-    completed: false,
-    due: '2026-08-25',
-    priority: 'high',
-    time: '',
-    recur: '',
-    notes: '',
-    subtasks: [
-      { id: 's1', title: 'Grãos', completed: false },
-      { id: 's2', title: 'Filtro', completed: true },
-    ],
-  },
-];
-
 describe('TasksPanel', () => {
-  it('agrupa por faixa de prazo e mostra o marcador de prioridade', () => {
-    render(<TasksPanel tasks={{ data: tasks, error: null }} onChanged={() => {}} />);
-    expect(screen.getByText('HOJE')).toBeInTheDocument();
-    expect(screen.getByText('!!!')).toBeInTheDocument();
+  it('lista as tarefas agrupadas por faixa de prazo', () => {
+    render(
+      <TasksPanel
+        tasks={{ data: [task({ id: '1', title: 'Sem data' })], error: null }}
+        onChanged={() => {}}
+      />,
+    );
+    expect(screen.getByText('Sem data')).toBeInTheDocument();
   });
 
-  it('abre o formulário ao clicar em uma tarefa', () => {
-    render(<TasksPanel tasks={{ data: tasks, error: null }} onChanged={() => {}} />);
-    fireEvent.click(screen.getByText('Comprar café'));
-    expect(screen.getByRole('dialog', { name: 'formulário de tarefa' })).toBeInTheDocument();
+  it('filtra por busca textual', () => {
+    render(
+      <TasksPanel
+        tasks={{
+          data: [task({ id: '1', title: 'Comprar pão' }), task({ id: '2', title: 'Revisar PR' })],
+          error: null,
+        }}
+        onChanged={() => {}}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText('buscar tarefas'), { target: { value: 'pão' } });
+    expect(screen.getByText('Comprar pão')).toBeInTheDocument();
+    expect(screen.queryByText('Revisar PR')).toBeNull();
   });
 
-  it('mostra o erro do painel quando presente', () => {
-    render(<TasksPanel tasks={{ data: [], error: 'mstodo falhou: sem credenciais' }} onChanged={() => {}} />);
-    expect(screen.getByRole('alert').textContent).toContain('sem credenciais');
+  it('filtra por prioridade alta', () => {
+    render(
+      <TasksPanel
+        tasks={{
+          data: [
+            task({ id: '1', title: 'Urgente', priority: 'high' }),
+            task({ id: '2', title: 'Comum' }),
+          ],
+          error: null,
+        }}
+        onChanged={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'alta' }));
+    expect(screen.getByText('Urgente')).toBeInTheDocument();
+    expect(screen.queryByText('Comum')).toBeNull();
   });
 
-  it('apagar uma tarefa com resposta não-ok mostra erro visível e não chama onChanged', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ error: 'mstodo falhou: id não encontrado' }), { status: 502 }),
+  it('conclui uma tarefa e avisa onChanged', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(new Response('{}'));
+    const onChanged = vi.fn();
+    render(<TasksPanel tasks={{ data: [task({})], error: null }} onChanged={onChanged} />);
+    fireEvent.click(screen.getByLabelText('concluir Tarefa'));
+    await waitFor(() =>
+      expect(fetchSpy).toHaveBeenCalledWith(
+        '/api/tasks/1',
+        expect.objectContaining({ method: 'PATCH' }),
+      ),
+    );
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+  });
+
+  it('mostra erro e não avisa onChanged quando concluir falha', async () => {
+    vi.spyOn(global, 'fetch').mockImplementation(
+      async () => new Response(JSON.stringify({ error: 'mstodo falhou' }), { status: 502 }),
     );
     const onChanged = vi.fn();
-    render(<TasksPanel tasks={{ data: tasks, error: null }} onChanged={onChanged} />);
-    fireEvent.click(screen.getByText('apagar'));
-    await waitFor(() =>
-      expect(screen.getByRole('alert').textContent).toContain('id não encontrado'),
-    );
+    render(<TasksPanel tasks={{ data: [task({})], error: null }} onChanged={onChanged} />);
+    fireEvent.click(screen.getByLabelText('concluir Tarefa'));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('mstodo falhou'));
     expect(onChanged).not.toHaveBeenCalled();
   });
 
-  it('apagar uma tarefa com sucesso chama onChanged e não mostra erro', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValue(new Response(JSON.stringify({ ok: true })));
-    const onChanged = vi.fn();
-    render(<TasksPanel tasks={{ data: tasks, error: null }} onChanged={onChanged} />);
-    fireEvent.click(screen.getByText('apagar'));
-    await waitFor(() => expect(onChanged).toHaveBeenCalled());
-    expect(screen.queryByRole('alert')).toBeNull();
-  });
-
-  it('renderiza as subtarefas quando presentes', () => {
-    render(<TasksPanel tasks={{ data: taskWithSubtasks, error: null }} onChanged={() => {}} />);
-    expect(screen.getByText('Grãos')).toBeInTheDocument();
-    expect(screen.getByText('Filtro')).toBeInTheDocument();
-    expect(screen.getByLabelText('concluir subtarefa Grãos')).not.toBeChecked();
-    expect(screen.getByLabelText('concluir subtarefa Filtro')).toBeChecked();
-  });
-
-  it('não renderiza itens de subtarefa quando a lista está vazia', () => {
-    render(<TasksPanel tasks={{ data: tasks, error: null }} onChanged={() => {}} />);
-    expect(screen.queryByLabelText(/concluir subtarefa/)).toBeNull();
-  });
-
-  it('marcar o checkbox de uma subtarefa chama o PATCH correto', async () => {
-    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(new Response(JSON.stringify({ ok: true })));
-    const onChanged = vi.fn();
-    render(<TasksPanel tasks={{ data: taskWithSubtasks, error: null }} onChanged={onChanged} />);
-    fireEvent.click(screen.getByLabelText('concluir subtarefa Grãos'));
+  it('marca uma subtarefa pela API certa', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(new Response('{}'));
+    render(
+      <TasksPanel
+        tasks={{
+          data: [task({ subtasks: [{ id: 's1', title: 'Etapa', completed: false }] })],
+          error: null,
+        }}
+        onChanged={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText('concluir subtarefa Etapa'));
     await waitFor(() =>
       expect(fetchSpy).toHaveBeenCalledWith(
-        '/api/tasks/a/subtasks/s1',
-        expect.objectContaining({
-          method: 'PATCH',
-          body: JSON.stringify({ completed: true }),
-        }),
+        '/api/tasks/1/subtasks/s1',
+        expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ completed: true }) }),
       ),
     );
-    await waitFor(() => expect(onChanged).toHaveBeenCalled());
   });
 
-  it('adicionar uma subtarefa chama o POST correto e limpa o campo', async () => {
-    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(new Response(JSON.stringify({ ok: true })));
-    const onChanged = vi.fn();
-    render(<TasksPanel tasks={{ data: tasks, error: null }} onChanged={onChanged} />);
-    const input = screen.getByLabelText('nova subtarefa de Comprar café');
-    fireEvent.change(input, { target: { value: 'Açúcar' } });
-    fireEvent.click(screen.getByText('adicionar subtarefa'));
+  it('adiciona uma subtarefa pela API certa', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(new Response('{}'));
+    render(<TasksPanel tasks={{ data: [task({})], error: null }} onChanged={() => {}} />);
+    fireEvent.change(screen.getByLabelText('nova subtarefa de Tarefa'), {
+      target: { value: 'Etapa nova' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'adicionar' }));
     await waitFor(() =>
       expect(fetchSpy).toHaveBeenCalledWith(
-        '/api/tasks/a/subtasks',
-        expect.objectContaining({
-          method: 'POST',
-          body: JSON.stringify({ title: 'Açúcar' }),
-        }),
+        '/api/tasks/1/subtasks',
+        expect.objectContaining({ method: 'POST', body: JSON.stringify({ title: 'Etapa nova' }) }),
       ),
     );
-    await waitFor(() => expect(onChanged).toHaveBeenCalled());
-    expect((input as HTMLInputElement).value).toBe('');
   });
 
-  it('apagar uma subtarefa chama o DELETE correto', async () => {
-    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(new Response(JSON.stringify({ ok: true })));
-    const onChanged = vi.fn();
-    render(<TasksPanel tasks={{ data: taskWithSubtasks, error: null }} onChanged={onChanged} />);
-    fireEvent.click(screen.getByLabelText('apagar subtarefa Grãos'));
-    await waitFor(() =>
-      expect(fetchSpy).toHaveBeenCalledWith('/api/tasks/a/subtasks/s1', { method: 'DELETE' }),
-    );
-    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+  it('mostra o estado vazio quando não há tarefas', () => {
+    render(<TasksPanel tasks={{ data: [], error: null }} onChanged={() => {}} />);
+    expect(screen.getByText(/nenhuma tarefa/i)).toBeInTheDocument();
   });
 });

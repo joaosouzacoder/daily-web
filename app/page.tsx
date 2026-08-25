@@ -1,45 +1,56 @@
 'use client';
 
 import { useDashboardState } from '@/lib/hooks/usePolling';
-import { Clock } from '@/components/Clock';
-import { Pomodoro } from '@/components/Pomodoro';
+import { NowBand } from '@/components/NowBand';
+import { NotificationsBell } from '@/components/NotificationsBell';
 import { EmailPanel } from '@/components/EmailPanel';
 import { AgendaPanel } from '@/components/AgendaPanel';
 import { PullsPanel } from '@/components/PullsPanel';
 import { JiraPanel } from '@/components/JiraPanel';
 import { TasksPanel } from '@/components/TasksPanel';
-import { NotificationsBell } from '@/components/NotificationsBell';
 
 export default function DashboardPage() {
   const { state, loading, refreshNow, reload } = useDashboardState();
+  const booting = loading && !state;
 
   return (
-    <main>
-      <div className="topbar">
-        <div style={{ display: 'flex', gap: '2rem', alignItems: 'center' }}>
-          <Clock />
-          <Pomodoro pomodoro={state?.pomodoro ?? null} onChanged={reload} />
-        </div>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          <button onClick={() => void refreshNow()} disabled={loading}>
-            {loading ? 'atualizando…' : 'atualizar agora'}
-          </button>
+    <main className="shell">
+      <NowBand
+        pomodoro={state?.pomodoro ?? null}
+        loading={loading}
+        onRefresh={() => void refreshNow()}
+        onChanged={reload}
+        updatedAt={state?.updatedAt ?? null}
+        bell={
           <NotificationsBell
             notifications={state?.notifications ?? { data: [], error: null }}
             onChanged={reload}
           />
+        }
+      />
+
+      <div className="columns">
+        <div className="col">
+          <EmailPanel
+            email={state?.email ?? { data: [], error: null }}
+            onChanged={reload}
+            loading={booting}
+          />
+          <TasksPanel
+            tasks={state?.tasks ?? { data: [], error: null }}
+            onChanged={reload}
+            loading={booting}
+          />
         </div>
-      </div>
-      <div className="dashboard-grid">
-        <EmailPanel email={state?.email ?? { data: [], error: null }} onChanged={reload} />
-        <AgendaPanel agenda={state?.agenda ?? { data: [], error: null }} />
-        <JiraPanel jira={state?.jira ?? { data: [], error: null }} />
-        <TasksPanel tasks={state?.tasks ?? { data: [], error: null }} onChanged={reload} />
-        <PullsPanel
-          pulls={state?.pulls ?? { data: { lines: [] }, error: null }}
-          className="span-2"
-          onChanged={reload}
-        />
+        <div className="col">
+          <AgendaPanel agenda={state?.agenda ?? { data: [], error: null }} loading={booting} />
+          <JiraPanel jira={state?.jira ?? { data: [], error: null }} loading={booting} />
+          <PullsPanel
+            pulls={state?.pulls ?? { data: { lines: [] }, error: null }}
+            onChanged={reload}
+            loading={booting}
+          />
+        </div>
       </div>
     </main>
   );

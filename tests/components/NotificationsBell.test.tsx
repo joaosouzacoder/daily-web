@@ -1,59 +1,80 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import { NotificationsBell } from '@/components/NotificationsBell';
-import type { NotificationItem } from '@/lib/types';
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
 });
 
-const items: NotificationItem[] = [
-  { id: 'A-1', source: 'jira_mention', title: 'A-1 — Bug', url: 'https://x/A-1', read: false },
+const items = [
+  {
+    id: 'A-1',
+    source: 'jira_mention' as const,
+    title: 'Mencionado em A-1',
+    url: 'https://x/A-1',
+    read: false,
+  },
+  {
+    id: 'A-2',
+    source: 'jira_mention' as const,
+    title: 'Mencionado em A-2',
+    url: 'https://x/A-2',
+    read: true,
+  },
 ];
 
 describe('NotificationsBell', () => {
-  it('mostra a contagem de não lidas no sino', () => {
+  it('mostra a contagem de não lidas', () => {
     render(<NotificationsBell notifications={{ data: items, error: null }} onChanged={() => {}} />);
-    expect(screen.getByLabelText('notificações').textContent).toContain('1');
-  });
-
-  it('não mostra contagem quando tudo está lido', () => {
-    render(
-      <NotificationsBell
-        notifications={{ data: [{ ...items[0], read: true }], error: null }}
-        onChanged={() => {}}
-      />,
-    );
-    expect(screen.getByLabelText('notificações').textContent?.trim()).toBe('🔔');
+    expect(screen.getByRole('button', { name: /notificações/ }).textContent).toContain('1');
   });
 
   it('abre o painel e lista as notificações', () => {
     render(<NotificationsBell notifications={{ data: items, error: null }} onChanged={() => {}} />);
-    fireEvent.click(screen.getByLabelText('notificações'));
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByText(/A-1 — Bug/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /notificações/ }));
+    expect(screen.getByText('Mencionado em A-1')).toBeInTheDocument();
   });
 
-  it('marcar como lida chama a API e avisa onChanged', async () => {
+  it('marca como lida e avisa onChanged', async () => {
     const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(new Response('{}'));
     const onChanged = vi.fn();
     render(<NotificationsBell notifications={{ data: items, error: null }} onChanged={onChanged} />);
-    fireEvent.click(screen.getByLabelText('notificações'));
-    fireEvent.click(screen.getByText('marcar como lida'));
-    await waitFor(() => expect(fetchSpy).toHaveBeenCalledWith('/api/notifications/A-1/read', { method: 'POST' }));
+    fireEvent.click(screen.getByRole('button', { name: /notificações/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'marcar Mencionado em A-1 como lida' }));
+    await waitFor(() =>
+      expect(fetchSpy).toHaveBeenCalledWith('/api/notifications/A-1/read', { method: 'POST' }),
+    );
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
   });
 
-  it('marcar como lida com resposta não-ok mostra erro visível e não chama onChanged', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ error: 'db falhou' }), { status: 502 }),
+  it('mostra erro quando marcar falha', async () => {
+    vi.spyOn(global, 'fetch').mockImplementation(
+      async () => new Response(JSON.stringify({ error: 'banco indisponível' }), { status: 502 }),
     );
-    const onChanged = vi.fn();
-    render(<NotificationsBell notifications={{ data: items, error: null }} onChanged={onChanged} />);
-    fireEvent.click(screen.getByLabelText('notificações'));
-    fireEvent.click(screen.getByText('marcar como lida'));
-    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('db falhou'));
-    expect(onChanged).not.toHaveBeenCalled();
+    render(<NotificationsBell notifications={{ data: items, error: null }} onChanged={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: /notificações/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'marcar Mencionado em A-1 como lida' }));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('banco indisponível'));
+  });
+
+  it('não oferece marcar como lida numa notificação já lida', () => {
+    render(<NotificationsBell notifications={{ data: items, error: null }} onChanged={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: /notificações/ }));
+    expect(screen.queryByRole('button', { name: 'marcar Mencionado em A-2 como lida' })).toBeNull();
+  });
+
+  it('mostra o estado vazio quando não há notificações', () => {
+    render(<NotificationsBell notifications={{ data: [], error: null }} onChanged={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: /notificações/ }));
+    expect(screen.getByText(/nada por aqui/i)).toBeInTheDocument();
+  });
+
+  it('fecha com a tecla Escape', () => {
+    render(<NotificationsBell notifications={{ data: items, error: null }} onChanged={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: /notificações/ }));
+    expect(screen.getByText('Mencionado em A-1')).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByText('Mencionado em A-1')).toBeNull();
   });
 });

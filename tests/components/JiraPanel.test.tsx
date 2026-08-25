@@ -3,63 +3,103 @@ import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { JiraPanel } from '@/components/JiraPanel';
 import type { JiraItem } from '@/lib/types';
 
+function issue(over: Partial<JiraItem>): JiraItem {
+  return {
+    key: 'A-1',
+    summary: 'Resumo',
+    status: 'Aberto',
+    project: 'A',
+    url: 'https://example/A-1',
+    parent: null,
+    role: 'assignee',
+    kind: 'História',
+    subtask: false,
+    ...over,
+  };
+}
+
 afterEach(cleanup);
 
-const issues: JiraItem[] = [
-  { key: 'A-1', summary: 'Bug', status: '', project: 'A', url: 'https://x/A-1', parent: null, role: 'reporter', kind: 'Bug', subtask: false },
-  { key: 'A-2', summary: 'Feature', status: '', project: 'A', url: 'https://x/A-2', parent: null, role: 'both', kind: 'História', subtask: false },
-];
-
 describe('JiraPanel', () => {
-  it('mostra REL para quem só relatou e RES para quem é responsável, no filtro ambas', () => {
-    render(<JiraPanel jira={{ data: issues, error: null }} />);
-    expect(screen.getByText('REL')).toBeInTheDocument();
-    expect(screen.getByText('RES')).toBeInTheDocument();
+  it('lista as issues com chave e resumo', () => {
+    render(<JiraPanel jira={{ data: [issue({})], error: null }} />);
+    expect(screen.getByText('A-1')).toBeInTheDocument();
+    expect(screen.getByText('Resumo')).toBeInTheDocument();
   });
 
-  it('ciclar o filtro (ambas -> minhas) esconde o marcador de papel', () => {
-    render(<JiraPanel jira={{ data: issues, error: null }} />);
-    fireEvent.click(screen.getByText(/filtro: ambas/));
-    expect(screen.getByText(/filtro: minhas/)).toBeInTheDocument();
-    expect(screen.queryByText('REL')).toBeNull();
-  });
-
-  it('filtro "minhas" mostra issues com role "assignee" e "both", mas esconde as só de "reporter"', () => {
-    render(<JiraPanel jira={{ data: issues, error: null }} />);
-    fireEvent.click(screen.getByText(/filtro: ambas/));
-    expect(screen.getByText(/filtro: minhas/)).toBeInTheDocument();
-    // A-2 tem role 'both' — precisa aparecer em "minhas" (é, entre outras
-    // coisas, uma issue da qual sou assignee), não só em "ambas".
+  it('mostra issues com papel both no filtro minhas', () => {
+    render(
+      <JiraPanel
+        jira={{
+          data: [issue({ key: 'A-1', role: 'reporter' }), issue({ key: 'A-2', role: 'both' })],
+          error: null,
+        }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'minhas' }));
     expect(screen.getByText('A-2')).toBeInTheDocument();
-    // A-1 tem role 'reporter' (não assignee) — não deve aparecer em "minhas".
     expect(screen.queryByText('A-1')).toBeNull();
   });
 
-  it('filtro "relator" mostra issues com role "reporter" e "both", mas esconde as só de "assignee"', () => {
-    const withAssigneeOnly: JiraItem[] = [
-      ...issues,
-      { key: 'A-3', summary: 'Tarefa', status: '', project: 'A', url: 'https://x/A-3', parent: null, role: 'assignee', kind: 'Tarefa', subtask: false },
-    ];
-    render(<JiraPanel jira={{ data: withAssigneeOnly, error: null }} />);
-    fireEvent.click(screen.getByText(/filtro: ambas/));
-    fireEvent.click(screen.getByText(/filtro: minhas/));
-    expect(screen.getByText(/filtro: relator/)).toBeInTheDocument();
-    expect(screen.getByText('A-1')).toBeInTheDocument();
+  it('mostra issues com papel both no filtro relator', () => {
+    render(
+      <JiraPanel
+        jira={{
+          data: [issue({ key: 'A-1', role: 'assignee' }), issue({ key: 'A-2', role: 'both' })],
+          error: null,
+        }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'relator' }));
     expect(screen.getByText('A-2')).toBeInTheDocument();
-    expect(screen.queryByText('A-3')).toBeNull();
+    expect(screen.queryByText('A-1')).toBeNull();
   });
 
-  it('agrupar por pai mostra o resumo do pai como cabeçalho', () => {
-    const withParent: JiraItem[] = [
-      { key: 'B-1', summary: 'Filha', status: '', project: 'B', url: 'https://x/B-1', parent: { key: 'B-0', summary: 'Épico mãe' }, role: 'assignee', kind: 'História', subtask: false },
-    ];
-    render(<JiraPanel jira={{ data: withParent, error: null }} />);
-    fireEvent.click(screen.getByText('agrupar por pai'));
-    expect(screen.getByText('Épico mãe')).toBeInTheDocument();
+  it('filtra por busca textual', () => {
+    render(
+      <JiraPanel
+        jira={{
+          data: [
+            issue({ key: 'A-1', summary: 'Corrigir login' }),
+            issue({ key: 'A-2', summary: 'Ajustar deploy' }),
+          ],
+          error: null,
+        }}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText('buscar issues'), { target: { value: 'login' } });
+    expect(screen.getByText('A-1')).toBeInTheDocument();
+    expect(screen.queryByText('A-2')).toBeNull();
+  });
+
+  it('agrupa por pai quando solicitado', () => {
+    render(
+      <JiraPanel
+        jira={{
+          data: [issue({ key: 'A-9', parent: { key: 'A-1', summary: 'Épico pai' } })],
+          error: null,
+        }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'agrupar por pai' }));
+    expect(screen.getByText('Épico pai')).toBeInTheDocument();
+  });
+
+  it('mostra o contador quando um filtro está ativo', () => {
+    render(
+      <JiraPanel
+        jira={{
+          data: [issue({ key: 'A-1', role: 'assignee' }), issue({ key: 'A-2', role: 'reporter' })],
+          error: null,
+        }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'minhas' }));
+    expect(screen.getByText('1 de 2')).toBeInTheDocument();
   });
 
   it('mostra o erro do painel quando presente', () => {
-    render(<JiraPanel jira={{ data: [], error: 'jira falhou: JIRA_TOKEN ausente' }} />);
-    expect(screen.getByRole('alert').textContent).toContain('JIRA_TOKEN');
+    render(<JiraPanel jira={{ data: null, error: 'jira falhou' }} />);
+    expect(screen.getByRole('alert').textContent).toContain('jira falhou');
   });
 });

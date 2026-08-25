@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { TaskPriority, TodoTask } from '@/lib/types';
 
 interface Props {
@@ -11,6 +11,19 @@ interface Props {
 
 const RECUR_CYCLE = ['none', 'daily', 'weekly', 'monthly'] as const;
 const PRIORITY_CYCLE: TaskPriority[] = ['normal', 'high', 'low'];
+
+const RECUR_LABEL: Record<(typeof RECUR_CYCLE)[number], string> = {
+  none: 'não repete',
+  daily: 'diária',
+  weekly: 'semanal',
+  monthly: 'mensal',
+};
+
+const PRIORITY_LABEL: Record<TaskPriority, string> = {
+  normal: 'normal',
+  high: 'alta',
+  low: 'baixa',
+};
 
 function initialRecur(task: TodoTask | null): (typeof RECUR_CYCLE)[number] {
   if (task?.recur === 'daily' || task?.recur === 'weekly') return task.recur;
@@ -25,7 +38,16 @@ export function TaskFormModal({ task, onClose, onSaved }: Props) {
   const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? 'normal');
   const [error, setError] = useState<string | null>(null);
 
-  const cycle = <T,>(list: readonly T[], current: T): T => list[(list.indexOf(current) + 1) % list.length];
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const cycle = <T,>(list: readonly T[], current: T): T =>
+    list[(list.indexOf(current) + 1) % list.length];
 
   const save = async () => {
     if (!title.trim()) {
@@ -43,7 +65,12 @@ export function TaskFormModal({ task, onClose, onSaved }: Props) {
         : await fetch('/api/tasks', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, due, priority, recur: recur === 'none' ? undefined : recur }),
+            body: JSON.stringify({
+              title,
+              due,
+              priority,
+              recur: recur === 'none' ? undefined : recur,
+            }),
           });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -57,24 +84,65 @@ export function TaskFormModal({ task, onClose, onSaved }: Props) {
   };
 
   return (
-    <div role="dialog" aria-label="formulário de tarefa" className="card">
-      <label>
-        Título
-        <input value={title} onChange={(e) => setTitle(e.target.value)} />
-      </label>
-      <label>
-        Vencimento (hoje, amanhã, +3d, AAAA-MM-DD, com hora opcional)
-        <input value={due} onChange={(e) => setDue(e.target.value)} placeholder="hoje 14:30" />
-      </label>
-      <button type="button" onClick={() => setPriority(cycle(PRIORITY_CYCLE, priority))}>
-        prioridade: {priority}
-      </button>
-      <button type="button" onClick={() => setRecur(cycle(RECUR_CYCLE, recur))}>
-        repetição: {recur}
-      </button>
-      {error && <p role="alert">{error}</p>}
-      <button onClick={() => void save()}>salvar</button>
-      <button onClick={onClose}>cancelar</button>
+    <div className="modal-backdrop" onClick={onClose}>
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="formulário de tarefa"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="modal-title">{task ? 'Editar tarefa' : 'Nova tarefa'}</h3>
+
+        <label>
+          Título
+          <input
+            className="field"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            autoFocus
+          />
+        </label>
+
+        <label>
+          Vencimento
+          <input
+            className="field"
+            value={due}
+            onChange={(e) => setDue(e.target.value)}
+            placeholder="hoje 14:30"
+          />
+          <span className="modal-hint">hoje, amanhã, +3d, AAAA-MM-DD — hora opcional no fim</span>
+        </label>
+
+        <div className="modal-row">
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setPriority(cycle(PRIORITY_CYCLE, priority))}
+          >
+            prioridade: {PRIORITY_LABEL[priority]}
+          </button>
+          <button type="button" className="btn" onClick={() => setRecur(cycle(RECUR_CYCLE, recur))}>
+            repetição: {RECUR_LABEL[recur]}
+          </button>
+        </div>
+
+        {error && (
+          <p role="alert" className="login-error">
+            {error}
+          </p>
+        )}
+
+        <div className="modal-actions">
+          <button type="button" className="btn" onClick={onClose}>
+            cancelar
+          </button>
+          <button type="button" className="btn btn-primary" onClick={() => void save()}>
+            salvar
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

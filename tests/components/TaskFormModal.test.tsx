@@ -43,12 +43,28 @@ describe('TaskFormModal', () => {
     expect(onSaved).not.toHaveBeenCalled();
   });
 
-  it('ciclar a prioridade avança normal -> alta -> baixa -> normal', () => {
+  it('ciclar a prioridade avança normal -> alta -> baixa', () => {
     render(<TaskFormModal task={null} onClose={() => {}} onSaved={() => {}} />);
-    const button = screen.getByText(/prioridade: normal/);
-    fireEvent.click(button);
-    expect(screen.getByText(/prioridade: high/)).toBeInTheDocument();
-    fireEvent.click(screen.getByText(/prioridade: high/));
-    expect(screen.getByText(/prioridade: low/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText(/prioridade: normal/));
+    expect(screen.getByText(/prioridade: alta/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText(/prioridade: alta/));
+    expect(screen.getByText(/prioridade: baixa/)).toBeInTheDocument();
+  });
+
+  it('ciclar a repetição avança pelos quatro valores em português', () => {
+    render(<TaskFormModal task={null} onClose={() => {}} onSaved={() => {}} />);
+    fireEvent.click(screen.getByText(/repetição: não repete/));
+    expect(screen.getByText(/repetição: diária/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText(/repetição: diária/));
+    expect(screen.getByText(/repetição: semanal/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText(/repetição: semanal/));
+    expect(screen.getByText(/repetição: mensal/)).toBeInTheDocument();
+  });
+
+  it('fecha com a tecla Escape', () => {
+    const onClose = vi.fn();
+    render(<TaskFormModal task={null} onClose={onClose} onSaved={() => {}} />);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalled();
   });
 });
