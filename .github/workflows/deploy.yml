@@ -39,7 +39,7 @@ jobs:
     if: github.repository == 'joaosouzacoder/daily-web'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # No setup-node here on purpose. This job builds better-sqlite3, a
       # native module, and the service runs under the machine's own Node.
