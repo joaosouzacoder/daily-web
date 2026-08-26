@@ -9,6 +9,9 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Added
+- The dashboard is rearrangeable: hold Ctrl and drag a panel to move it, drag
+  its corner to resize. The arrangement is stored per user. A button pins the
+  same mode for touch screens.
 - The Jira panel now shows status, staleness and due date on each row.
   Six issues turned out to be past due, which the panel had no way of
   showing before.

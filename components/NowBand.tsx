@@ -14,6 +14,9 @@ interface Props {
   onChanged: () => void;
   bell: ReactNode;
   updatedAt: string | null;
+  /** Ações que só existem em certas situações — restaurar a disposição dos
+   *  painéis, por exemplo, que só faz sentido depois de alguém mexer. */
+  extra?: ReactNode;
 }
 
 function formatUpdatedAt(iso: string | null): string {
@@ -25,7 +28,15 @@ function formatUpdatedAt(iso: string | null): string {
   return `atualizado ${h}:${m}`;
 }
 
-export function NowBand({ pomodoro, loading, onRefresh, onChanged, bell, updatedAt }: Props) {
+export function NowBand({
+  pomodoro,
+  loading,
+  onRefresh,
+  onChanged,
+  bell,
+  updatedAt,
+  extra,
+}: Props) {
   return (
     <header className="now">
       <div className="now-main">
@@ -37,6 +48,7 @@ export function NowBand({ pomodoro, loading, onRefresh, onChanged, bell, updated
         <button type="button" className="btn" onClick={onRefresh} disabled={loading}>
           {loading ? 'Atualizando' : 'Atualizar'}
         </button>
+        {extra}
         {bell}
         <Link className="icon-btn" href="/config" aria-label="configuração">
           <Settings width={16} height={16} />

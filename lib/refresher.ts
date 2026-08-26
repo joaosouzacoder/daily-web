@@ -9,7 +9,7 @@ import { getPomodoroState } from './pomodoro';
 import { warmBodyCache, pruneOldBodies } from './emailCache';
 import { listUsers } from './auth/users';
 import { enabledModules, listConnections } from './vault/connections';
-import { agendaDays } from './preferences';
+import { agendaDays, dashboardLayout } from './preferences';
 import type { Connection } from './vault/connections';
 
 const EMAIL_LIMIT = 30;
@@ -80,6 +80,7 @@ export async function refreshAll(userId: string): Promise<DashboardState> {
     modules,
     mailboxes,
     agendaDays: days,
+    layout: dashboardLayout(userId),
     email,
     agenda,
     pulls,

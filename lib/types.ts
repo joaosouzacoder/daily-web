@@ -130,6 +130,8 @@ export interface DashboardState {
   mailboxes: MailboxRef[];
   /** Quantos dias a agenda cobre, contando hoje. Escolha de cada usuário. */
   agendaDays: number;
+  /** Disposição dos painéis na grade, arrastada e redimensionada pelo dono. */
+  layout: { i: string; x: number; y: number; w: number; h: number }[];
   email: PanelResult<EmailEnvelope[]>;
   agenda: PanelResult<AgendaItem[]>;
   pulls: PanelResult<PullsDigest>;

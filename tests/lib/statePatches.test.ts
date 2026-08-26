@@ -8,6 +8,7 @@ import {
   setSubtaskCompleted,
   setTaskCompleted,
 } from '@/lib/statePatches';
+import { defaultLayout } from '@/lib/dashboardLayout';
 import type { DashboardState, EmailEnvelope, NotificationItem, TodoTask } from '@/lib/types';
 
 function envelope(over: Partial<EmailEnvelope>): EmailEnvelope {
@@ -49,6 +50,7 @@ function state(over: Partial<DashboardState> = {}): DashboardState {
     modules: ['email', 'tasks', 'jira'],
     mailboxes: [{ id: 'mail-1', label: 'Trabalho' }],
     agendaDays: 2,
+    layout: defaultLayout(),
     email: { data: [envelope({ id: '1' }), envelope({ id: '2' })], error: null },
     agenda: { data: [], error: null },
     pulls: { data: { items: [], errors: [] }, error: null },

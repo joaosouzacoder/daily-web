@@ -1,3 +1,6 @@
+@import 'react-grid-layout/css/styles.css';
+@import 'react-resizable/css/styles.css';
+
 /* ============================================================
    daily-web — sistema de design
    Escuro por natureza: a tela fica aberta o dia inteiro num
@@ -1965,4 +1968,130 @@ textarea.mail-reply-input {
 .row-tag-accent {
   color: var(--accent);
   border-color: var(--accent-dim);
+}
+
+/* ---------- grade arrastável ---------- */
+
+/* A grade só entra em modo de arrastar com o Ctrl pressionado. Fora disso o
+   painel é conteúdo comum: clicar num e-mail, marcar uma tarefa e selecionar
+   texto continuam funcionando, sem modo de edição para entrar e sair. */
+
+.grid-hint {
+  margin-bottom: var(--s4);
+  font-size: var(--step--1);
+  color: var(--text-faint);
+  opacity: 0;
+  transition: opacity var(--med) var(--ease);
+}
+
+/* A dica fica invisível até servir para alguma coisa, mas ocupa o espaço:
+   aparecer empurraria a grade inteira para baixo no meio do arrasto. */
+.grid-hint.is-on,
+.shell:hover .grid-hint {
+  opacity: 1;
+}
+
+.grid-hint.is-on {
+  color: var(--accent);
+}
+
+.grid-panel {
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* O painel tem altura definida pela grade, então o conteúdo rola por dentro.
+   Sem isto, redimensionar não teria efeito visível: a lista continuaria
+   crescendo para fora do quadro. */
+.grid-panel-body {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: var(--s2);
+}
+
+.dashboard-grid.is-arranging .grid-panel {
+  border-radius: 12px;
+  outline: 1px dashed var(--hairline-strong);
+  outline-offset: var(--s2);
+  cursor: grab;
+}
+
+.dashboard-grid.is-arranging .grid-panel:hover {
+  outline-color: var(--accent-dim);
+}
+
+/* Enquanto arrasta, o conteúdo não deve capturar o ponteiro nem rolar. */
+.dashboard-grid.is-arranging .grid-panel-body {
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.react-grid-item.react-draggable-dragging {
+  cursor: grabbing;
+  z-index: 3;
+}
+
+.react-grid-item.react-draggable-dragging .grid-panel {
+  outline-color: var(--accent);
+  background: var(--surface);
+  box-shadow: 0 24px 60px rgba(4, 2, 10, 0.55);
+}
+
+/* O retângulo que mostra onde o painel vai cair. */
+.react-grid-item.react-grid-placeholder {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-radius: 12px;
+  opacity: 1;
+}
+
+/* A alça de redimensionar vem da biblioteca com uma seta cinza em PNG; esta é
+   desenhada com borda, para combinar com o resto. */
+.dashboard-grid .react-resizable-handle {
+  background: none;
+  width: 16px;
+  height: 16px;
+  right: 2px;
+  bottom: 2px;
+  opacity: 0;
+  transition: opacity var(--fast) var(--ease);
+}
+
+.dashboard-grid.is-arranging .react-resizable-handle {
+  opacity: 1;
+}
+
+.dashboard-grid .react-resizable-handle::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
+  border-bottom-right-radius: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .grid-hint,
+  .dashboard-grid .react-resizable-handle {
+    transition: none;
+  }
+
+  .react-grid-item.cssTransforms {
+    transition: none;
+  }
+}
+
+.grid-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s4);
+  margin-bottom: var(--s4);
+}
+
+.grid-bar .grid-hint {
+  margin-bottom: 0;
 }

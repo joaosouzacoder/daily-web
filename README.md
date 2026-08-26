@@ -132,6 +132,21 @@ The domain is the start of the URL: in `acme.atlassian.net`, it is `acme`.
 [github.com/settings/tokens](https://github.com/settings/tokens). Scope `repo`
 for private repositories; for public ones, no scope is needed.
 
+## Rearranging the dashboard
+
+Hold **Ctrl** and drag a panel to move it; drag the bottom-right corner to
+resize it. Without Ctrl the panels are ordinary content, so clicking a message,
+ticking a task and selecting text keep working — there is no edit mode to enter
+and leave. On touch screens, where there is no Ctrl, the **Organizar** button
+pins the same mode until you finish.
+
+The arrangement is stored per user on the server, so it follows you between
+screens. **Restaurar disposição** appears once you have changed something.
+
+Panels have a fixed height on the grid and scroll internally, which is what
+makes resizing mean anything. Below 1024px the grid gives way to a single
+column in the order the panels are arranged.
+
 ## Installing as an app
 
 The page ships a manifest and a service worker, so Chrome offers **Install**
