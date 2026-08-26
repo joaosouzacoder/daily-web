@@ -3,9 +3,20 @@ import { verifySessionToken, SESSION_MAX_AGE_MS, SESSION_COOKIE } from '@/lib/au
 
 const PUBLIC_PATHS = ['/login', '/api/login'];
 
+// O Chrome busca o manifest sem credenciais e registra o service worker antes
+// de qualquer sessão: atrás do login eles receberiam o HTML do redirect em vez
+// do arquivo, e a app deixaria de ser instalável. Nenhum destes revela dado de
+// usuário — são o ícone, o nome e um worker que só repassa requisições.
+const PUBLIC_PREFIXES = ['/_next', '/icons/'];
+const PUBLIC_ASSETS = ['/manifest.webmanifest', '/sw.js', '/icon.svg'];
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  if (PUBLIC_PATHS.includes(pathname) || pathname.startsWith('/_next')) {
+  if (
+    PUBLIC_PATHS.includes(pathname) ||
+    PUBLIC_ASSETS.includes(pathname) ||
+    PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+  ) {
     return NextResponse.next();
   }
 

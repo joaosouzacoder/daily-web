@@ -3,57 +3,99 @@
 Dashboard pessoal para deixar aberto num segundo monitor: e-mail, agenda, pull
 requests, Jira, tarefas e pomodoro numa página só, atrás de login.
 
-É a versão web do [daily-tui](https://github.com/joaosouzacoder/daily-tui), com
-as mesmas features. Como o TUI, ele **não fala direto com Gmail, Google, Jira
-ou GitHub** — ele executa CLIs já instaladas e autenticadas na máquina e
-formata a saída. Isso é o que torna o setup barato e o que cria o principal
-pré-requisito, abaixo.
+Cada pessoa conecta as próprias contas pela tela de configuração. Nada é
+compartilhado entre usuários e nenhum módulo é obrigatório — quem não usa Jira
+simplesmente não liga o Jira.
 
-Next.js 16 · React 19 · SQLite · sem framework de UI, CSS na mão (Catppuccin
-Mocha).
+Next.js 16 · React 19 · SQLite · sem framework de UI, CSS na mão.
 
-## Pré-requisitos
+## O que dá para conectar
 
-Este é o degrau mais alto: os painéis só mostram dados se as CLIs
-correspondentes estiverem **instaladas e autenticadas na máquina que roda a
-app**. Cada uma é independente — sem o `jira` configurado, só o painel do Jira
-mostra erro; o resto do dashboard continua funcionando.
-
-| Painel | CLI | Projeto |
+| Módulo | Como autentica | Custo |
 |---|---|---|
-| E-mail | `himalaya` | <https://github.com/pimalaya/himalaya> |
-| Agenda | `gcalcli` | <https://github.com/insanum/gcalcli> |
-| Pull requests | `ghpending` | CLI própria |
-| Jira | `jira` | CLI própria |
-| Tarefas | `mstodo` | CLI própria |
+| E-mail | IMAP/SMTP com senha de app | grátis |
+| Agenda | URL secreta em formato iCal (.ics) | grátis |
+| Jira | API token do Atlassian | grátis |
+| Pull requests | Personal access token do GitHub | grátis |
+| Tarefas | guardadas neste servidor (padrão) | — |
 
-Além disso: Node.js 22+ e, para o rascunho de resposta com IA,
-uma `ANTHROPIC_API_KEY`.
+Nenhum deles exige cadastrar um aplicativo OAuth. Isso é deliberado: os escopos
+de Gmail e Google Agenda são *restricted*, e publicar um app que os use exige
+verificação com auditoria paga e recertificação anual. Senha de app e link iCal
+entregam o mesmo resultado, funcionam com qualquer provedor e cada pessoa
+consegue gerar os seus em um minuto.
 
-## Rodando local
+**Tarefas** ficam no banco da própria app, então o painel funciona no primeiro
+login sem configurar nada. Quem tem a CLI [mstodo] instalada pode apontar para
+o Microsoft To Do e manter a sincronia com o celular.
+
+[mstodo]: https://github.com/joaosouzacoder/daily-tui
+
+## Subindo
+
+Precisa de Node.js 22+.
 
 ```sh
 npm install
-cp .env.example .env.local     # preencha o que for testar
-npm run dev                    # http://localhost:8010
+cp .env.example .env.local
 ```
 
-Crie o primeiro usuário:
+Preencha no mínimo `SESSION_SECRET` e `DAILY_WEB_SECRET_KEY`:
+
+```sh
+openssl rand -hex 32      # SESSION_SECRET
+openssl rand -base64 32   # DAILY_WEB_SECRET_KEY
+```
+
+Crie o primeiro usuário e suba:
 
 ```sh
 npm run users -- add <username> <senha> --admin
+npm run dev                    # http://localhost:8010
 ```
 
-Também existem `list`, `password <username> <nova-senha>` e
-`remove <username>`.
+Também existem `list`, `password <username> <nova-senha>` e `remove <username>`.
 
-Alternativa: preencher `DASHBOARD_USER` e `DASHBOARD_PASSWORD_HASH` no env —
-na primeira subida com a tabela vazia eles semeiam o primeiro admin. Gere o
-hash com:
+Depois de entrar, vá em **Configuração** e conecte o que você usa. Cada módulo
+traz o passo a passo de onde tirar a credencial, e um botão **Testar** que diz
+na hora se funcionou.
 
-```sh
-node -e "require('bcryptjs').hash(process.argv[1], 10).then(console.log)" 'sua-senha'
-```
+### Onde conseguir cada credencial
+
+**E-mail** — precisa de senha de app, não da senha da conta:
+
+- Gmail: ative a verificação em duas etapas e gere em
+  [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)
+- Outlook / Microsoft 365: em account.microsoft.com/security, nas opções de
+  segurança avançadas
+- iCloud: em account.apple.com, seção Segurança
+- Qualquer outro provedor IMAP: escolha "Outro" e preencha host e porta
+
+**Agenda** — o endereço secreto em formato iCal:
+
+- Google Agenda: Configurações → escolha a agenda → "Endereço secreto no
+  formato iCal"
+- Outlook: Configurações → Agenda → Agendas compartilhadas → Publicar
+
+É somente leitura: o painel mostra os compromissos, não cria nem edita.
+
+**Jira** — API token em
+[id.atlassian.com](https://id.atlassian.com/manage-profile/security/api-tokens).
+O domínio é o começo da URL: em `acme.atlassian.net`, é `acme`.
+
+**GitHub** — personal access token em
+[github.com/settings/tokens](https://github.com/settings/tokens). Escopo `repo`
+para repositórios privados; para só públicos, nenhum escopo basta.
+
+## Instalar como app
+
+A página traz manifest e service worker, então o Chrome oferece "Instalar" e
+ela abre em janela própria, sem barra de endereço. Funciona em desktop e
+Android; no iOS, "Adicionar à Tela de Início" pelo Safari.
+
+O service worker hoje não guarda nada em cache — o painel mostra dados de
+agora, e servir uma cópia velha seria pior do que mostrar erro de rede. É a
+base para um PWA com estratégia offline por rota.
 
 ## Testes
 
@@ -62,26 +104,14 @@ npm test           # suíte inteira, uma vez
 npm run test:watch
 ```
 
-## Configuração
-
-Tudo vem de variáveis de ambiente; veja `.env.example` para a lista comentada.
-As que não têm default e você provavelmente precisa:
-
-- `SESSION_SECRET` — obrigatório. Sem ele nenhum login é aceito, de propósito.
-  Gere com `openssl rand -hex 32`.
-- `PUBLIC_ORIGIN` — origem pública HTTPS, usada para montar o redirect de login
-  sem confiar no `Host` enviado pelo cliente.
-- `DAILY_WEB_DB_PATH` — default `./data/daily-web.db`.
-
 ## Deploy
 
 O diretório `deploy/` traz **um exemplo** do setup que este projeto usa:
 processo host via systemd escutando em `127.0.0.1:8010`, com Traefik na frente
 terminando TLS. Os arquivos contêm caminhos e domínio específicos daquela
-máquina (usuário do SO, shims do asdf, host do roteador) — trate como
-referência, não como configuração pronta.
+máquina — trate como referência, não como configuração pronta.
 
-Os passos, em resumo:
+Em resumo:
 
 1. Crie `/etc/daily-web/env` (fora do git, `chmod 600`) a partir de
    `.env.example`.
@@ -91,22 +121,17 @@ Os passos, em resumo:
    use o proxy que preferir.
 4. Aponte o DNS para a máquina.
 
-`scripts/deploy.sh` faz o ciclo seguinte (pull, build, restart) e também
-assume esse layout.
+`scripts/deploy.sh` faz o ciclo seguinte (pull, build, restart) e também assume
+esse layout.
 
 ## Segurança
 
 Leia [SECURITY.md](SECURITY.md) antes de expor isto em qualquer lugar. Resumo:
-a app executa CLIs do sistema com dados vindos da requisição, então quem tem
-sessão tem, por construção, bastante alcance. Foi feita para rodar na sua
-máquina, para você e para pessoas em quem você confia — não é multi-tenant.
-
-## Roadmap
-
-Suporte a múltiplos usuários com credenciais próprias está em andamento, em
-quatro estágios. O primeiro (usuários no banco) está pronto; o desenho completo
-e o raciocínio estão em
-[`docs/superpowers/specs/2026-08-26-multiusuario-design.md`](docs/superpowers/specs/2026-08-26-multiusuario-design.md).
+credenciais são cifradas em repouso com `DAILY_WEB_SECRET_KEY` e cada conexão
+é resolvida pelo dono da sessão, então uma pessoa não alcança a conta de outra.
+Ainda assim isto **não é multi-tenant**: não há isolamento de processo nem
+auditoria, e o operador da máquina tem acesso ao banco. Foi feito para rodar na
+sua máquina, para você e para pessoas em quem você confia.
 
 ## Licença
 

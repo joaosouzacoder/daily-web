@@ -57,4 +57,25 @@ describe('middleware', () => {
     const res = await middleware(makeRequest('/api/tasks'));
     expect(res.status).toBe(401);
   });
+
+  // O Chrome busca o manifest sem credenciais e registra o service worker
+  // antes de qualquer sessão. Atrás do login eles receberiam o HTML do
+  // redirect e a app deixaria de ser instalável.
+  it.each(['/manifest.webmanifest', '/sw.js', '/icon.svg', '/icons/icon-192.png'])(
+    'deixa %s passar sem sessão, para a app continuar instalável',
+    async (path) => {
+      process.env.SESSION_SECRET = 'real-secret';
+      const res = await middleware(makeRequest(path));
+      expect(res.status).toBe(200);
+      expect(res.headers.get('location')).toBeNull();
+    },
+  );
+
+  it('não abre a app inteira junto com os arquivos públicos', async () => {
+    process.env.SESSION_SECRET = 'real-secret';
+    for (const path of ['/', '/config', '/api/state', '/iconsxx']) {
+      const res = await middleware(makeRequest(path));
+      expect(res.status).not.toBe(200);
+    }
+  });
 });
