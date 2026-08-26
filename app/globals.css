@@ -366,7 +366,12 @@ input[type='checkbox']:checked {
     border-color var(--fast) var(--ease);
 }
 
-.chip:hover {
+.chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.chip:hover:not(:disabled) {
   background: var(--surface-hover);
   color: var(--text);
 }

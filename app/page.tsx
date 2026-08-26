@@ -10,6 +10,7 @@ import { PullsPanel } from '@/components/PullsPanel';
 import { JiraPanel } from '@/components/JiraPanel';
 import { TasksPanel } from '@/components/TasksPanel';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { DEFAULT_AGENDA_DAYS } from '@/lib/agendaWindow';
 
 export default function DashboardPage() {
   const { state, loading, refreshNow, reload } = useDashboardState();
@@ -43,7 +44,13 @@ export default function DashboardPage() {
 
   const right = [
     has('agenda') && (
-      <AgendaPanel key="agenda" agenda={state?.agenda ?? { data: [], error: null }} loading={booting} />
+      <AgendaPanel
+        key="agenda"
+        agenda={state?.agenda ?? { data: [], error: null }}
+        days={state?.agendaDays ?? DEFAULT_AGENDA_DAYS}
+        onChanged={reload}
+        loading={booting}
+      />
     ),
     has('jira') && (
       <JiraPanel key="jira" jira={state?.jira ?? { data: [], error: null }} loading={booting} />

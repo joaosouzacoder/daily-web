@@ -89,7 +89,9 @@ agendas mostrar. Para os demais provedores, use o endereço iCal:
 - Outlook: Configurações → Agenda → Agendas compartilhadas → Publicar
 - Apple, Fastmail, Nextcloud: qualquer URL `.ics` serve
 
-É somente leitura: o painel mostra os compromissos, não cria nem edita.
+É somente leitura: o painel mostra os compromissos, não cria nem edita. Quantos
+dias aparecem — de hoje até 14 dias — é escolha de cada usuário, nos botões do
+próprio painel, e vale também para o que o servidor busca.
 
 **Jira** — API token em
 [id.atlassian.com](https://id.atlassian.com/manage-profile/security/api-tokens).

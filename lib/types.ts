@@ -119,6 +119,8 @@ export interface DashboardState {
   modules: string[];
   /** Caixas de e-mail do usuário, para os filtros e o envio de resposta. */
   mailboxes: MailboxRef[];
+  /** Quantos dias a agenda cobre, contando hoje. Escolha de cada usuário. */
+  agendaDays: number;
   email: PanelResult<EmailEnvelope[]>;
   agenda: PanelResult<AgendaItem[]>;
   pulls: PanelResult<PullsDigest>;

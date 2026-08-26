@@ -155,7 +155,9 @@ export const MODULES: Record<ModuleId, ModuleSpec> = {
   agenda: {
     id: 'agenda',
     label: 'Agenda',
-    summary: 'Compromissos de hoje e amanhã.',
+    // O resumo dizia "hoje e amanhã" enquanto a janela era de sete dias.
+    // Agora o período é escolha de cada um, então ele não promete um número.
+    summary: 'Compromissos no período que você escolher.',
     multi: true,
     instructions: [
       'Para contas Google, conecte pelo botão do Google: funciona com conta pessoal e corporativa, e não quebra quando o link muda.',
@@ -164,6 +166,7 @@ export const MODULES: Record<ModuleId, ModuleSpec> = {
       'Outlook: Configurações → Agenda → Agendas compartilhadas → Publicar, e copie o link ICS.',
       'Em conta corporativa o administrador costuma bloquear o link iCal; nesse caso só a conexão pelo Google funciona.',
       'É somente leitura: o painel mostra os compromissos, não cria nem edita.',
+      'Quantos dias aparecem é escolha sua, nos botões do próprio painel.',
     ],
     fields: [
       { name: 'provider', label: 'Origem', type: 'text', hidden: true, defaultValue: 'ics' },

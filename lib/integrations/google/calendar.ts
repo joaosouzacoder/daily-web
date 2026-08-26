@@ -114,9 +114,13 @@ interface RawEventList {
   items?: RawEvent[];
 }
 
-export async function fetchAgenda(conn: Connection, now: Date = new Date()): Promise<AgendaItem[]> {
+export async function fetchAgenda(
+  conn: Connection,
+  now: Date = new Date(),
+  days?: number,
+): Promise<AgendaItem[]> {
   const token = await accessToken(googleClient(), refreshToken(conn));
-  const window = computeAgendaWindow(now);
+  const window = computeAgendaWindow(now, days);
   const timeMin = new Date(`${window.start}T00:00:00`).toISOString();
   const timeMax = new Date(`${window.end}T23:59:59`).toISOString();
 

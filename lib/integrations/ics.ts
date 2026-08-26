@@ -128,9 +128,13 @@ export async function fetchIcs(url: string): Promise<string> {
   return text;
 }
 
-export async function fetchAgenda(conn: Connection, now: Date = new Date()): Promise<AgendaItem[]> {
+export async function fetchAgenda(
+  conn: Connection,
+  now: Date = new Date(),
+  days?: number,
+): Promise<AgendaItem[]> {
   const text = await fetchIcs(icsUrl(conn));
-  const window = computeAgendaWindow(now);
+  const window = computeAgendaWindow(now, days);
   const start = new Date(`${window.start}T00:00:00`);
   const end = new Date(`${window.end}T23:59:59`);
   return expandEvents(ical.sync.parseICS(text), conn, start, end);

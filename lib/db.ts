@@ -194,6 +194,22 @@ function addLocalTasks(instance: Database.Database): void {
   `);
 }
 
+// Preferências de visualização, por usuário. Diferente de `module_settings`,
+// que liga e desliga um módulo: aqui fica o como, não o se — por enquanto
+// quantos dias a agenda mostra. Chave-valor porque cada preferência nova não
+// deve custar uma migração.
+function addPreferences(instance: Database.Database): void {
+  instance.exec(`
+    CREATE TABLE IF NOT EXISTS preferences (
+      user_id TEXT NOT NULL,
+      key TEXT NOT NULL,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, key)
+    );
+  `);
+}
+
 // Migrações numeradas, aplicadas em ordem a partir do `user_version` do banco.
 // Cada uma roda no máximo uma vez, em transação.
 const MIGRATIONS: ((instance: Database.Database) => void)[] = [
@@ -201,6 +217,7 @@ const MIGRATIONS: ((instance: Database.Database) => void)[] = [
   addConnections,
   dropLegacyEmailCache,
   addLocalTasks,
+  addPreferences,
 ];
 
 function migrate(instance: Database.Database): void {

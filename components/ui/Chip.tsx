@@ -6,10 +6,14 @@ export function Chip({
   active = false,
   onClick,
   children,
+  // Um chip que dispara requisição precisa poder se travar enquanto ela corre,
+  // senão dois cliques seguidos viram duas gravações concorrentes.
+  disabled = false,
 }: {
   active?: boolean;
   onClick: () => void;
   children: ReactNode;
+  disabled?: boolean;
 }) {
   return (
     <button
@@ -17,6 +21,7 @@ export function Chip({
       className={`chip${active ? ' chip-active' : ''}`}
       aria-pressed={active}
       onClick={onClick}
+      disabled={disabled}
     >
       {children}
     </button>

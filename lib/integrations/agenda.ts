@@ -10,8 +10,14 @@ export function isGoogle(conn: Connection): boolean {
   return conn.values.provider === 'google';
 }
 
-export function fetchAgenda(conn: Connection, now?: Date): Promise<AgendaItem[]> {
-  return isGoogle(conn) ? google.fetchAgenda(conn, now) : ics.fetchAgenda(conn, now);
+export function fetchAgenda(
+  conn: Connection,
+  now?: Date,
+  days?: number,
+): Promise<AgendaItem[]> {
+  return isGoogle(conn)
+    ? google.fetchAgenda(conn, now, days)
+    : ics.fetchAgenda(conn, now, days);
 }
 
 export function testConnection(conn: Connection): Promise<void> {

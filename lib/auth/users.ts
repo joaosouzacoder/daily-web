@@ -86,6 +86,7 @@ export async function createUser(
 const USER_SCOPED_TABLES = [
   'connections',
   'module_settings',
+  'preferences',
   'tasks',
   'email_bodies',
   'notifications_read',
