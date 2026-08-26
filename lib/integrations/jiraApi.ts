@@ -1,11 +1,13 @@
 import type { Connection } from '@/lib/vault/connections';
-import type { JiraItem, JiraRole } from '@/lib/types';
+import type { JiraItem, JiraRole, JiraStatusCategory } from '@/lib/types';
 import type { JiraFilter } from '@/lib/parsers/jira';
 
 const TIMEOUT_MS = 20_000;
 const PAGE_SIZE = 100;
 
-const FIELDS = ['summary', 'status', 'project', 'parent', 'issuetype'];
+// `updated` e `duedate` são o que transforma a lista em "o que precisa de
+// mim": sem eles não dá para saber o que está parado nem o que vence.
+const FIELDS = ['summary', 'status', 'project', 'parent', 'issuetype', 'updated', 'duedate'];
 
 export interface JiraAuth {
   baseUrl: string;
@@ -35,11 +37,23 @@ interface RawIssue {
   key: string;
   fields?: {
     summary?: string | null;
-    status?: { name?: string | null } | null;
+    updated?: string | null;
+    duedate?: string | null;
+    status?: {
+      name?: string | null;
+      statusCategory?: { key?: string | null } | null;
+    } | null;
     project?: { key?: string | null } | null;
     issuetype?: { name?: string | null; subtask?: boolean | null } | null;
     parent?: { key?: string; fields?: { summary?: string | null } | null } | null;
   } | null;
+}
+
+/** O Jira usa três chaves de categoria; qualquer outra coisa é tratada como
+ *  pendente, que é o palpite seguro para uma issue que ainda aparece aqui. */
+function toCategory(key: string | null | undefined): JiraStatusCategory {
+  if (key === 'indeterminate' || key === 'done') return key;
+  return 'new';
 }
 
 export function toJiraItem(raw: RawIssue, baseUrl: string, role: JiraRole): JiraItem {
@@ -48,6 +62,9 @@ export function toJiraItem(raw: RawIssue, baseUrl: string, role: JiraRole): Jira
     key: raw.key,
     summary: fields.summary ?? '',
     status: fields.status?.name ?? '',
+    statusCategory: toCategory(fields.status?.statusCategory?.key),
+    updatedAt: fields.updated ?? '',
+    dueDate: fields.duedate ?? '',
     project: fields.project?.key ?? raw.key.split('-')[0] ?? '',
     url: `${baseUrl}/browse/${raw.key}`,
     parent: fields.parent

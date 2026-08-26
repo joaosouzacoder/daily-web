@@ -49,16 +49,25 @@ export interface JiraParent {
   summary: string;
 }
 
+/** As três situações do Jira, normalizadas. O nome do status é livre e varia
+ *  por projeto e por idioma; a categoria não. */
+export type JiraStatusCategory = 'new' | 'indeterminate' | 'done';
+
 export interface JiraItem {
   key: string;
   summary: string;
   status: string;
+  statusCategory: JiraStatusCategory;
   project: string;
   url: string;
   parent: JiraParent | null;
   role: JiraRole;
   kind: string;
   subtask: boolean;
+  /** ISO da última alteração. É daqui que sai "parado há X dias". */
+  updatedAt: string;
+  /** AAAA-MM-DD, ou vazio quando a issue não tem prazo. */
+  dueDate: string;
 }
 
 export interface SubTask {

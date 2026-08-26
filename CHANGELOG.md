@@ -9,6 +9,9 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Added
+- The Jira panel now shows status, staleness and due date on each row.
+  Six issues turned out to be past due, which the panel had no way of
+  showing before.
 - Contribution infrastructure: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`,
   `CODEOWNERS`, pull request and issue templates, Dependabot.
 - CI on GitHub-hosted runners (tests, build, audit of production dependencies)
@@ -20,6 +23,12 @@ Only `main` is maintained; there are no release branches.
 - Production now runs from `/srv/daily-web` instead of the development
   checkout, so a deploy cannot overwrite uncommitted work.
 - Documentation is in English. The interface stays in Portuguese.
+- The Jira row no longer shows the assignee/reporter badge by default. It read
+  the same on 15 of 19 issues, so it occupied the only visual slot on the line
+  without carrying information; status, which has five distinct values, took
+  its place. Reporter is still marked, because it is the exception.
+- Outside the hierarchy view, issues group by situation rather than project.
+  Grouping by project barely grouped anything when 16 of 19 belong to one.
 - Dependencies brought up to date: React 19.2.8, Vitest 4, Vite 8,
   `@vitejs/plugin-react` 6, better-sqlite3 13, and the checkout and setup-node
   actions to v7.

@@ -1,27 +1,38 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { parseIssues, typeMarker, issueMarker, groupByParent, buildJiraTree } from '@/lib/parsers/jira';
+import { typeMarker, issueMarker, groupByParent, buildJiraTree } from '@/lib/parsers/jira';
 import type { JiraItem } from '@/lib/types';
 
-const real = readFileSync(path.join(__dirname, '../../fixtures/jira-issues.json'), 'utf8');
-const tree = readFileSync(path.join(__dirname, '../../fixtures/jira-issues-tree.json'), 'utf8');
+// Estes testes montavam JiraItem a partir de um JSON de fixture, que era a
+// saída da CLI `jira`. A CLI saiu do caminho: o cliente REST monta o item em
+// `toJiraItem`, testado em jiraApi. Aqui interessa só a lógica de árvore e de
+// marcador, então o item é construído direto.
+function issue(over: Partial<JiraItem>): JiraItem {
+  return {
+    key: 'ENG-1',
+    summary: 'Uma issue',
+    status: 'Em andamento',
+    statusCategory: 'indeterminate',
+    project: 'ENG',
+    url: 'https://x/ENG-1',
+    parent: null,
+    role: 'assignee',
+    kind: 'História',
+    subtask: false,
+    updatedAt: '2026-08-26T10:00:00.000Z',
+    dueDate: '',
+    ...over,
+  };
+}
 
-describe('parseIssues', () => {
-  it('faz o parse do contrato real do helper jira', () => {
-    const items = parseIssues(real);
-    expect(items).toHaveLength(3);
-    expect(items[0].key).toBe('ENG-101');
-    expect(items[0].status).toBe('Em andamento');
-    expect(items[0].parent).toEqual({ key: 'ENG-1', summary: 'Iniciativa de Engenharia' });
-    expect(items[1].parent).toBeNull();
-  });
-
-  it('usa "assignee" como role padrão quando ausente', () => {
-    const items = parseIssues(real);
-    expect(items[0].role).toBe('assignee');
-  });
-});
+const real: JiraItem[] = [
+  issue({
+    key: 'ENG-101',
+    project: 'ENG',
+    parent: { key: 'ENG-1', summary: 'Iniciativa de Engenharia' },
+  }),
+  issue({ key: 'OPS-55', project: 'OPS' }),
+  issue({ key: 'OPS-56', project: 'OPS' }),
+];
 
 describe('typeMarker', () => {
   it('reconhece o tipo nos dois idiomas', () => {
@@ -46,22 +57,19 @@ describe('typeMarker', () => {
 
 describe('issueMarker', () => {
   it('usa [s] para subtarefa mesmo quando o nome do tipo não é reconhecido', () => {
-    const items = parseIssues(tree);
-    const subtask = items.find((i) => i.key === 'ENG-9')!;
+    const subtask = issue({ key: 'ENG-9', kind: 'Subtarefa', subtask: true });
     expect(typeMarker(subtask.kind)).toBe('[?]');
     expect(issueMarker(subtask)).toBe('[s]');
   });
 
   it('história segue com o marcador do tipo', () => {
-    const items = parseIssues(tree);
-    const story = items.find((i) => i.key === 'ENG-7')!;
-    expect(issueMarker(story)).toBe('[S]');
+    expect(issueMarker(issue({ key: 'ENG-7', kind: 'História' }))).toBe('[S]');
   });
 });
 
 describe('groupByParent', () => {
   it('agrupa issues pelo pai e junta as sem pai em "sem pai"', () => {
-    const groups = groupByParent(parseIssues(real));
+    const groups = groupByParent(real);
     const withParent = groups.find((g) => g.parentKey === 'ENG-1');
     expect(withParent?.issues.map((i) => i.key)).toEqual(['ENG-101']);
     const orphanGroup = groups.find((g) => g.parentKey === null);
@@ -70,20 +78,7 @@ describe('groupByParent', () => {
 });
 
 describe('buildJiraTree', () => {
-  function item(over: Partial<JiraItem>): JiraItem {
-    return {
-      key: 'A-1',
-      summary: 'Resumo',
-      status: 'Aberto',
-      project: 'A',
-      url: 'u',
-      parent: null,
-      role: 'assignee',
-      kind: 'História',
-      subtask: false,
-      ...over,
-    };
-  }
+  const item = (over: Partial<JiraItem>): JiraItem => issue({ project: 'A', url: 'u', ...over });
 
   it('separa cada projeto em seu próprio grupo, em ordem alfabética', () => {
     const groups = buildJiraTree([

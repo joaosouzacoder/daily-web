@@ -8,12 +8,15 @@ function issue(over: Partial<JiraItem>): JiraItem {
     key: 'A-1',
     summary: 'Resumo',
     status: 'Aberto',
+    statusCategory: 'new',
     project: 'A',
     url: 'https://example/A-1',
     parent: null,
     role: 'assignee',
     kind: 'História',
     subtask: false,
+    updatedAt: new Date().toISOString(),
+    dueDate: '',
     ...over,
   };
 }
@@ -112,14 +115,25 @@ describe('JiraPanel', () => {
     expect(rows[1].getAttribute('style')).toContain('padding-left');
   });
 
-  it('alterna para lista simples quando pedido', () => {
+  // Fora da hierarquia, o agrupamento passou a ser por situação. Agrupar por
+  // projeto quase não agrupava: 16 das 19 issues reais são do mesmo projeto.
+  it('na lista simples, agrupa por situação em vez de projeto', () => {
     render(
       <JiraPanel
-        jira={{ data: [issue({ key: 'TT-1', project: 'TT' })], error: null }}
+        jira={{
+          data: [
+            issue({ key: 'TT-1', project: 'TT', statusCategory: 'indeterminate', status: 'Em andamento' }),
+            issue({ key: 'TT-2', project: 'TT', statusCategory: 'new', status: 'Backlog' }),
+          ],
+          error: null,
+        }}
       />,
     );
     fireEvent.click(screen.getByRole('button', { name: 'Hierarquia' }));
-    expect(screen.queryByRole('heading', { name: /TT/ })).toBeNull();
+
+    expect(screen.queryByRole('heading', { name: /^TT/ })).toBeNull();
+    expect(screen.getByRole('heading', { name: /Em andamento/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Pendentes/ })).toBeInTheDocument();
     expect(screen.getByText('TT-1')).toBeInTheDocument();
   });
 
@@ -139,5 +153,66 @@ describe('JiraPanel', () => {
   it('mostra o erro do painel quando presente', () => {
     render(<JiraPanel jira={{ data: null, error: 'jira falhou' }} />);
     expect(screen.getByRole('alert').textContent).toContain('jira falhou');
+  });
+});
+
+describe('situação, idade e prazo na linha', () => {
+  // O selo antigo mostrava o papel, que em 15 de 19 issues dizia a mesma
+  // coisa. O status tem cinco valores distintos e é o que faltava.
+  it('mostra o status em vez do papel padrão', () => {
+    render(<JiraPanel jira={{ data: [issue({ status: 'Freezing' })], error: null }} />);
+    expect(screen.getByText('Freezing')).toBeInTheDocument();
+    expect(screen.queryByText('RES')).toBeNull();
+  });
+
+  it('ainda marca quando você é só o relator, que é a exceção', () => {
+    render(<JiraPanel jira={{ data: [issue({ role: 'reporter' })], error: null }} />);
+    expect(screen.getByText('REL')).toBeInTheDocument();
+  });
+
+  it('junta o mesmo status escrito com caixas diferentes', () => {
+    render(
+      <JiraPanel
+        jira={{
+          data: [
+            issue({ key: 'A-1', status: 'Em andamento', statusCategory: 'indeterminate' }),
+            issue({ key: 'A-2', status: 'Em Andamento', statusCategory: 'indeterminate' }),
+          ],
+          error: null,
+        }}
+      />,
+    );
+    expect(screen.getAllByText('Em andamento')).toHaveLength(2);
+  });
+
+  function diasAtras(dias: number): string {
+    return new Date(Date.now() - dias * 86400000).toISOString();
+  }
+
+  it('avisa o que está parado há tempo demais', () => {
+    render(<JiraPanel jira={{ data: [issue({ updatedAt: diasAtras(14) })], error: null }} />);
+    expect(screen.getByText('parado há 14d')).toBeInTheDocument();
+  });
+
+  // Quase tudo é mexido a cada dois dias; avisar sempre apagaria o sinal.
+  it('cala sobre o que foi mexido há pouco', () => {
+    render(<JiraPanel jira={{ data: [issue({ updatedAt: diasAtras(1) })], error: null }} />);
+    expect(screen.queryByText(/parado há/)).toBeNull();
+  });
+
+  it('mostra o prazo e destaca o atraso', () => {
+    const ontem = new Date(Date.now() - 86400000);
+    const iso = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+    render(<JiraPanel jira={{ data: [issue({ dueDate: iso(ontem) })], error: null }} />);
+    const prazo = screen.getByText('venceu há 1d');
+    expect(prazo).toBeInTheDocument();
+    expect(prazo.className).toContain('is-overdue');
+  });
+
+  it('não inventa prazo para issue sem data', () => {
+    render(<JiraPanel jira={{ data: [issue({ dueDate: '' })], error: null }} />);
+    expect(screen.queryByText(/vence/)).toBeNull();
   });
 });

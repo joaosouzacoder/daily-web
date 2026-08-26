@@ -1009,15 +1009,64 @@ textarea.mail-reply-input {
 
 /* ---------- jira ---------- */
 
-.jira-row {
+/* A linha passou a ter duas alturas: o título em cima, a situação embaixo.
+   O alinhamento sai de `center` para o topo, senão o marcador de tipo flutua
+   no meio de uma linha que agora é mais alta. */
+.jira-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.jira-line {
   display: flex;
   align-items: baseline;
   gap: var(--s3);
-  padding: var(--s2) 0;
+  min-width: 0;
+}
+
+.jira-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  font-size: 0.75rem;
+  color: var(--text-faint);
+}
+
+/* A situação é o que muda de linha para linha; a cor separa "já comecei" de
+   "ainda não" sem precisar ler. */
+.jira-status {
+  color: var(--text-muted);
+}
+
+.jira-status-indeterminate {
+  color: var(--accent);
+}
+
+/* Esquecido e atrasado são os dois avisos do painel: ficam quentes, e são
+   raros o bastante para a cor continuar significando alguma coisa. */
+.jira-stale {
+  color: var(--warn);
+}
+
+.jira-due.is-overdue {
+  color: var(--danger);
+}
+
+.jira-row {
+  display: flex;
+  /* `baseline` alinhava pela primeira linha de texto; com a linha agora em
+     dois níveis, o marcador de tipo precisa acompanhar o topo. */
+  align-items: flex-start;
+  gap: var(--s3);
+  padding: var(--s3) 0;
   border-bottom: 1px solid var(--hairline);
 }
 
 .jira-kind {
+  line-height: 1.55;
   font-size: 0.6875rem;
   color: var(--text-faint);
   flex: none;

@@ -4,7 +4,15 @@ import { useMemo, useState } from 'react';
 import type { JiraItem, PanelResult } from '@/lib/types';
 import type { ActiveFilter } from '@/lib/filters';
 import { matchesQuery } from '@/lib/filters';
-import { buildJiraTree, issueMarker } from '@/lib/parsers/jira';
+import {
+  buildJiraTree,
+  dueLabel,
+  groupByStatusCategory,
+  isOverdue,
+  issueMarker,
+  normalizeStatus,
+  stalenessLabel,
+} from '@/lib/parsers/jira';
 import type { JiraNode } from '@/lib/parsers/jira';
 import { Section } from './ui/Section';
 import { FilterBar } from './ui/FilterBar';
@@ -47,6 +55,7 @@ export function JiraPanel({ jira, loading = false }: Props) {
   );
 
   const projects = useMemo(() => buildJiraTree(visible), [visible]);
+  const situations = useMemo(() => groupByStatusCategory(visible), [visible]);
 
   const activeFilters: ActiveFilter[] = [
     ...(query.trim() ? [{ id: 'query', label: `Busca: ${query.trim()}` }] : []),
@@ -96,13 +105,21 @@ export function JiraPanel({ jira, loading = false }: Props) {
         <EmptyState message="Nenhuma issue com esses filtros." />
       )}
 
-      {grouped && visible.length > 0 && (
-        <ul>
-          {visible.map((issue) => (
-            <JiraRow key={issue.key} issue={issue} showRole={filter === 'both'} depth={0} />
-          ))}
-        </ul>
-      )}
+      {grouped &&
+        visible.length > 0 &&
+        situations.map((group) => (
+          <div key={group.category} className="jira-project">
+            <h3 className="jira-group-label eyebrow">
+              {group.label}
+              <span className="section-count mono"> {group.issues.length}</span>
+            </h3>
+            <ul>
+              {group.issues.map((issue) => (
+                <JiraRow key={issue.key} issue={issue} showRole={filter === 'both'} depth={0} />
+              ))}
+            </ul>
+          </div>
+        ))}
 
       {!grouped &&
         visible.length > 0 &&
@@ -151,20 +168,37 @@ function JiraRow({
   showRole: boolean;
   depth: number;
 }) {
-  const isReporter = issue.role === 'reporter';
+  const parado = stalenessLabel(issue);
+  const prazo = issue.dueDate ? dueLabel(issue.dueDate) : null;
+  const atrasado = issue.dueDate ? isOverdue(issue.dueDate) : false;
+  // O papel só é dito quando não é o padrão: em 15 de 19 issues ele era
+  // "responsável", e um selo que repete não informa nada. Relator, sim, é
+  // exceção e vale a marca.
+  const eRelator = issue.role === 'reporter';
+
   return (
-    <li className="jira-row" style={{ paddingLeft: depth > 0 ? `calc(${depth} * var(--s4))` : undefined }}>
+    <li
+      className="jira-row"
+      style={{ paddingLeft: depth > 0 ? `calc(${depth} * var(--s4))` : undefined }}
+    >
       {depth > 0 && <span className="jira-branch" aria-hidden="true" />}
       <span className="jira-kind mono">{issueMarker(issue)}</span>
-      <a className="jira-key mono" href={issue.url} target="_blank" rel="noreferrer">
-        {issue.key}
-      </a>
-      <span className="jira-summary">{issue.summary}</span>
-      {showRole && (
-        <span className={`jira-role ${isReporter ? 'jira-role-rel' : 'jira-role-res'}`}>
-          {isReporter ? 'REL' : 'RES'}
-        </span>
-      )}
+      <div className="jira-main">
+        <div className="jira-line">
+          <a className="jira-key mono" href={issue.url} target="_blank" rel="noreferrer">
+            {issue.key}
+          </a>
+          <span className="jira-summary">{issue.summary}</span>
+          {showRole && eRelator && <span className="jira-role jira-role-rel">REL</span>}
+        </div>
+        <div className="jira-meta">
+          <span className={`jira-status jira-status-${issue.statusCategory}`}>
+            {normalizeStatus(issue.status)}
+          </span>
+          {parado && <span className="jira-stale">{parado}</span>}
+          {prazo && <span className={atrasado ? 'jira-due is-overdue' : 'jira-due'}>{prazo}</span>}
+        </div>
+      </div>
     </li>
   );
 }
