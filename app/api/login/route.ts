@@ -40,7 +40,14 @@ export async function POST(request: NextRequest) {
   response.cookies.set(SESSION_COOKIE, token, {
     httpOnly: true,
     secure: true,
-    sameSite: 'strict',
+    // `strict` não envia o cookie quando a navegação vem de outro site, o que
+    // inclui a volta do consentimento do Google: o retorno chegava sem sessão
+    // e o middleware respondia 401. `lax` envia em navegação de topo com
+    // método seguro — exatamente o caso do callback — e continua não enviando
+    // em POST/PUT/PATCH/DELETE de outro site, que é onde mora o CSRF.
+    // Toda mutação desta app usa um desses métodos; o único GET que altera
+    // estado é o callback do OAuth, protegido pelo `state` assinado.
+    sameSite: 'lax',
     maxAge: SESSION_MAX_AGE_SECONDS,
     path: '/',
   });

@@ -71,6 +71,26 @@ describe('middleware', () => {
     },
   );
 
+  // Barrado no middleware, o retorno do Google virava {"error":"não
+  // autenticado"} cru na tela. A rota trata a própria autenticação e
+  // redireciona com uma mensagem legível.
+  it('deixa o callback do OAuth passar para a rota tratar', async () => {
+    process.env.SESSION_SECRET = 'real-secret';
+    const res = await middleware(makeRequest('/api/integrations/agenda/google/callback?code=x'));
+    expect(res.status).toBe(200);
+  });
+
+  it('não abre as demais rotas de integração junto com o callback', async () => {
+    process.env.SESSION_SECRET = 'real-secret';
+    for (const path of [
+      '/api/integrations',
+      '/api/integrations/agenda/google/start',
+      '/api/integrations/agenda/google/calendars',
+    ]) {
+      expect((await middleware(makeRequest(path))).status).toBe(401);
+    }
+  });
+
   it('não abre a app inteira junto com os arquivos públicos', async () => {
     process.env.SESSION_SECRET = 'real-secret';
     for (const path of ['/', '/config', '/api/state', '/iconsxx']) {

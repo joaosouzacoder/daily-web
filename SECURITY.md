@@ -35,7 +35,7 @@ máquina**, que pode ler a chave e o banco.
 ## O que já está protegido
 
 - Senhas guardadas como hash bcrypt, nunca em texto claro.
-- Sessão em cookie `httpOnly`, `secure`, `sameSite=strict`, assinada por HMAC.
+- Sessão em cookie `httpOnly`, `secure`, `sameSite=lax`, assinada por HMAC.
 - Middleware falha fechado: sem `SESSION_SECRET`, nenhum token é aceito.
 - O usuário é resolvido dentro do handler, relendo o cookie — o middleware não
   injeta header de identidade, que seria superfície de spoof.
@@ -59,7 +59,12 @@ Nenhum deles carrega dado de usuário.
   `execFile` (nunca por shell), com argumentos validados em
   `lib/api/validation.ts`. Quem liga esse provedor aceita essa superfície; o
   provedor padrão, local, não executa processo nenhum.
-- Não há CSRF token; a proteção vem de `sameSite=strict` no cookie.
+- Não há CSRF token; a proteção vem de `sameSite=lax` no cookie. `lax` não
+  envia o cookie em POST, PUT, PATCH ou DELETE vindos de outro site, e toda
+  mutação desta app usa um desses métodos. O único GET que altera estado é o
+  callback do OAuth, protegido pelo `state` assinado com `SESSION_SECRET`.
+  (Era `strict`, que também não envia o cookie na volta de um consentimento
+  OAuth — o retorno do Google chegava sem sessão.)
 - Não há registro de auditoria de quem fez o quê.
 - O rascunho de resposta com IA envia o corpo do e-mail para a API da
   Anthropic. Sem `ANTHROPIC_API_KEY` o recurso fica desligado.

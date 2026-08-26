@@ -131,3 +131,22 @@ describe('POST /api/login — rate limit resistente a X-Forwarded-For forjado', 
     expect(res.status).toBe(401);
   });
 });
+
+describe('atributos do cookie de sessão', () => {
+  // `strict` não envia o cookie quando a navegação vem de outro site, o que
+  // quebrava a volta do consentimento do Google com 401. `lax` resolve isso e
+  // continua barrando CSRF, porque toda mutação desta app é POST/PUT/PATCH/
+  // DELETE — métodos em que `lax` também não envia cookie cross-site.
+  it('usa lax, para o retorno do OAuth chegar com sessão', async () => {
+    const { POST, createUser } = await load();
+    await createUser('maria', 'senha-da-maria');
+
+    const res = await POST(loginRequest('maria', 'senha-da-maria') as never);
+    const raw = res.headers.get('set-cookie') ?? '';
+
+    expect(raw.toLowerCase()).toContain('samesite=lax');
+    expect(raw.toLowerCase()).toContain('httponly');
+    expect(raw.toLowerCase()).toContain('secure');
+    expect(raw.toLowerCase()).toContain('path=/');
+  });
+});

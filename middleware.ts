@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifySessionToken, SESSION_MAX_AGE_MS, SESSION_COOKIE } from '@/lib/auth/session';
 
-const PUBLIC_PATHS = ['/login', '/api/login'];
+// O callback do OAuth trata a própria autenticação: ele exige um `state`
+// assinado e uma sessão do mesmo usuário. Barrá-lo aqui devolveria
+// {"error":"não autenticado"} cru na tela do navegador no retorno do Google;
+// deixando passar, a própria rota redireciona para /config com uma mensagem
+// legível — e continua recusando quem não tem sessão.
+const PUBLIC_PATHS = ['/login', '/api/login', '/api/integrations/agenda/google/callback'];
 
 // O Chrome busca o manifest sem credenciais e registra o service worker antes
 // de qualquer sessão: atrás do login eles receberiam o HTML do redirect em vez
