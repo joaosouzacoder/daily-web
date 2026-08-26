@@ -63,6 +63,11 @@ Only `main` is maintained; there are no release branches.
 - Subtasks are collapsed behind a disclosure arrow.
 
 ### Fixed
+- Completing, editing and deleting a task worked again for Microsoft To Do.
+  The id validation rejected `=`, which every Graph id carries, so every one
+  of them failed with "id inválido".
+- The task form's save button locks while the request is in flight; a second
+  click used to create a duplicate task.
 - Next.js upgraded to 16.3.3 for a critical advisory that included a
   middleware bypass — and middleware is this app's auth gate.
 - Every open pull request in a tracked repository is listed. A filter was

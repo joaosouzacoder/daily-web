@@ -72,7 +72,7 @@ function SubtaskList({
   const toggleSubtask = async (subtaskId: string, completed: boolean) => {
     onSubtaskChanged(task.id, subtaskId, completed);
 
-    const res = await fetch(`/api/tasks/${task.id}/subtasks/${subtaskId}`, {
+    const res = await fetch(`/api/tasks/${encodeURIComponent(task.id)}/subtasks/${encodeURIComponent(subtaskId)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ completed }),
@@ -85,7 +85,7 @@ function SubtaskList({
 
   const addSubtask = async () => {
     if (!newTitle.trim()) return;
-    const res = await fetch(`/api/tasks/${task.id}/subtasks`, {
+    const res = await fetch(`/api/tasks/${encodeURIComponent(task.id)}/subtasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: newTitle.trim() }),
@@ -100,7 +100,7 @@ function SubtaskList({
   };
 
   const removeSubtask = async (subtaskId: string) => {
-    const res = await fetch(`/api/tasks/${task.id}/subtasks/${subtaskId}`, { method: 'DELETE' });
+    const res = await fetch(`/api/tasks/${encodeURIComponent(task.id)}/subtasks/${encodeURIComponent(subtaskId)}`, { method: 'DELETE' });
     if (!res.ok) {
       onError(await readErrorMessage(res, 'Falha ao apagar subtarefa'));
       return;
@@ -243,7 +243,7 @@ export function TasksPanel({
     if (!recorrente) onCompletedChanged(task.id, completed);
     setActionError(null);
 
-    const res = await fetch(`/api/tasks/${task.id}`, {
+    const res = await fetch(`/api/tasks/${encodeURIComponent(task.id)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ completed }),
@@ -262,7 +262,7 @@ export function TasksPanel({
     onRemoved(task.id);
     setActionError(null);
 
-    const res = await fetch(`/api/tasks/${task.id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/tasks/${encodeURIComponent(task.id)}`, { method: 'DELETE' });
     if (!res.ok) {
       setActionError(await readErrorMessage(res, 'Falha ao apagar tarefa'));
       // A tarefa continua existindo: recarrega para ela voltar à lista.

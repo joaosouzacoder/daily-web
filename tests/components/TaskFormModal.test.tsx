@@ -8,11 +8,12 @@ afterEach(() => {
 });
 
 describe('TaskFormModal', () => {
+  // O botão fica desabilitado sem título, então o estado inválido é impedido
+  // em vez de reportado depois do clique.
   it('não salva sem título', () => {
     const fetchSpy = vi.spyOn(global, 'fetch');
     render(<TaskFormModal task={null} onClose={() => {}} onSaved={() => {}} />);
-    fireEvent.click(screen.getByText('Salvar'));
-    expect(screen.getByRole('alert').textContent).toContain('título obrigatório');
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
@@ -66,5 +67,65 @@ describe('TaskFormModal', () => {
     render(<TaskFormModal task={null} onClose={onClose} onSaved={() => {}} />);
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(onClose).toHaveBeenCalled();
+  });
+});
+
+describe('proteção contra envio duplicado', () => {
+  // Foi assim que uma tarefa nasceu em duplicata: o botão continuava
+  // clicável enquanto o POST estava em voo.
+  it('trava o botão durante o envio e não dispara duas vezes', async () => {
+    let resolver: (r: Response) => void = () => {};
+    const fetchSpy = vi
+      .spyOn(global, 'fetch')
+      .mockReturnValue(new Promise<Response>((r) => { resolver = r; }));
+
+    render(<TaskFormModal task={null} onClose={() => {}} onSaved={() => {}} />);
+    fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Ligar para o cara' } });
+
+    const salvar = screen.getByRole('button', { name: 'Salvar' });
+    fireEvent.click(salvar);
+
+    const salvando = await screen.findByRole('button', { name: 'Salvando…' });
+    expect(salvando).toBeDisabled();
+
+    fireEvent.click(salvando);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    resolver(new Response('{}'));
+  });
+
+  it('libera o botão de novo quando o envio falha', async () => {
+    vi.spyOn(global, 'fetch').mockImplementation(
+      async () => new Response(JSON.stringify({ error: 'mstodo caiu' }), { status: 502 }),
+    );
+    render(<TaskFormModal task={null} onClose={() => {}} onSaved={() => {}} />);
+    fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Tarefa' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('mstodo caiu'));
+    expect(screen.getByRole('button', { name: 'Salvar' })).not.toBeDisabled();
+  });
+
+  it('mantém o botão desabilitado enquanto o título está vazio', () => {
+    render(<TaskFormModal task={null} onClose={() => {}} onSaved={() => {}} />);
+    expect(screen.getByRole('button', { name: 'Salvar' })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'x' } });
+    expect(screen.getByRole('button', { name: 'Salvar' })).not.toBeDisabled();
+  });
+
+  // Um id base64 do Graph tem `=` e pode ter `/`; sem codificar, o `/`
+  // quebraria o caminho da rota.
+  it('codifica o id na URL ao editar', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(new Response('{}'));
+    const tarefa = {
+      id: 'AQMk+ADAw/abc==', title: 'Existente', completed: false, due: '', priority: 'normal' as const,
+      time: '', recur: '', notes: '', subtasks: [],
+    };
+    render(<TaskFormModal task={tarefa} onClose={() => {}} onSaved={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+    expect(String(fetchSpy.mock.calls[0][0])).toBe('/api/tasks/AQMk%2BADAw%2Fabc%3D%3D');
   });
 });

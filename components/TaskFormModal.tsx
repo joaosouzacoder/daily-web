@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { TaskPriority, TodoTask } from '@/lib/types';
 
 interface Props {
@@ -37,6 +37,10 @@ export function TaskFormModal({ task, onClose, onSaved }: Props) {
   const [recur, setRecur] = useState<(typeof RECUR_CYCLE)[number]>(initialRecur(task));
   const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? 'normal');
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  // Dois cliques rápidos disparam duas vezes antes de o estado renderizar; o
+  // ref barra a segunda chamada de imediato, o estado cuida do botão.
+  const enviando = useRef(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -50,14 +54,17 @@ export function TaskFormModal({ task, onClose, onSaved }: Props) {
     list[(list.indexOf(current) + 1) % list.length];
 
   const save = async () => {
+    if (enviando.current) return;
     if (!title.trim()) {
       setError('título obrigatório');
       return;
     }
+    enviando.current = true;
+    setSaving(true);
     setError(null);
     try {
       const res = task
-        ? await fetch(`/api/tasks/${task.id}`, {
+        ? await fetch(`/api/tasks/${encodeURIComponent(task.id)}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ title, due, priority, recur }),
@@ -80,6 +87,10 @@ export function TaskFormModal({ task, onClose, onSaved }: Props) {
       onSaved();
     } catch {
       setError('Falha ao salvar');
+    } finally {
+      // Liberado mesmo em caso de erro: a pessoa precisa poder tentar de novo.
+      enviando.current = false;
+      setSaving(false);
     }
   };
 
@@ -135,11 +146,16 @@ export function TaskFormModal({ task, onClose, onSaved }: Props) {
         )}
 
         <div className="modal-actions">
-          <button type="button" className="btn" onClick={onClose}>
+          <button type="button" className="btn" onClick={onClose} disabled={saving}>
             Cancelar
           </button>
-          <button type="button" className="btn btn-primary" onClick={() => void save()}>
-            Salvar
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => void save()}
+            disabled={saving || title.trim().length === 0}
+          >
+            {saving ? 'Salvando…' : 'Salvar'}
           </button>
         </div>
       </div>

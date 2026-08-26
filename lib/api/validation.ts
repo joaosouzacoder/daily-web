@@ -2,6 +2,17 @@ import type { TaskPriority } from '@/lib/types';
 import type { Recur } from '@/lib/tasks/types';
 
 const ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+
+// Ids de tarefa não são nossos: vêm do provedor. Os do Microsoft Graph são
+// base64 e trazem `=` de preenchimento, que o charset acima recusava — na
+// prática isso reprovava *todos* eles e deixava concluir, editar e apagar
+// quebrados para quem usa Microsoft To Do. Os do provedor local são UUID.
+//
+// O risco que a validação existe para conter é outro: o id vira argumento
+// posicional de uma CLI via execFile, e um id começando com "-" seria lido
+// como flag. Esse é o guard que importa, e ele continua.
+const TASK_ID_PATTERN = /^[A-Za-z0-9_\-=+/]+$/;
+const TASK_ID_MAX_LENGTH = 512;
 const FOLDER_PATTERN = /^[A-Za-z0-9 _\-/]+$/;
 const REPO_PATTERN = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
 const VALID_TASK_PRIORITIES: TaskPriority[] = ['low', 'normal', 'high'];
@@ -20,11 +31,14 @@ export function isValidFolder(value: unknown): value is string {
   return typeof value === 'string' && FOLDER_PATTERN.test(value) && !value.startsWith('-');
 }
 
-// Mesmo risco de argument injection do Task 16 (id passado como argumento
-// posicional a um CLI via execFile): um id iniciado com "-" pode ser
-// interpretado como flag pelo parser do mstodo CLI em vez de um id literal.
 export function isValidTaskId(value: unknown): value is string {
-  return typeof value === 'string' && ID_PATTERN.test(value) && !value.startsWith('-');
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= TASK_ID_MAX_LENGTH &&
+    TASK_ID_PATTERN.test(value) &&
+    !value.startsWith('-')
+  );
 }
 
 export function isValidTaskPriority(value: unknown): value is TaskPriority {
