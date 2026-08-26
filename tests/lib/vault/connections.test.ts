@@ -174,3 +174,21 @@ describe('módulos ligados e desligados', () => {
     expect(isModuleEnabled(OTHER, 'agenda')).toBe(false);
   });
 });
+
+describe('religar módulo ao conectar', () => {
+  // Quem desligou a agenda porque o link iCal vivia falhando e depois
+  // autoriza no Google espera ver o painel — não descobrir um interruptor.
+  it('setModuleEnabled sobrepõe um desligamento anterior', async () => {
+    const { setModuleEnabled, isModuleEnabled, saveConnection } = await import(
+      '@/lib/vault/connections'
+    );
+    saveConnection(USER, 'agenda', 'Antiga', { icsUrl: 'https://exemplo/a.ics' });
+    setModuleEnabled(USER, 'agenda', false);
+    expect(isModuleEnabled(USER, 'agenda')).toBe(false);
+
+    saveConnection(USER, 'agenda', 'Google Agenda', { provider: 'google', refreshToken: 'r' });
+    setModuleEnabled(USER, 'agenda', true);
+
+    expect(isModuleEnabled(USER, 'agenda')).toBe(true);
+  });
+});

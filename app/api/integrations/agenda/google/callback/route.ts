@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth/currentUser';
 import { exchangeCode, googleClient, verifyState } from '@/lib/integrations/google/oauth';
-import { listConnections, saveConnection } from '@/lib/vault/connections';
+import { listConnections, saveConnection, setModuleEnabled } from '@/lib/vault/connections';
 import { dropCache } from '@/lib/refresher';
 
 function back(message: string, ok: boolean): NextResponse {
@@ -49,6 +49,10 @@ export async function GET(request: NextRequest) {
       { ...(existing?.values ?? {}), provider: 'google', refreshToken },
       existing?.id,
     );
+    // Autorizar no Google é intenção explícita de usar a agenda. Sem isto,
+    // quem tivesse desligado o módulo — porque o link iCal vivia falhando —
+    // concluiria a autorização e continuaria sem painel nenhum na tela.
+    setModuleEnabled(user.id, 'agenda', true);
     dropCache(user.id);
     return back('Google Agenda conectado', true);
   } catch (err) {
