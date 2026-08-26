@@ -31,6 +31,8 @@ export interface PullRequestItem {
   draft: boolean;
   /** Pediram a sua revisão. */
   awaitingYou: boolean;
+  /** Você abriu este PR. */
+  mine: boolean;
   updatedAt: string;
 }
 

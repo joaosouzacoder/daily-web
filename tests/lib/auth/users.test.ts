@@ -9,6 +9,7 @@ const ORIGINAL_ENV = { ...process.env };
 beforeEach(() => {
   dir = mkdtempSync(path.join(tmpdir(), 'daily-web-users-'));
   process.env.DAILY_WEB_DB_PATH = path.join(dir, 'test.db');
+  process.env.DAILY_WEB_SECRET_KEY = Buffer.alloc(32, 11).toString('base64');
   vi.resetModules();
 });
 
@@ -139,5 +140,56 @@ describe('bootstrap do primeiro admin', () => {
     const { bootstrapFirstUser, listUsers } = await import('@/lib/auth/users');
     bootstrapFirstUser();
     expect(listUsers()).toEqual([]);
+  });
+});
+
+describe('remoção de usuário leva os dados junto', () => {
+  it('apaga conexões, tarefas, subtarefas, cache e notificações da pessoa', async () => {
+    const { createUser, removeUser } = await import('@/lib/auth/users');
+    const { saveConnection } = await import('@/lib/vault/connections');
+    const local = await import('@/lib/tasks/local');
+    const { putCachedBody } = await import('@/lib/emailCache');
+    const { markRead } = await import('@/lib/notifications');
+    const { getDb } = await import('@/lib/db');
+
+    const admin = await createUser('chefe', 'senha-boa-123', true);
+    const alvo = await createUser('temporario', 'senha-boa-123');
+
+    saveConnection(alvo.id, 'jira', 'Jira', { cloud: 'a', email: 'e', token: 'segredo' });
+    const taskId = local.addTask(alvo.id, 'Tarefa dele');
+    local.addSubtask(alvo.id, taskId, 'Etapa');
+    putCachedBody(alvo.id, 'mail-1', '1', 'corpo');
+    markRead(alvo.id, 'jira_mention', 'X-1');
+
+    expect(removeUser('temporario')).toBe(true);
+
+    const db = getDb();
+    const count = (sql: string) => (db.prepare(sql).get(alvo.id) as { c: number }).c;
+    expect(count('SELECT count(*) c FROM connections WHERE user_id = ?')).toBe(0);
+    expect(count('SELECT count(*) c FROM tasks WHERE user_id = ?')).toBe(0);
+    expect(count('SELECT count(*) c FROM email_bodies WHERE user_id = ?')).toBe(0);
+    expect(count('SELECT count(*) c FROM notifications_read WHERE user_id = ?')).toBe(0);
+    expect(
+      (db.prepare('SELECT count(*) c FROM subtasks WHERE task_id = ?').get(taskId) as { c: number })
+        .c,
+    ).toBe(0);
+
+    // O resto da instalação fica intacto.
+    expect(db.prepare('SELECT count(*) c FROM users').get()).toEqual({ c: 1 });
+    expect(admin.username).toBe('chefe');
+  });
+
+  it('não mexe nos dados de quem fica', async () => {
+    const { createUser, removeUser } = await import('@/lib/auth/users');
+    const { saveConnection, listConnections } = await import('@/lib/vault/connections');
+
+    const fica = await createUser('fica', 'senha-boa-123', true);
+    const sai = await createUser('sai', 'senha-boa-123');
+    saveConnection(fica.id, 'jira', 'Jira', { cloud: 'a', email: 'e', token: 't' });
+    saveConnection(sai.id, 'jira', 'Jira', { cloud: 'b', email: 'f', token: 'u' });
+
+    removeUser('sai');
+
+    expect(listConnections(fica.id, 'jira')).toHaveLength(1);
   });
 });

@@ -80,6 +80,17 @@ export async function createUser(
   });
 }
 
+// Tudo que é escopado por usuário. Apagar só a linha de `users` deixaria para
+// trás as credenciais cifradas de alguém que saiu, além das tarefas e do
+// cache de e-mail — dados de uma pessoa que não deveria mais existir aqui.
+const USER_SCOPED_TABLES = [
+  'connections',
+  'module_settings',
+  'tasks',
+  'email_bodies',
+  'notifications_read',
+];
+
 // Sem esta guarda dá para esvaziar os admins: ninguém mais consegue cadastrar
 // ou promover alguém, e o sistema fica travado sem caminho de volta pela tela.
 export function removeUser(username: string): boolean {
@@ -88,7 +99,18 @@ export function removeUser(username: string): boolean {
   if (target.isAdmin && listUsers().filter((u) => u.isAdmin).length === 1) {
     throw new Error('não é possível remover o último admin');
   }
-  return getDb().prepare('DELETE FROM users WHERE username = ?').run(username).changes > 0;
+
+  const db = getDb();
+  return db.transaction(() => {
+    // As subtarefas apontam para a tarefa, não para o usuário.
+    db.prepare(
+      'DELETE FROM subtasks WHERE task_id IN (SELECT id FROM tasks WHERE user_id = ?)',
+    ).run(target.id);
+    for (const table of USER_SCOPED_TABLES) {
+      db.prepare(`DELETE FROM ${table} WHERE user_id = ?`).run(target.id);
+    }
+    return db.prepare('DELETE FROM users WHERE id = ?').run(target.id).changes > 0;
+  })();
 }
 
 export async function setUserPassword(username: string, password: string): Promise<boolean> {

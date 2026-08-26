@@ -276,15 +276,6 @@ export function IntegrationsPanel() {
               </label>
             </header>
 
-            <button
-              type="button"
-              className="btn btn-ghost conn-help-toggle"
-              aria-expanded={openHelp === mod.module}
-              onClick={() => setOpenHelp(openHelp === mod.module ? null : mod.module)}
-            >
-              {openHelp === mod.module ? 'Esconder' : 'Como conseguir isso'}
-            </button>
-
             {openHelp === mod.module && (
               <ul className="conn-instructions">
                 {spec.instructions.map((line) => (
@@ -404,11 +395,23 @@ export function IntegrationsPanel() {
                 </div>
               </form>
             ) : (
-              (spec.multi || mod.connections.length === 0) && (
-                <button type="button" className="btn" onClick={() => startNew(mod.module)}>
-                  {mod.connections.length === 0 ? 'Conectar' : 'Adicionar outra'}
+              // Ajuda e ação na mesma linha, com separação: soltas no fluxo
+              // elas encostavam uma na outra e liam como uma frase só.
+              <div className="conn-actions">
+                {(spec.multi || mod.connections.length === 0) && (
+                  <button type="button" className="btn" onClick={() => startNew(mod.module)}>
+                    {mod.connections.length === 0 ? 'Conectar' : 'Adicionar outra'}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-ghost conn-help-toggle"
+                  aria-expanded={openHelp === mod.module}
+                  onClick={() => setOpenHelp(openHelp === mod.module ? null : mod.module)}
+                >
+                  {openHelp === mod.module ? 'Esconder ajuda' : 'Como conseguir isso'}
                 </button>
-              )
+              </div>
             )}
           </article>
         );

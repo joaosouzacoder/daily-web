@@ -154,6 +154,13 @@ textarea {
   align-items: start;
 }
 
+/* Uma coluna só, quando a outra não tem nenhum módulo ligado. A largura fica
+   limitada para o texto não esticar pela tela toda de um monitor largo. */
+.columns.is-single {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 900px;
+}
+
 .col {
   display: flex;
   flex-direction: column;
@@ -1656,9 +1663,28 @@ textarea.mail-reply-input {
   color: var(--accent);
 }
 
+.conn-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  margin-top: var(--s3);
+}
+
+/* Botão de ajuda é secundário: fica com sublinhado pontilhado em vez de
+   borda, para não competir com o "Conectar" ao lado. */
 .conn-help-toggle {
+  border: 0;
   padding-left: 0;
   padding-right: 0;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+}
+
+.conn-help-toggle:hover:not(:disabled) {
+  background: transparent;
+  color: var(--accent);
 }
 
 .conn-instructions {

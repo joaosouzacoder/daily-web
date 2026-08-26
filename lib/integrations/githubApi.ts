@@ -56,29 +56,40 @@ interface RawPull {
   updated_at?: string;
 }
 
-/** Um PR interessa quando é seu ou quando pediram sua revisão — o resto é
- *  ruído de repositório movimentado. */
-export function relevantPulls(
+/**
+ * Todo PR aberto de um repositório acompanhado entra na lista. Filtrar por
+ * "seu ou pediram sua revisão" parecia razoável e escondia justamente o caso
+ * mais comum num repo próprio: o PR do dependabot, que ninguém atribui e
+ * ninguém pede revisão, e que é exatamente o que está esperando por você.
+ * Quem escolheu acompanhar o repositório já disse o que quer ver.
+ */
+export function toPullItems(
   pulls: RawPull[],
   repo: string,
   login: string,
 ): PullRequestItem[] {
-  return pulls
-    .filter(
-      (pull) =>
-        pull.user?.login === login ||
-        (pull.requested_reviewers ?? []).some((r) => r.login === login),
-    )
-    .map((pull) => ({
-      repo,
-      number: pull.number,
-      title: pull.title,
-      url: pull.html_url,
-      author: pull.user?.login ?? '',
-      draft: pull.draft ?? false,
-      awaitingYou: (pull.requested_reviewers ?? []).some((r) => r.login === login),
-      updatedAt: pull.updated_at ?? '',
-    }));
+  return pulls.map((pull) => ({
+    repo,
+    number: pull.number,
+    title: pull.title,
+    url: pull.html_url,
+    author: pull.user?.login ?? '',
+    draft: pull.draft ?? false,
+    awaitingYou: (pull.requested_reviewers ?? []).some((r) => r.login === login),
+    mine: pull.user?.login === login,
+    updatedAt: pull.updated_at ?? '',
+  }));
+}
+
+/** Primeiro o que pediram para você revisar, depois o que é seu, e o resto
+ *  por atualização mais recente. */
+export function rankPulls(items: PullRequestItem[]): PullRequestItem[] {
+  return [...items].sort(
+    (a, b) =>
+      Number(b.awaitingYou) - Number(a.awaitingYou) ||
+      Number(b.mine) - Number(a.mine) ||
+      b.updatedAt.localeCompare(a.updatedAt),
+  );
 }
 
 export function trackedRepos(conn: Connection): string[] {
@@ -96,7 +107,7 @@ export async function fetchPulls(conn: Connection): Promise<PullsDigest> {
   const results = await Promise.allSettled(
     repos.map(async (repo) => {
       const pulls = (await request(token, `/repos/${repo}/pulls?state=open&per_page=100`)) as RawPull[];
-      return relevantPulls(pulls, repo, login);
+      return toPullItems(pulls, repo, login);
     }),
   );
 
@@ -108,8 +119,7 @@ export async function fetchPulls(conn: Connection): Promise<PullsDigest> {
     else errors.push(`${repos[index]}: ${result.reason instanceof Error ? result.reason.message : result.reason}`);
   });
 
-  items.sort((a, b) => Number(b.awaitingYou) - Number(a.awaitingYou) || b.updatedAt.localeCompare(a.updatedAt));
-  return { items, errors };
+  return { items: rankPulls(items), errors };
 }
 
 export async function testConnection(conn: Connection): Promise<void> {

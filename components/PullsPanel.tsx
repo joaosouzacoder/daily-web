@@ -18,6 +18,9 @@ function PullRow({ pull }: { pull: PullRequestItem }) {
       <span className="pull-meta mono">
         {pull.repo}#{pull.number}
       </span>
+      {/* O autor só importa quando não é você: num repo próprio é o que
+          separa o seu PR do que o dependabot abriu. */}
+      {!pull.mine && pull.author && <span className="pull-meta">{pull.author}</span>}
       {pull.draft && <span className="row-tag">rascunho</span>}
       {pull.awaitingYou && <span className="row-tag row-tag-accent">revisar</span>}
     </li>

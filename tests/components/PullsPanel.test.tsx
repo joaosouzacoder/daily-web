@@ -23,6 +23,7 @@ function pull(over: Partial<PullRequestItem>): PullRequestItem {
     author: 'joao',
     draft: false,
     awaitingYou: false,
+    mine: true,
     updatedAt: '2026-08-26T10:00:00Z',
     ...over,
   };
@@ -43,6 +44,18 @@ describe('PullsPanel', () => {
       />,
     );
     expect(screen.getByText('revisar')).toBeInTheDocument();
+  });
+
+  it('mostra o autor quando o PR não é seu', () => {
+    render(
+      <PullsPanel
+        pulls={{
+          data: { items: [pull({ mine: false, author: 'dependabot[bot]' })], errors: [] },
+          error: null,
+        }}
+      />,
+    );
+    expect(screen.getByText('dependabot[bot]')).toBeInTheDocument();
   });
 
   it('marca rascunho', () => {

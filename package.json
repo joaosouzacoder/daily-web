@@ -9,7 +9,8 @@
     "start": "next start -p 8010 -H 127.0.0.1",
     "test": "vitest run",
     "test:watch": "vitest",
-    "users": "vite-node --config vitest.config.ts scripts/users.ts --"
+    "users": "vite-node --config vitest.config.ts scripts/users.ts --",
+    "import-machine": "vite-node --config vitest.config.ts scripts/import-machine-config.ts --"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",

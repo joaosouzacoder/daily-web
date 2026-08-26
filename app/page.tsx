@@ -88,9 +88,12 @@ export default function DashboardPage() {
           </Link>
         </div>
       ) : (
-        <div className="columns">
-          <div className="col">{left}</div>
-          <div className="col">{right}</div>
+        // Com módulos opcionais, uma das colunas pode ficar vazia — quem ligou
+        // só o Jira teria a coluna larga em branco e o painel espremido na
+        // estreita. Nesse caso a página vira uma coluna só.
+        <div className={`columns${left.length === 0 || right.length === 0 ? ' is-single' : ''}`}>
+          {left.length > 0 && <div className="col">{left}</div>}
+          {right.length > 0 && <div className="col">{right}</div>}
         </div>
       )}
     </main>
