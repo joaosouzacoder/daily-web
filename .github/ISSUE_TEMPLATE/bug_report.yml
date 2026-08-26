@@ -1,0 +1,78 @@
+name: Bug report
+description: Something does not work the way it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Security vulnerabilities do **not** go here — use the
+        [private channel](https://github.com/joaosouzacoder/daily-web/security/advisories/new).
+
+  - type: textarea
+    id: what-happens
+    attributes:
+      label: What happens
+      description: What you did, what you expected, what happened instead.
+      placeholder: |
+        Clicked "Mark as read" on a notification.
+        Expected the bell counter to drop.
+        The counter stayed the same until I reloaded the page.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: module
+    attributes:
+      label: Which module
+      options:
+        - Email
+        - Calendar
+        - Jira
+        - Pull requests
+        - Tasks
+        - Pomodoro
+        - Login / users
+        - Settings / integrations
+        - Other or not sure
+    validations:
+      required: true
+
+  - type: input
+    id: provider
+    attributes:
+      label: Provider involved
+      description: For email or calendar, which service. It helps to reproduce.
+      placeholder: Gmail, Outlook, Fastmail, Google Calendar over OAuth, iCal link…
+
+  - type: textarea
+    id: error
+    attributes:
+      label: Error message
+      description: The text shown on screen, and the server log if you have it.
+      render: text
+
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: v0.1.0, or the commit hash you are running
+    validations:
+      required: true
+
+  - type: input
+    id: node
+    attributes:
+      label: Node.js
+      description: Output of `node --version`
+      placeholder: v22.11.0

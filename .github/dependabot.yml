@@ -1,0 +1,28 @@
+version: 2
+updates:
+  # This app's dependencies speak IMAP, SMTP and third-party APIs, so a
+  # security fix here matters more than the convenience of staying current.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # One PR per group rather than one per package: reviewing fifteen patch
+      # PRs a week leads to approving without reading.
+      production:
+        dependency-type: production
+        update-types: [minor, patch]
+      development:
+        dependency-type: development
+        update-types: [minor, patch]
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "chore(ci)"

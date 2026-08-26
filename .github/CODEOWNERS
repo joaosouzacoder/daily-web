@@ -1,0 +1,28 @@
+# Who gets requested for review on each part of the tree.
+#
+# GitHub reads this file at this exact path, with no extension. A file named
+# CODEOWNERS.md is ignored.
+
+# Default: everything goes through the maintainer.
+*                           @joaosouzacoder
+
+# Auth, sessions and the credential vault. A mistake here exposes every
+# account on the instance, so nothing lands without a careful read.
+/lib/auth/                  @joaosouzacoder
+/lib/vault/                 @joaosouzacoder
+/lib/api/context.ts         @joaosouzacoder
+/middleware.ts              @joaosouzacoder
+/app/api/login/             @joaosouzacoder
+/app/api/users/             @joaosouzacoder
+
+# Integrations: these talk to third-party services using user credentials.
+/lib/integrations/          @joaosouzacoder
+
+# Database migrations run once and do not roll back.
+/lib/db.ts                  @joaosouzacoder
+
+# Repository and deployment infrastructure.
+/.github/                   @joaosouzacoder
+/deploy/                    @joaosouzacoder
+/LICENSE                    @joaosouzacoder
+/SECURITY.md                @joaosouzacoder

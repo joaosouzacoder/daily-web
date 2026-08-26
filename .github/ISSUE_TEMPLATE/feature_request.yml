@@ -1,0 +1,39 @@
+name: Feature request
+description: An idea for the project
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Worth reading [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md) first: it
+        says what tends to be accepted and what tends to be turned down.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve
+      description: Describe the situation, not the solution. What is hard or impossible today.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you propose
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What else you considered
+      description: Including doing nothing. It helps to gauge how much the problem weighs.
+
+  - type: checkboxes
+    id: fit
+    attributes:
+      label: Fit with the project
+      options:
+        - label: It does not require the user to pay for anything to work
+        - label: The credential it needs is one the person can generate on their own
+        - label: It makes sense in a self-hosted panel, not only in someone else's product

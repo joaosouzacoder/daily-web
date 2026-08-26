@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Read-only. This workflow runs code from anyone's pull request; it does not
+# need — and must not have — write access to the repository.
+permissions:
+  contents: read
+
+concurrency:
+  # A new push cancels the previous run on the same branch: reviewing results
+  # for code that has already been replaced serves no one.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests and build
+    # A GitHub-hosted runner, deliberately: this is where fork pull request
+    # code runs, and it must never touch the deployment machine.
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Tests
+        run: npm test
+
+      - name: Build
+        # The build runs TypeScript, so a type error fails here.
+        run: npm run build
+        env:
+          # The build talks to no service, but the code reads these variables;
+          # throwaway values are enough and avoid failing on their absence.
+          SESSION_SECRET: ci-is-not-a-real-secret
+          DAILY_WEB_SECRET_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - name: Critical vulnerability in a production dependency
+        # Production only, critical only. This app once shipped with a
+        # critical middleware-bypass advisory that nobody noticed; the gate
+        # exists because of that. Failing on "moderate" would turn CI into
+        # noise and the gate would be ignored.
+        run: npm audit --omit=dev --audit-level=critical

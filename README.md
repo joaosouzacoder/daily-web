@@ -1,156 +1,233 @@
 # daily-web
 
-Dashboard pessoal para deixar aberto num segundo monitor: e-mail, agenda, pull
-requests, Jira, tarefas e pomodoro numa página só, atrás de login.
+[![CI](https://github.com/joaosouzacoder/daily-web/actions/workflows/ci.yml/badge.svg)](https://github.com/joaosouzacoder/daily-web/actions/workflows/ci.yml)
+[![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%E2%89%A522-brightgreen)](.nvmrc)
 
-Cada pessoa conecta as próprias contas pela tela de configuração. Nada é
-compartilhado entre usuários e nenhum módulo é obrigatório — quem não usa Jira
-simplesmente não liga o Jira.
+A personal dashboard meant to sit open on a second monitor: email, calendar,
+pull requests, Jira, tasks and a pomodoro timer on one page, behind a login.
 
-Next.js 16 · React 19 · SQLite · sem framework de UI, CSS na mão.
+Everyone connects their own accounts from the settings screen. Nothing is
+shared between users and no module is mandatory — if you do not use Jira, you
+do not turn Jira on.
 
-## O que dá para conectar
+Next.js 16 · React 19 · SQLite · no UI framework, CSS written by hand.
 
-| Módulo | Como autentica | Custo |
+> The interface is in Brazilian Portuguese. Code, comments and documentation
+> are in English. There is no translation layer yet.
+
+---
+
+## Contents
+
+- [What you can connect](#what-you-can-connect)
+- [Why no OAuth for email](#why-no-oauth-for-email)
+- [Getting started](#getting-started)
+- [Where to get each credential](#where-to-get-each-credential)
+- [Installing as an app](#installing-as-an-app)
+- [How it is put together](#how-it-is-put-together)
+- [Tests](#tests)
+- [Deployment](#deployment)
+- [Contributing](#contributing)
+- [Security](#security)
+- [License](#license)
+
+---
+
+## What you can connect
+
+| Module | How it authenticates | Cost |
 |---|---|---|
-| E-mail | IMAP/SMTP com senha de app | grátis |
-| Agenda | OAuth do Google, ou URL iCal (.ics) | grátis |
-| Jira | API token do Atlassian | grátis |
-| Pull requests | Personal access token do GitHub | grátis |
-| Tarefas | guardadas neste servidor (padrão) | — |
+| Email | IMAP/SMTP with an app password | free |
+| Calendar | Google OAuth, or an iCal (.ics) URL | free |
+| Jira | Atlassian API token | free |
+| Pull requests | GitHub personal access token | free |
+| Tasks | stored on this server (default) | — |
 
-O e-mail não exige aplicativo OAuth nenhum: senha de app sobre IMAP funciona em
-qualquer provedor e cada pessoa gera a sua em um minuto.
+Each module is independent. A module with no connection does not render an
+empty panel — it does not render at all.
 
-A agenda tem dois caminhos. O link iCal não exige nada de quem hospeda, mas é
-frágil: é fácil copiar o link errado (o Google mostra três na mesma tela) e
-administradores de contas corporativas costumam bloquear o compartilhamento
-externo, o que derruba o link de vez. Por isso existe a conexão pelo Google, que
-é a recomendada para contas Google.
+**Tasks** live in the app's own database, so the panel works on first login
+with nothing configured. If you have the `mstodo` CLI installed you can point
+it at Microsoft To Do instead and keep phone sync.
 
-Criar o client OAuth é **gratuito** — a verificação paga do Google só é exigida
-para publicar um app que acessa contas de terceiros em escala, e um app não
-verificado atende até 100 contas. Quem hospeda cria o client uma vez (passo a
-passo em `.env.example`, em `GOOGLE_CLIENT_ID`); quem usa só clica em
-"Conectar com Google".
+## Why no OAuth for email
 
-**Tarefas** ficam no banco da própria app, então o painel funciona no primeiro
-login sem configurar nada. Quem tem a CLI [mstodo] instalada pode apontar para
-o Microsoft To Do e manter a sincronia com o celular.
+Email needs no OAuth application at all: an app password over IMAP works with
+any provider, and each person generates their own in a minute.
 
-[mstodo]: https://github.com/joaosouzacoder/daily-tui
+Calendar has two paths. The iCal link requires nothing from whoever hosts the
+app, but it is fragile: it is easy to copy the wrong link (Google shows three
+on the same screen) and corporate Workspace administrators commonly disable
+external sharing, which kills the secret address permanently. That is why the
+Google connection exists, and it is the recommended path for Google accounts.
 
-## Subindo
+Creating the OAuth client is **free**. Google's paid CASA review is only
+required to publish an app that reaches other people's accounts at scale; an
+unverified app serves up to 100 accounts. Whoever hosts creates the client
+once (step by step in `.env.example`, under `GOOGLE_CLIENT_ID`); everyone else
+just clicks **Conectar com Google**.
 
-Precisa de Node.js 22+.
+## Getting started
+
+Node.js 22 or newer. Production runs 24, which is what `.nvmrc` pins for CI.
 
 ```sh
+git clone https://github.com/joaosouzacoder/daily-web.git
+cd daily-web
 npm install
 cp .env.example .env.local
 ```
 
-Preencha no mínimo `SESSION_SECRET` e `DAILY_WEB_SECRET_KEY`:
+Fill in at least `SESSION_SECRET` and `DAILY_WEB_SECRET_KEY`:
 
 ```sh
 openssl rand -hex 32      # SESSION_SECRET
 openssl rand -base64 32   # DAILY_WEB_SECRET_KEY
 ```
 
-Crie o primeiro usuário e suba:
+Create the first user and start:
 
 ```sh
-npm run users -- add <username> <senha> --admin
+npm run users -- add <username> <password> --admin
 npm run dev                    # http://localhost:8010
 ```
 
-Também existem `list`, `password <username> <nova-senha>` e `remove <username>`.
+`users` also takes `list`, `password <username> <new-password>` and
+`remove <username>`.
 
-Depois de entrar, vá em **Configuração** e conecte o que você usa. Cada módulo
-traz o passo a passo de onde tirar a credencial, e um botão **Testar** que diz
-na hora se funcionou.
+Once you are in, open **Configuração** and connect what you use. Each module
+carries a walkthrough of where to find the credential, and a **Testar** button
+that tells you right away whether it worked.
 
-### Onde conseguir cada credencial
+## Where to get each credential
 
-**E-mail** — precisa de senha de app, não da senha da conta:
+**Email** — needs an app password, not your account password:
 
-- Gmail: ative a verificação em duas etapas e gere em
+- Gmail: turn on two-step verification, then generate one at
   [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)
-- Outlook / Microsoft 365: em account.microsoft.com/security, nas opções de
-  segurança avançadas
-- iCloud: em account.apple.com, seção Segurança
-- Qualquer outro provedor IMAP: escolha "Outro" e preencha host e porta
+- Outlook / Microsoft 365: at account.microsoft.com/security, under advanced
+  security options
+- iCloud: at account.apple.com, Security section
+- Any other IMAP provider: choose "Outro" and fill in host and port
 
-**Agenda** — em conta Google, clique em "Conectar com Google" e escolha quais
-agendas mostrar. Para os demais provedores, use o endereço iCal:
+**Calendar** — on a Google account, click **Conectar com Google** and pick
+which calendars to show. For other providers, use the iCal address:
 
-- Google Agenda: Configurações → clique na agenda à esquerda → "Integrar
-  agenda" → "Endereço secreto no formato iCal" (termina em `.ics` — não é o
-  endereço da barra do navegador)
-- Outlook: Configurações → Agenda → Agendas compartilhadas → Publicar
-- Apple, Fastmail, Nextcloud: qualquer URL `.ics` serve
+- Google Calendar: Settings → click the calendar on the left → "Integrate
+  calendar" → "Secret address in iCal format" (ends in `.ics` — it is not the
+  address in your browser's bar)
+- Outlook: Settings → Calendar → Shared calendars → Publish
+- Apple, Fastmail, Nextcloud: any `.ics` URL works
 
-É somente leitura: o painel mostra os compromissos, não cria nem edita. Quantos
-dias aparecem — de hoje até 14 dias — é escolha de cada usuário, nos botões do
-próprio painel, e vale também para o que o servidor busca.
+It is read-only: the panel shows appointments, it does not create or edit them.
+How many days appear — from today up to 14 — is each user's choice, in the
+panel's own buttons, and it governs what the server fetches too.
 
-**Jira** — API token em
+**Jira** — API token at
 [id.atlassian.com](https://id.atlassian.com/manage-profile/security/api-tokens).
-O domínio é o começo da URL: em `acme.atlassian.net`, é `acme`.
+The domain is the start of the URL: in `acme.atlassian.net`, it is `acme`.
 
-**GitHub** — personal access token em
-[github.com/settings/tokens](https://github.com/settings/tokens). Escopo `repo`
-para repositórios privados; para só públicos, nenhum escopo basta.
+**GitHub** — personal access token at
+[github.com/settings/tokens](https://github.com/settings/tokens). Scope `repo`
+for private repositories; for public ones, no scope is needed.
 
-## Instalar como app
+## Installing as an app
 
-A página traz manifest e service worker, então o Chrome oferece "Instalar" e
-ela abre em janela própria, sem barra de endereço. Funciona em desktop e
-Android; no iOS, "Adicionar à Tela de Início" pelo Safari.
+The page ships a manifest and a service worker, so Chrome offers **Install**
+and it opens in its own window without an address bar. Works on desktop and
+Android; on iOS, use "Add to Home Screen" from Safari.
 
-O service worker hoje não guarda nada em cache — o painel mostra dados de
-agora, e servir uma cópia velha seria pior do que mostrar erro de rede. É a
-base para um PWA com estratégia offline por rota.
+The service worker caches nothing today — the panel shows data as it is right
+now, and serving a stale copy would be worse than showing a network error. It
+is the starting point for a PWA with a real per-route strategy.
 
-## Testes
+## How it is put together
 
-```sh
-npm test           # suíte inteira, uma vez
-npm run test:watch
+```
+app/            Next.js App Router: pages and API routes
+  api/          one route per action; each resolves the user from the cookie
+components/     panels and UI primitives; no UI framework
+lib/
+  auth/         users, password hashing, session tokens
+  vault/        AES-256-GCM encryption and per-user connections
+  integrations/ IMAP, iCal, Google Calendar, Jira REST, GitHub REST
+  tasks/        local SQLite provider and the optional mstodo adapter
+  db.ts         schema and numbered migrations
+  refresher.ts  background fetch loop and the per-user state cache
+deploy/         systemd unit, Traefik snippets, publish and healthcheck
+docs/           design documents
 ```
 
-## Deploy
+Two ideas explain most of the structure:
 
-O diretório `deploy/` traz **um exemplo** do setup que este projeto usa:
-processo host via systemd escutando em `127.0.0.1:8010`, com Traefik na frente
-terminando TLS. Os arquivos contêm caminhos e domínio específicos daquela
-máquina — trate como referência, não como configuração pronta.
+**Connections, not credentials.** A user can have several mailboxes and
+several calendars. Each connection is a row with its own label, encrypted at
+rest, resolved through the session's owner.
 
-Em resumo:
+**I/O separated from logic.** Anything that talks to a network lives beside a
+pure function that can be tested without one. `expandEvents` parses a calendar;
+`fetchIcs` downloads it. That is why the suite runs in seconds with no fixture
+server.
 
-1. Crie `/etc/daily-web/env` (fora do git, `chmod 600`) a partir de
-   `.env.example`.
-2. Ajuste `deploy/daily-web.service` para o seu usuário, diretório e caminho do
-   `npm` (`which npm`), e instale com `systemctl enable --now`.
-3. Mescle `deploy/traefik-*-snippet.yml` no `dynamic.yml` do seu Traefik, ou
-   use o proxy que preferir.
-4. Aponte o DNS para a máquina.
+## Tests
 
-`scripts/deploy.sh` faz o ciclo seguinte (pull, build, restart) e também assume
-esse layout.
+```sh
+npm test           # the whole suite, once
+npm run test:watch
+npm run build      # runs TypeScript
+```
 
-## Segurança
+Tests never touch a real database: `tests/setup.ts` points every file at a
+throwaway one. They never touch the network either.
 
-Leia [SECURITY.md](SECURITY.md) antes de expor isto em qualquer lugar. Resumo:
-credenciais são cifradas em repouso com `DAILY_WEB_SECRET_KEY` e cada conexão
-é resolvida pelo dono da sessão, então uma pessoa não alcança a conta de outra.
-Ainda assim isto **não é multi-tenant**: não há isolamento de processo nem
-auditoria, e o operador da máquina tem acesso ao banco. Foi feito para rodar na
-sua máquina, para você e para pessoas em quem você confia.
+## Deployment
 
-## Licença
+`deploy/` holds **an example** of the setup this project uses: a host process
+under systemd listening on `127.0.0.1:8010`, with Traefik in front terminating
+TLS. The files contain paths and a domain specific to that machine — treat
+them as a reference, not a ready-made configuration.
 
-[PolyForm Noncommercial 1.0.0](LICENSE) — livre para uso pessoal, estudo,
-pesquisa, ONGs e instituições públicas; uso comercial não é permitido.
+In short:
 
-Isto **não é uma licença open source** no sentido da OSI, que não admite
-restrição de campo de uso. É source-available.
+1. Create `/etc/daily-web/env` (outside git, `chmod 600`) from `.env.example`.
+2. Adjust `deploy/daily-web.service` for your user, directory and `npm` path
+   (`which npm`), then `systemctl enable --now`.
+3. Merge `deploy/traefik-*-snippet.yml` into your Traefik `dynamic.yml`, or use
+   whatever proxy you prefer.
+4. Point DNS at the machine.
+
+Pushes to `main` deploy automatically through a self-hosted GitHub Actions
+runner: `deploy/publish.sh` copies the tested build into place and
+`deploy/healthcheck.sh` confirms the service answers before the run goes
+green. Read the security note at the top of `.github/workflows/deploy.yml`
+before changing anything there.
+
+## Contributing
+
+Pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first — it
+says what tends to be accepted, what tends to be turned down, and how the
+tests are written here.
+
+The [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) applies.
+
+## Security
+
+Read [SECURITY.md](SECURITY.md) before exposing this anywhere. In short:
+credentials are encrypted at rest with `DAILY_WEB_SECRET_KEY` and every
+connection is resolved through the session's owner, so one person cannot reach
+another's account. Even so this is **not multi-tenant**: there is no process
+isolation and no audit log, and the machine's operator has the database. It is
+built to run on your machine, for you and people you trust.
+
+Report vulnerabilities privately through
+[Security Advisories](https://github.com/joaosouzacoder/daily-web/security/advisories/new),
+never in a public issue.
+
+## License
+
+[PolyForm Noncommercial 1.0.0](LICENSE) — free for personal use, study,
+research, nonprofits and public institutions; commercial use is not permitted.
+
+This is **not an open source license** in the OSI sense, which does not allow
+field-of-use restrictions. It is source-available.

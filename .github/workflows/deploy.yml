@@ -1,0 +1,72 @@
+name: Deploy
+
+# SECURITY NOTE — read before editing this file.
+#
+# This workflow runs on a self-hosted runner, meaning it executes commands on
+# the machine that serves the app. In a public repository that is only safe
+# because:
+#
+#   1. The trigger is `push` to `main`. A fork pull request does not fire this
+#      workflow, and only someone with write access can push to `main`.
+#   2. There is no `pull_request` or `pull_request_target` here. Adding either
+#      would let a stranger's code run on this machine.
+#   3. `workflow_dispatch` requires write access to the repository.
+#
+# If this workflow ever needs code coming from a pull request, move that step
+# to a GitHub-hosted runner. Nothing from outside may run here.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Never two deploys at once on the same machine. And no cancelling midway:
+  # an interrupted deploy leaves the app between two versions.
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Publish to the machine
+    runs-on: [self-hosted, daily-web]
+
+    # A fork that enables Actions has no such runner, but the guard makes the
+    # intent explicit to anyone reading.
+    if: github.repository == 'joaosouzacoder/daily-web'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # No setup-node here on purpose. This job builds better-sqlite3, a
+      # native module, and the service runs under the machine's own Node.
+      # Installing a second Node could compile against a different ABI and
+      # leave the service unable to open the database.
+      - name: Show the toolchain in use
+        run: node --version && npm --version
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Tests
+        # CI already ran on the pull request, but what ships is the merge
+        # result — which nobody has tested in this exact combination yet.
+        run: npm test
+
+      - name: Build
+        run: npm run build
+        env:
+          SESSION_SECRET: build-is-not-a-real-secret
+          DAILY_WEB_SECRET_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+
+      - name: Publish the build and restart the service
+        # The service runs from its own directory and reads real credentials
+        # from /etc/daily-web/env, which never passes through here. The script
+        # is version-controlled so this step is not loose shell inside YAML.
+        run: ./deploy/publish.sh
+
+      - name: Verify it came back up
+        run: ./deploy/healthcheck.sh
