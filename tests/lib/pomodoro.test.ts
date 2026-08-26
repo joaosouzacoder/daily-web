@@ -10,7 +10,7 @@ beforeEach(() => {
 
 describe('pomodoro', () => {
   it('começa parado na fase de foco com o tempo cheio', () => {
-    const s = getPomodoroState();
+    const s = getPomodoroState('u-1');
     expect(s.phase).toBe('focus');
     expect(s.running).toBe(false);
     expect(s.remainingSeconds).toBe(25 * 60);
@@ -18,27 +18,27 @@ describe('pomodoro', () => {
 
   it('conta o tempo regressivamente enquanto rodando', () => {
     vi.setSystemTime(new Date('2026-08-25T10:00:00Z'));
-    startPomodoro();
+    startPomodoro('u-1');
     vi.setSystemTime(new Date('2026-08-25T10:00:10Z'));
-    expect(getPomodoroState().remainingSeconds).toBe(25 * 60 - 10);
+    expect(getPomodoroState('u-1').remainingSeconds).toBe(25 * 60 - 10);
   });
 
   it('pausar interrompe a contagem', () => {
     vi.setSystemTime(new Date('2026-08-25T10:00:00Z'));
-    startPomodoro();
+    startPomodoro('u-1');
     vi.setSystemTime(new Date('2026-08-25T10:00:10Z'));
-    pausePomodoro();
+    pausePomodoro('u-1');
     vi.setSystemTime(new Date('2026-08-25T10:05:00Z'));
-    const s = getPomodoroState();
+    const s = getPomodoroState('u-1');
     expect(s.remainingSeconds).toBe(25 * 60 - 10);
     expect(s.running).toBe(false);
   });
 
   it('ao terminar o foco, o descanso começa sozinho e soma um foco', () => {
     vi.setSystemTime(new Date('2026-08-25T10:00:00Z'));
-    startPomodoro();
+    startPomodoro('u-1');
     vi.setSystemTime(new Date('2026-08-25T10:25:01Z'));
-    const s = getPomodoroState();
+    const s = getPomodoroState('u-1');
     expect(s.phase).toBe('rest');
     expect(s.running).toBe(true);
     expect(s.completedFocusCount).toBe(1);
@@ -46,20 +46,20 @@ describe('pomodoro', () => {
 
   it('ao terminar o descanso, volta a foco e espera o próximo "iniciar"', () => {
     vi.setSystemTime(new Date('2026-08-25T10:00:00Z'));
-    startPomodoro();
+    startPomodoro('u-1');
     vi.setSystemTime(new Date('2026-08-25T10:30:01Z'));
-    const s = getPomodoroState();
+    const s = getPomodoroState('u-1');
     expect(s.phase).toBe('focus');
     expect(s.running).toBe(false);
   });
 
   it('reset zera a fase sem apagar o contador de focos', () => {
     vi.setSystemTime(new Date('2026-08-25T10:00:00Z'));
-    startPomodoro();
+    startPomodoro('u-1');
     vi.setSystemTime(new Date('2026-08-25T10:25:01Z'));
-    getPomodoroState();
-    resetPomodoro();
-    const s = getPomodoroState();
+    getPomodoroState('u-1');
+    resetPomodoro('u-1');
+    const s = getPomodoroState('u-1');
     expect(s.phase).toBe('focus');
     expect(s.remainingSeconds).toBe(25 * 60);
     expect(s.completedFocusCount).toBe(1);
@@ -69,9 +69,9 @@ describe('pomodoro', () => {
     const seen: string[] = [];
     const unsubscribe = onPhaseChange((phase) => seen.push(phase));
     vi.setSystemTime(new Date('2026-08-25T10:00:00Z'));
-    startPomodoro();
+    startPomodoro('u-1');
     vi.setSystemTime(new Date('2026-08-25T10:25:01Z'));
-    getPomodoroState();
+    getPomodoroState('u-1');
     expect(seen).toEqual(['rest']);
     unsubscribe();
   });

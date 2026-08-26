@@ -22,9 +22,21 @@ function initialState(): InternalState {
   };
 }
 
-let state: InternalState = initialState();
+// Um pomodoro por usuário. Era um `let state` de módulo, o que fazia duas
+// pessoas logadas compartilharem o mesmo cronômetro: quem apertasse pausa
+// pausava o da outra.
+const states = new Map<string, InternalState>();
 
-type PhaseChangeListener = (phase: PomodoroPhase) => void;
+function stateFor(userId: string): InternalState {
+  let state = states.get(userId);
+  if (!state) {
+    state = initialState();
+    states.set(userId, state);
+  }
+  return state;
+}
+
+type PhaseChangeListener = (phase: PomodoroPhase, userId: string) => void;
 const listeners = new Set<PhaseChangeListener>();
 
 export function onPhaseChange(listener: PhaseChangeListener): () => void {
@@ -36,7 +48,8 @@ function phaseSeconds(phase: PomodoroPhase): number {
   return (phase === 'focus' ? FOCUS_MINUTES : REST_MINUTES) * 60;
 }
 
-function tick(): void {
+function tick(userId: string): void {
+  const state = stateFor(userId);
   if (!state.running) {
     state.lastTickAt = Date.now();
     return;
@@ -54,12 +67,13 @@ function tick(): void {
     state.remainingSeconds += phaseSeconds(nextPhase);
     state.phase = nextPhase;
     state.running = nextPhase === 'rest';
-    for (const listener of listeners) listener(nextPhase);
+    for (const listener of listeners) listener(nextPhase, userId);
   }
 }
 
-export function getPomodoroState(): PomodoroState {
-  tick();
+export function getPomodoroState(userId: string): PomodoroState {
+  tick(userId);
+  const state = stateFor(userId);
   return {
     enabled: ENABLED,
     phase: state.phase,
@@ -71,28 +85,38 @@ export function getPomodoroState(): PomodoroState {
   };
 }
 
-export function startPomodoro(): PomodoroState {
-  tick();
+export function startPomodoro(userId: string): PomodoroState {
+  tick(userId);
+  const state = stateFor(userId);
   state.running = true;
   state.lastTickAt = Date.now();
-  return getPomodoroState();
+  return getPomodoroState(userId);
 }
 
-export function pausePomodoro(): PomodoroState {
-  tick();
-  state.running = false;
-  return getPomodoroState();
+export function pausePomodoro(userId: string): PomodoroState {
+  tick(userId);
+  stateFor(userId).running = false;
+  return getPomodoroState(userId);
 }
 
-export function resetPomodoro(): PomodoroState {
+export function resetPomodoro(userId: string): PomodoroState {
+  // Zera a fase, não o histórico: o contador de focos concluídos sobrevive ao
+  // reset, como antes do estado virar por usuário.
+  const state = stateFor(userId);
   state.phase = 'focus';
   state.running = false;
   state.remainingSeconds = phaseSeconds('focus');
   state.lastTickAt = Date.now();
-  return getPomodoroState();
+  return getPomodoroState(userId);
+}
+
+// Quem já tem cronômetro em andamento. O tick de fundo só precisa visitar
+// esses — criar estado para todo usuário cadastrado seria trabalho à toa.
+export function activePomodoroUsers(): string[] {
+  return [...states.keys()];
 }
 
 export function resetStateForTests(): void {
-  state = initialState();
+  states.clear();
   listeners.clear();
 }

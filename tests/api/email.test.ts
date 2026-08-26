@@ -1,5 +1,13 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
+// As rotas resolvem o usuário pelo cookie; aqui basta um usuário fixo para o
+// teste focar no que ele mede.
+vi.mock('@/lib/auth/currentUser', () => ({
+  getCurrentUser: vi.fn(async () => ({
+    id: 'u-1', username: 'joao', passwordHash: 'x', isAdmin: true, createdAt: '2026-01-01',
+  })),
+}));
+
 vi.mock('@/lib/cli/himalaya', () => ({
   setSeen: vi.fn(),
   moveTo: vi.fn(),

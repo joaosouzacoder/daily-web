@@ -6,21 +6,31 @@ import type { Account, EmailEnvelope } from './types';
 // guardando os corpos conforme os e-mails chegam, então abrir é instantâneo.
 const RETENTION_DAYS = 30;
 
-export function getCachedBody(account: Account, messageId: string): string | null {
+export function getCachedBody(
+  userId: string,
+  account: Account,
+  messageId: string,
+): string | null {
   const row = getDb()
-    .prepare('SELECT body FROM email_bodies WHERE account = ? AND message_id = ?')
-    .get(account, messageId) as { body: string } | undefined;
+    .prepare('SELECT body FROM email_bodies WHERE user_id = ? AND account = ? AND message_id = ?')
+    .get(userId, account, messageId) as { body: string } | undefined;
   return row?.body ?? null;
 }
 
-export function putCachedBody(account: Account, messageId: string, body: string): void {
+export function putCachedBody(
+  userId: string,
+  account: Account,
+  messageId: string,
+  body: string,
+): void {
   getDb()
     .prepare(
-      `INSERT INTO email_bodies (account, message_id, body, cached_at)
-       VALUES (?, ?, ?, ?)
-       ON CONFLICT (account, message_id) DO UPDATE SET body = excluded.body, cached_at = excluded.cached_at`,
+      `INSERT INTO email_bodies (user_id, account, message_id, body, cached_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (user_id, account, message_id)
+       DO UPDATE SET body = excluded.body, cached_at = excluded.cached_at`,
     )
-    .run(account, messageId, body, new Date().toISOString());
+    .run(userId, account, messageId, body, new Date().toISOString());
 }
 
 export function pruneOldBodies(now: Date = new Date()): number {
@@ -32,22 +42,22 @@ export function pruneOldBodies(now: Date = new Date()): number {
   return result.changes;
 }
 
-export function isCached(account: Account, messageId: string): boolean {
+export function isCached(userId: string, account: Account, messageId: string): boolean {
   const row = getDb()
-    .prepare('SELECT 1 AS present FROM email_bodies WHERE account = ? AND message_id = ?')
-    .get(account, messageId) as { present: number } | undefined;
+    .prepare('SELECT 1 AS present FROM email_bodies WHERE user_id = ? AND account = ? AND message_id = ?')
+    .get(userId, account, messageId) as { present: number } | undefined;
   return row !== undefined;
 }
 
 // Roda em segundo plano depois de cada refresh: só busca o que ainda não
 // está em cache, um de cada vez, para não abrir dezenas de conexões IMAP.
-export async function warmBodyCache(envelopes: EmailEnvelope[]): Promise<number> {
+export async function warmBodyCache(userId: string, envelopes: EmailEnvelope[]): Promise<number> {
   let fetched = 0;
   for (const envelope of envelopes) {
-    if (isCached(envelope.account, envelope.id)) continue;
+    if (isCached(userId, envelope.account, envelope.id)) continue;
     try {
       const body = await fetchBody(envelope.account, envelope.id);
-      putCachedBody(envelope.account, envelope.id, body);
+      putCachedBody(userId, envelope.account, envelope.id, body);
       fetched += 1;
     } catch {
       // Um e-mail que falhou não pode interromper o aquecimento dos outros;

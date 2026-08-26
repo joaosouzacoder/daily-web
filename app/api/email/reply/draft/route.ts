@@ -3,6 +3,7 @@ import { fetchBody } from '@/lib/cli/himalaya';
 import { getCachedBody, putCachedBody } from '@/lib/emailCache';
 import { draftReply, MissingApiKeyError } from '@/lib/ai/replyDraft';
 import { isValidAccount, isValidEmailId } from '@/lib/api/validation';
+import { getCurrentUser } from '@/lib/auth/currentUser';
 
 export async function POST(request: NextRequest) {
   const payload = await request.json().catch(() => null);
@@ -10,14 +11,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'conta ou id inválido' }, { status: 400 });
   }
   const { account, id, from, subject, instruction } = payload;
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: 'não autenticado' }, { status: 401 });
 
   try {
     // Mesmo caminho do corpo exibido no acordeão: o refresher normalmente já
     // deixou o texto em cache, então gerar o rascunho não custa uma ida ao IMAP.
-    let body = getCachedBody(account, id);
+    let body = getCachedBody(user.id, account, id);
     if (body === null) {
       body = await fetchBody(account, id);
-      putCachedBody(account, id, body);
+      putCachedBody(user.id, account, id, body);
     }
     const text = await draftReply({
       from: typeof from === 'string' ? from : '',

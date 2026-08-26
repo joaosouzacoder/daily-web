@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { editTask, completeTask, reopenTask, deleteTask } from '@/lib/cli/mstodo';
 import { parseDueInput } from '@/lib/dateParsing';
 import { isValidTaskId, isValidTaskPriority, isValidRecur, isSafePositionalValue } from '@/lib/api/validation';
+import { getCurrentUser } from '@/lib/auth/currentUser';
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -10,13 +11,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
   const body = await request.json();
 
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: 'não autenticado' }, { status: 401 });
   try {
     if (body.completed === true) {
-      await completeTask(id);
+      await completeTask(user.id, id);
       return NextResponse.json({ ok: true });
     }
     if (body.completed === false) {
-      await reopenTask(id);
+      await reopenTask(user.id, id);
       return NextResponse.json({ ok: true });
     }
 
@@ -42,7 +45,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
     }
 
-    await editTask(id, { title: body.title, due, time, recur: body.recur, priority: body.priority });
+    await editTask(user.id, id, { title: body.title, due, time, recur: body.recur, priority: body.priority });
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 502 });
@@ -54,8 +57,10 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   if (!isValidTaskId(id)) {
     return NextResponse.json({ error: 'id inválido' }, { status: 400 });
   }
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: 'não autenticado' }, { status: 401 });
   try {
-    await deleteTask(id);
+    await deleteTask(user.id, id);
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 502 });

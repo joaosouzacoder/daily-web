@@ -12,22 +12,22 @@ beforeEach(() => {
 describe('notifications_read', () => {
   it('marca uma notificação como lida e não a esquece', async () => {
     const { markRead, isRead } = await import('@/lib/notifications');
-    expect(isRead('jira_mention', 'ENG-1')).toBe(false);
-    markRead('jira_mention', 'ENG-1');
-    expect(isRead('jira_mention', 'ENG-1')).toBe(true);
+    expect(isRead('u-1', 'jira_mention', 'ENG-1')).toBe(false);
+    markRead('u-1', 'jira_mention', 'ENG-1');
+    expect(isRead('u-1', 'jira_mention', 'ENG-1')).toBe(true);
   });
 
   it('marcar duas vezes não falha (idempotente)', async () => {
     const { markRead, isRead } = await import('@/lib/notifications');
-    markRead('jira_mention', 'ENG-1');
-    markRead('jira_mention', 'ENG-1');
-    expect(isRead('jira_mention', 'ENG-1')).toBe(true);
+    markRead('u-1', 'jira_mention', 'ENG-1');
+    markRead('u-1', 'jira_mention', 'ENG-1');
+    expect(isRead('u-1', 'jira_mention', 'ENG-1')).toBe(true);
   });
 
   it('fontes diferentes com o mesmo id externo não se confundem', async () => {
     const { markRead, isRead } = await import('@/lib/notifications');
-    markRead('jira_mention', 'X-1');
-    expect(isRead('outra_fonte', 'X-1')).toBe(false);
+    markRead('u-1', 'jira_mention', 'X-1');
+    expect(isRead('u-1', 'outra_fonte', 'X-1')).toBe(false);
   });
 });
 
@@ -42,8 +42,8 @@ describe('getNotifications', () => {
       ]),
     }));
     const { markRead, getNotifications } = await import('@/lib/notifications');
-    markRead('jira_mention', 'ENG-1');
-    const items = await getNotifications();
+    markRead('u-1', 'jira_mention', 'ENG-1');
+    const items = await getNotifications('u-1');
     expect(items).toHaveLength(1);
     expect(items[0].read).toBe(true);
     expect(items[0].title).toContain('ENG-1');

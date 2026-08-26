@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { UsersPanel } from '@/components/UsersPanel';
+import { IntegrationsPanel } from '@/components/IntegrationsPanel';
 
 export default function ConfigPage() {
   return (
@@ -17,9 +18,11 @@ export default function ConfigPage() {
 
       <div className="columns">
         <div className="col">
+          <IntegrationsPanel />
+        </div>
+        <div className="col">
           <UsersPanel />
         </div>
-        <div className="col" />
       </div>
     </main>
   );

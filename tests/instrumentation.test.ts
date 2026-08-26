@@ -4,9 +4,13 @@ vi.mock('@/lib/refresher', () => ({
   startRefreshLoop: vi.fn(),
 }));
 
+vi.mock('@/lib/auth/users', () => ({ bootstrapFirstUser: vi.fn() }));
+
 vi.mock('@/lib/pomodoro', () => ({
   getPomodoroState: vi.fn(),
   onPhaseChange: vi.fn(),
+  // O tick de fundo só visita quem já tem cronômetro em andamento.
+  activePomodoroUsers: vi.fn(() => ['u-1']),
 }));
 
 const ORIGINAL_RUNTIME = process.env.NEXT_RUNTIME;

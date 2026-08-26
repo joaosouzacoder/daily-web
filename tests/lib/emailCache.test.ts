@@ -36,36 +36,36 @@ afterEach(() => {
 describe('cache de corpos de e-mail', () => {
   it('devolve null quando o corpo ainda não foi guardado', async () => {
     const { getCachedBody } = await import('@/lib/emailCache');
-    expect(getCachedBody('work', 'inexistente')).toBeNull();
+    expect(getCachedBody('u-1', 'work', 'inexistente')).toBeNull();
   });
 
   it('guarda e recupera o corpo', async () => {
     const { putCachedBody, getCachedBody } = await import('@/lib/emailCache');
-    putCachedBody('work', '42', 'corpo do e-mail');
-    expect(getCachedBody('work', '42')).toBe('corpo do e-mail');
+    putCachedBody('u-1', 'work', '42', 'corpo do e-mail');
+    expect(getCachedBody('u-1', 'work', '42')).toBe('corpo do e-mail');
   });
 
   it('não confunde o mesmo id em contas diferentes', async () => {
     const { putCachedBody, getCachedBody } = await import('@/lib/emailCache');
-    putCachedBody('work', '42', 'do trabalho');
-    putCachedBody('personal', '42', 'pessoal');
-    expect(getCachedBody('work', '42')).toBe('do trabalho');
-    expect(getCachedBody('personal', '42')).toBe('pessoal');
+    putCachedBody('u-1', 'work', '42', 'do trabalho');
+    putCachedBody('u-1', 'personal', '42', 'pessoal');
+    expect(getCachedBody('u-1', 'work', '42')).toBe('do trabalho');
+    expect(getCachedBody('u-1', 'personal', '42')).toBe('pessoal');
   });
 
   it('sobrescreve o corpo quando o mesmo e-mail é guardado de novo', async () => {
     const { putCachedBody, getCachedBody } = await import('@/lib/emailCache');
-    putCachedBody('work', '42', 'antigo');
-    putCachedBody('work', '42', 'novo');
-    expect(getCachedBody('work', '42')).toBe('novo');
+    putCachedBody('u-1', 'work', '42', 'antigo');
+    putCachedBody('u-1', 'work', '42', 'novo');
+    expect(getCachedBody('u-1', 'work', '42')).toBe('novo');
   });
 
   it('só busca no IMAP o que ainda não está em cache', async () => {
     const { putCachedBody, warmBodyCache } = await import('@/lib/emailCache');
-    putCachedBody('work', '1', 'já tenho');
+    putCachedBody('u-1', 'work', '1', 'já tenho');
     vi.mocked(fetchBody).mockResolvedValue('baixado');
 
-    const fetched = await warmBodyCache([
+    const fetched = await warmBodyCache('u-1', [
       envelope({ id: '1' }),
       envelope({ id: '2' }),
     ]);
@@ -82,19 +82,19 @@ describe('cache de corpos de e-mail', () => {
       return 'ok';
     });
 
-    const fetched = await warmBodyCache([envelope({ id: '1' }), envelope({ id: '2' })]);
+    const fetched = await warmBodyCache('u-1', [envelope({ id: '1' }), envelope({ id: '2' })]);
 
     expect(fetched).toBe(1);
-    expect(getCachedBody('work', '1')).toBeNull();
-    expect(getCachedBody('work', '2')).toBe('ok');
+    expect(getCachedBody('u-1', 'work', '1')).toBeNull();
+    expect(getCachedBody('u-1', 'work', '2')).toBe('ok');
   });
 
   it('descarta corpos com mais de 30 dias e preserva os recentes', async () => {
     const { putCachedBody, pruneOldBodies, getCachedBody } = await import('@/lib/emailCache');
     const { getDb } = await import('@/lib/db');
 
-    putCachedBody('work', 'antigo', 'velho');
-    putCachedBody('work', 'novo', 'recente');
+    putCachedBody('u-1', 'work', 'antigo', 'velho');
+    putCachedBody('u-1', 'work', 'novo', 'recente');
     getDb()
       .prepare('UPDATE email_bodies SET cached_at = ? WHERE message_id = ?')
       .run('2026-01-01T00:00:00.000Z', 'antigo');
@@ -102,7 +102,7 @@ describe('cache de corpos de e-mail', () => {
     const removed = pruneOldBodies(new Date('2026-08-25T12:00:00Z'));
 
     expect(removed).toBe(1);
-    expect(getCachedBody('work', 'antigo')).toBeNull();
-    expect(getCachedBody('work', 'novo')).toBe('recente');
+    expect(getCachedBody('u-1', 'work', 'antigo')).toBeNull();
+    expect(getCachedBody('u-1', 'work', 'novo')).toBe('recente');
   });
 });

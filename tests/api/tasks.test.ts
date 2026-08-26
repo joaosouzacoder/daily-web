@@ -1,5 +1,13 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
+// As rotas resolvem o usuário pelo cookie; aqui basta um usuário fixo para o
+// teste focar no que ele mede.
+vi.mock('@/lib/auth/currentUser', () => ({
+  getCurrentUser: vi.fn(async () => ({
+    id: 'u-1', username: 'joao', passwordHash: 'x', isAdmin: true, createdAt: '2026-01-01',
+  })),
+}));
+
 vi.mock('@/lib/cli/mstodo', () => ({
   addTask: vi.fn(async () => 'NEW-ID'),
   editTask: vi.fn(),
@@ -37,8 +45,8 @@ describe('POST /api/tasks', () => {
     const res = await createRoute(req({ title: 'Nova tarefa', due: 'hoje', priority: 'high' }));
     const data = await res.json();
     expect(data.id).toBe('NEW-ID');
-    expect(addTask).toHaveBeenCalledWith('Nova tarefa');
-    expect(editTask).toHaveBeenCalledWith('NEW-ID', expect.objectContaining({ priority: 'high' }));
+    expect(addTask).toHaveBeenCalledWith('u-1', 'Nova tarefa');
+    expect(editTask).toHaveBeenCalledWith('u-1', 'NEW-ID', expect.objectContaining({ priority: 'high' }));
   });
 
   it('data inválida devolve 400 e não cria a tarefa (sem orfão)', async () => {
@@ -69,17 +77,17 @@ describe('POST /api/tasks', () => {
 describe('PATCH /api/tasks/[id]', () => {
   it('completed=true chama completeTask', async () => {
     await patchRoute(req({ completed: true }), params({ id: 'T1' }));
-    expect(completeTask).toHaveBeenCalledWith('T1');
+    expect(completeTask).toHaveBeenCalledWith('u-1', 'T1');
   });
 
   it('completed=false chama reopenTask', async () => {
     await patchRoute(req({ completed: false }), params({ id: 'T1' }));
-    expect(reopenTask).toHaveBeenCalledWith('T1');
+    expect(reopenTask).toHaveBeenCalledWith('u-1', 'T1');
   });
 
   it('edição de campos chama editTask com a data já parseada', async () => {
     await patchRoute(req({ due: 'amanhã' }), params({ id: 'T1' }));
-    expect(editTask).toHaveBeenCalledWith('T1', expect.objectContaining({ due: expect.any(String) }));
+    expect(editTask).toHaveBeenCalledWith('u-1', 'T1', expect.objectContaining({ due: expect.any(String) }));
   });
 
   it('id iniciado com "-" devolve 400 sem chamar completeTask/editTask', async () => {
@@ -111,7 +119,7 @@ describe('PATCH /api/tasks/[id]', () => {
 describe('DELETE /api/tasks/[id]', () => {
   it('chama deleteTask', async () => {
     await deleteRoute(req({}), params({ id: 'T1' }));
-    expect(deleteTask).toHaveBeenCalledWith('T1');
+    expect(deleteTask).toHaveBeenCalledWith('u-1', 'T1');
   });
 
   it('id iniciado com "-" devolve 400 sem chamar deleteTask', async () => {
@@ -146,7 +154,7 @@ describe('POST /api/tasks/[id]/subtasks', () => {
 describe('PATCH /api/tasks/[id]/subtasks/[itemId]', () => {
   it('completed marca a subtarefa', async () => {
     await patchSubtaskRoute(req({ completed: true }), params({ id: 'T1', itemId: 'S1' }));
-    expect(checkSubtask).toHaveBeenCalledWith('T1', 'S1', true);
+    expect(checkSubtask).toHaveBeenCalledWith('u-1', 'T1', 'S1', true);
   });
 
   it('itemId iniciado com "-" devolve 400 sem chamar checkSubtask', async () => {

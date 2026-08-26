@@ -8,7 +8,7 @@ export async function register() {
   bootstrapFirstUser();
 
   const { startRefreshLoop } = await import('@/lib/refresher');
-  const { getPomodoroState, onPhaseChange } = await import('@/lib/pomodoro');
+  const { getPomodoroState, onPhaseChange, activePomodoroUsers } = await import('@/lib/pomodoro');
 
   startRefreshLoop(Number(process.env.REFRESH_SECONDS ?? '300'));
 
@@ -18,7 +18,7 @@ export async function register() {
   // exists solely to drive prompt phase detection for the ntfy fallback, so it
   // still fires even when no client has the dashboard open to poll /api/state.
   setInterval(() => {
-    void getPomodoroState();
+    for (const userId of activePomodoroUsers()) getPomodoroState(userId);
   }, 10_000);
 
   onPhaseChange((phase) => {

@@ -2,11 +2,15 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { runCli, stripAnsi } from './run';
+import { providerEnv } from '@/lib/vault/env';
 import { parsePulls, parseGhpendingConfig, serializeGhpendingConfig } from '@/lib/parsers/pulls';
 import type { PullsDigest } from '@/lib/types';
 
-export async function fetchPulls(): Promise<PullsDigest> {
-  const { stdout } = await runCli('ghpending', []);
+export async function fetchPulls(userId: string): Promise<PullsDigest> {
+  // O token vem do cofre; a lista de repositórios ainda é do arquivo da
+  // máquina — ela passa a ser por usuário no estágio 3, junto com os demais
+  // arquivos de config gerados por usuário.
+  const { stdout } = await runCli('ghpending', [], { env: providerEnv(userId, 'github') });
   return { lines: parsePulls(stripAnsi(stdout)) };
 }
 

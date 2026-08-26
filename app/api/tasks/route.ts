@@ -2,8 +2,11 @@ import { NextResponse } from 'next/server';
 import { addTask, editTask } from '@/lib/cli/mstodo';
 import { parseDueInput } from '@/lib/dateParsing';
 import { isValidTaskPriority, isValidRecur, isSafePositionalValue } from '@/lib/api/validation';
+import { getCurrentUser } from '@/lib/auth/currentUser';
 
 export async function POST(request: Request) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: 'não autenticado' }, { status: 401 });
   const body = await request.json();
   const title: string = body.title ?? '';
   if (!title.trim()) {
@@ -33,10 +36,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    const id = await addTask(title.trim());
+    const id = await addTask(user.id, title.trim());
 
     if (due !== undefined || body.priority !== undefined || body.recur !== undefined) {
-      await editTask(id, { due, time, priority: body.priority, recur: body.recur });
+      await editTask(user.id, id, { due, time, priority: body.priority, recur: body.recur });
     }
     return NextResponse.json({ id });
   } catch (err) {

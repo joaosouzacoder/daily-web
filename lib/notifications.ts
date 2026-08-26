@@ -2,29 +2,29 @@ import { getDb } from './db';
 import { fetchMentions } from './cli/jira';
 import type { NotificationItem } from '@/lib/types';
 
-export function isRead(source: string, externalId: string): boolean {
+export function isRead(userId: string, source: string, externalId: string): boolean {
   const row = getDb()
-    .prepare('SELECT 1 FROM notifications_read WHERE source = ? AND external_id = ?')
-    .get(source, externalId);
+    .prepare('SELECT 1 FROM notifications_read WHERE user_id = ? AND source = ? AND external_id = ?')
+    .get(userId, source, externalId);
   return row !== undefined;
 }
 
-export function markRead(source: string, externalId: string): void {
+export function markRead(userId: string, source: string, externalId: string): void {
   getDb()
     .prepare(
-      'INSERT INTO notifications_read (source, external_id, read_at) VALUES (?, ?, ?) ' +
-        'ON CONFLICT (source, external_id) DO NOTHING',
+      'INSERT INTO notifications_read (user_id, source, external_id, read_at) VALUES (?, ?, ?, ?) ' +
+        'ON CONFLICT (user_id, source, external_id) DO NOTHING',
     )
-    .run(source, externalId, new Date().toISOString());
+    .run(userId, source, externalId, new Date().toISOString());
 }
 
-export async function getNotifications(): Promise<NotificationItem[]> {
-  const mentions = await fetchMentions();
+export async function getNotifications(userId: string): Promise<NotificationItem[]> {
+  const mentions = await fetchMentions(userId);
   return mentions.map((issue) => ({
     id: issue.key,
     source: 'jira_mention' as const,
     title: `${issue.key} — ${issue.summary}`,
     url: issue.url,
-    read: isRead('jira_mention', issue.key),
+    read: isRead(userId, 'jira_mention', issue.key),
   }));
 }
