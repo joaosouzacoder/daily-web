@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyPassword } from '@/lib/auth/password';
-import { createSessionToken } from '@/lib/auth/session';
+import { createSessionToken, SESSION_COOKIE } from '@/lib/auth/session';
 import { findUserByUsername } from '@/lib/auth/users';
 import { isRateLimited, registerFailedAttempt, clearAttempts, extractClientIp } from '@/lib/auth/rateLimit';
 
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
   clearAttempts(ip);
   const token = await createSessionToken(user.id, user.username, secret);
   const response = NextResponse.json({ ok: true });
-  response.cookies.set('daily_web_session', token, {
+  response.cookies.set(SESSION_COOKIE, token, {
     httpOnly: true,
     secure: true,
     sameSite: 'strict',

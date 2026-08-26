@@ -73,6 +73,45 @@ describe('cadastro de usuários', () => {
   });
 });
 
+describe('busca por id', () => {
+  it('encontra pelo id', async () => {
+    const { createUser, findUserById } = await import('@/lib/auth/users');
+    const created = await createUser('maria', 'x1234567');
+    expect(findUserById(created.id)?.username).toBe('maria');
+  });
+
+  it('devolve null para id inexistente', async () => {
+    const { findUserById } = await import('@/lib/auth/users');
+    expect(findUserById('nao-existe')).toBeNull();
+  });
+});
+
+// Sem esta regra dá para ficar com um banco só de não-admins: ninguém
+// consegue mais cadastrar nem promover ninguém, e o sistema fica travado.
+describe('proteção do último admin', () => {
+  it('recusa remover o único admin', async () => {
+    const { createUser, removeUser } = await import('@/lib/auth/users');
+    await createUser('joao', 'x1234567', true);
+    await createUser('maria', 'y1234567');
+    expect(() => removeUser('joao')).toThrow(/último admin/i);
+  });
+
+  it('permite remover um admin quando existe outro', async () => {
+    const { createUser, removeUser, listUsers } = await import('@/lib/auth/users');
+    await createUser('joao', 'x1234567', true);
+    await createUser('ana', 'y1234567', true);
+    expect(removeUser('joao')).toBe(true);
+    expect(listUsers().map((u) => u.username)).toEqual(['ana']);
+  });
+
+  it('permite remover um não-admin sem restrição', async () => {
+    const { createUser, removeUser } = await import('@/lib/auth/users');
+    await createUser('joao', 'x1234567', true);
+    await createUser('maria', 'y1234567');
+    expect(removeUser('maria')).toBe(true);
+  });
+});
+
 describe('bootstrap do primeiro admin', () => {
   it('semeia o operador a partir do env quando a tabela está vazia', async () => {
     process.env.DASHBOARD_USER = 'joao';

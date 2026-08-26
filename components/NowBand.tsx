@@ -1,6 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { Settings } from 'iconoir-react';
 import type { PomodoroState } from '@/lib/types';
 import { Clock } from './Clock';
 import { Pomodoro } from './Pomodoro';
@@ -36,6 +38,9 @@ export function NowBand({ pomodoro, loading, onRefresh, onChanged, bell, updated
           {loading ? 'Atualizando' : 'Atualizar'}
         </button>
         {bell}
+        <Link className="icon-btn" href="/config" aria-label="configuração">
+          <Settings width={16} height={16} />
+        </Link>
       </div>
     </header>
   );

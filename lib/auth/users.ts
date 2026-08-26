@@ -38,6 +38,11 @@ export function findUserByUsername(username: string): User | null {
   return row ? toUser(row) : null;
 }
 
+export function findUserById(id: string): User | null {
+  const row = getDb().prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRow | undefined;
+  return row ? toUser(row) : null;
+}
+
 export function listUsers(): User[] {
   const rows = getDb()
     .prepare('SELECT * FROM users ORDER BY created_at')
@@ -75,7 +80,14 @@ export async function createUser(
   });
 }
 
+// Sem esta guarda dá para esvaziar os admins: ninguém mais consegue cadastrar
+// ou promover alguém, e o sistema fica travado sem caminho de volta pela tela.
 export function removeUser(username: string): boolean {
+  const target = findUserByUsername(username);
+  if (!target) return false;
+  if (target.isAdmin && listUsers().filter((u) => u.isAdmin).length === 1) {
+    throw new Error('não é possível remover o último admin');
+  }
   return getDb().prepare('DELETE FROM users WHERE username = ?').run(username).changes > 0;
 }
 

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifySessionToken } from '@/lib/auth/session';
+import { verifySessionToken, SESSION_MAX_AGE_MS, SESSION_COOKIE } from '@/lib/auth/session';
 
-const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const PUBLIC_PATHS = ['/login', '/api/login'];
 
 export async function middleware(request: NextRequest) {
@@ -10,7 +9,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const token = request.cookies.get('daily_web_session')?.value;
+  const token = request.cookies.get(SESSION_COOKIE)?.value;
   const secret = process.env.SESSION_SECRET;
   // Fail closed: sem SESSION_SECRET configurado, nenhum token pode ser
   // considerado válido — verificar contra um segredo vazio aceitaria
