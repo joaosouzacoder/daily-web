@@ -37,6 +37,8 @@ function payload(over: Record<string, unknown> = {}) {
   return {
     vaultReady: true,
     mstodoAvailable: false,
+    googleConfigured: false,
+    googleRedirectUri: 'https://exemplo.com/api/integrations/agenda/google/callback',
     modules: EMPTY_MODULES,
     ...over,
   };
@@ -215,6 +217,38 @@ describe('IntegrationsPanel', () => {
       'placeholder',
       expect.stringContaining('guardado'),
     );
+  });
+
+  it('oferece o botão do Google quando o servidor tem client OAuth', async () => {
+    mockFetch(() => payload({ googleConfigured: true }));
+    render(<IntegrationsPanel />);
+    await waitFor(() => expect(screen.getByText('Agenda')).toBeInTheDocument());
+
+    const link = screen.getByRole('link', { name: 'Conectar com Google' });
+    expect(link).toHaveAttribute('href', '/api/integrations/agenda/google/start');
+  });
+
+  // Oferecer um caminho que não existe é pior do que não oferecer; e quem
+  // administra precisa saber exatamente qual URI registrar.
+  it('sem client OAuth, esconde o botão e diz o que falta', async () => {
+    render(<IntegrationsPanel />);
+    await waitFor(() => expect(screen.getByText('Agenda')).toBeInTheDocument());
+
+    expect(screen.queryByRole('link', { name: 'Conectar com Google' })).toBeNull();
+    expect(screen.getByText('GOOGLE_CLIENT_ID')).toBeInTheDocument();
+    expect(
+      screen.getByText('https://exemplo.com/api/integrations/agenda/google/callback'),
+    ).toBeInTheDocument();
+  });
+
+  it('mostra o resultado que volta do retorno do Google', async () => {
+    window.history.replaceState({}, '', '/config?conectado=Google+Agenda+conectado');
+    render(<IntegrationsPanel />);
+    await waitFor(() =>
+      expect(screen.getByRole('status').textContent).toContain('Google Agenda conectado'),
+    );
+    // A mensagem sai da URL para não reaparecer a cada recarga.
+    expect(window.location.search).toBe('');
   });
 
   it('não oferece o Microsoft To Do quando a CLI não está instalada', async () => {

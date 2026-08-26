@@ -14,16 +14,25 @@ Next.js 16 · React 19 · SQLite · sem framework de UI, CSS na mão.
 | Módulo | Como autentica | Custo |
 |---|---|---|
 | E-mail | IMAP/SMTP com senha de app | grátis |
-| Agenda | URL secreta em formato iCal (.ics) | grátis |
+| Agenda | OAuth do Google, ou URL iCal (.ics) | grátis |
 | Jira | API token do Atlassian | grátis |
 | Pull requests | Personal access token do GitHub | grátis |
 | Tarefas | guardadas neste servidor (padrão) | — |
 
-Nenhum deles exige cadastrar um aplicativo OAuth. Isso é deliberado: os escopos
-de Gmail e Google Agenda são *restricted*, e publicar um app que os use exige
-verificação com auditoria paga e recertificação anual. Senha de app e link iCal
-entregam o mesmo resultado, funcionam com qualquer provedor e cada pessoa
-consegue gerar os seus em um minuto.
+O e-mail não exige aplicativo OAuth nenhum: senha de app sobre IMAP funciona em
+qualquer provedor e cada pessoa gera a sua em um minuto.
+
+A agenda tem dois caminhos. O link iCal não exige nada de quem hospeda, mas é
+frágil: é fácil copiar o link errado (o Google mostra três na mesma tela) e
+administradores de contas corporativas costumam bloquear o compartilhamento
+externo, o que derruba o link de vez. Por isso existe a conexão pelo Google, que
+é a recomendada para contas Google.
+
+Criar o client OAuth é **gratuito** — a verificação paga do Google só é exigida
+para publicar um app que acessa contas de terceiros em escala, e um app não
+verificado atende até 100 contas. Quem hospeda cria o client uma vez (passo a
+passo em `.env.example`, em `GOOGLE_CLIENT_ID`); quem usa só clica em
+"Conectar com Google".
 
 **Tarefas** ficam no banco da própria app, então o painel funciona no primeiro
 login sem configurar nada. Quem tem a CLI [mstodo] instalada pode apontar para
@@ -71,11 +80,14 @@ na hora se funcionou.
 - iCloud: em account.apple.com, seção Segurança
 - Qualquer outro provedor IMAP: escolha "Outro" e preencha host e porta
 
-**Agenda** — o endereço secreto em formato iCal:
+**Agenda** — em conta Google, clique em "Conectar com Google" e escolha quais
+agendas mostrar. Para os demais provedores, use o endereço iCal:
 
-- Google Agenda: Configurações → escolha a agenda → "Endereço secreto no
-  formato iCal"
+- Google Agenda: Configurações → clique na agenda à esquerda → "Integrar
+  agenda" → "Endereço secreto no formato iCal" (termina em `.ics` — não é o
+  endereço da barra do navegador)
 - Outlook: Configurações → Agenda → Agendas compartilhadas → Publicar
+- Apple, Fastmail, Nextcloud: qualquer URL `.ics` serve
 
 É somente leitura: o painel mostra os compromissos, não cria nem edita.
 

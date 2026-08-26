@@ -1,5 +1,6 @@
 import ical, { type CalendarComponent, type VEvent } from 'node-ical';
 import { computeAgendaWindow } from '@/lib/agendaWindow';
+import { diagnoseIcsResponse, diagnoseIcsUrl } from './icsDiagnostics';
 import type { Connection } from '@/lib/vault/connections';
 import type { AgendaItem } from '@/lib/types';
 
@@ -94,20 +95,11 @@ export function expandEvents(
 
 export function icsUrl(conn: Connection): string {
   const raw = (conn.values.icsUrl ?? '').trim();
-  if (!raw) throw new Error(`agenda ${conn.label}: URL do iCal não configurada`);
+  const problem = diagnoseIcsUrl(raw);
+  if (problem) throw new Error(`${conn.label}: ${problem}`);
   // O Google entrega o mesmo arquivo por https; webcal:// é só um apelido que
   // o fetch do Node não conhece.
-  const normalized = raw.replace(/^webcal:\/\//i, 'https://');
-  let parsed: URL;
-  try {
-    parsed = new URL(normalized);
-  } catch {
-    throw new Error(`agenda ${conn.label}: URL do iCal inválida`);
-  }
-  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-    throw new Error(`agenda ${conn.label}: a URL do iCal precisa ser http ou https`);
-  }
-  return parsed.toString();
+  return new URL(raw.replace(/^webcal:\/\//i, 'https://')).toString();
 }
 
 export async function fetchIcs(url: string): Promise<string> {
@@ -117,9 +109,13 @@ export async function fetchIcs(url: string): Promise<string> {
     redirect: 'follow',
   });
   if (!response.ok) {
-    if (response.status === 404) throw new Error('o link do iCal não existe mais (404)');
+    if (response.status === 404) {
+      throw new Error(
+        'o endereço não existe (404). Se o calendário é de uma conta corporativa, o administrador pode ter bloqueado o compartilhamento externo — nesse caso use a conexão pelo Google',
+      );
+    }
     if (response.status === 401 || response.status === 403) {
-      throw new Error('o link do iCal foi recusado — gere um endereço secreto novo');
+      throw new Error('o endereço foi recusado — gere um "Endereço secreto no formato iCal" novo');
     }
     throw new Error(`o servidor respondeu ${response.status}`);
   }
@@ -127,7 +123,7 @@ export async function fetchIcs(url: string): Promise<string> {
   const text = await response.text();
   if (text.length > MAX_ICS_BYTES) throw new Error('o arquivo do iCal é grande demais');
   if (!text.includes('BEGIN:VCALENDAR')) {
-    throw new Error('a URL não devolveu um calendário iCal');
+    throw new Error(diagnoseIcsResponse(response.headers.get('content-type'), text));
   }
   return text;
 }

@@ -1,6 +1,6 @@
 import type { DashboardState, MailboxRef, PanelResult } from '@/lib/types';
 import * as imap from './integrations/imap';
-import * as ics from './integrations/ics';
+import * as agendaSource from './integrations/agenda';
 import * as jiraApi from './integrations/jiraApi';
 import * as githubApi from './integrations/githubApi';
 import { fetchTasks } from './tasks';
@@ -62,7 +62,7 @@ export async function refreshAll(userId: string): Promise<DashboardState> {
 
   const [email, agenda, pulls, jira, tasks, notifications] = await Promise.all([
     has('email') ? mergeConnections(mailConnections, (c) => imap.listEnvelopes(c, EMAIL_LIMIT)) : OFF,
-    has('agenda') ? mergeConnections(calendars, (c) => ics.fetchAgenda(c)) : OFF,
+    has('agenda') ? mergeConnections(calendars, (c) => agendaSource.fetchAgenda(c)) : OFF,
     pullsConnection ? panel(() => githubApi.fetchPulls(pullsConnection)) : OFF,
     jiraConnection ? panel(() => jiraApi.fetchIssues(jiraConnection, JIRA_FILTER)) : OFF,
     has('tasks') ? panel(() => fetchTasks(userId)) : OFF,

@@ -35,7 +35,15 @@ interface ModuleState {
 interface Payload {
   vaultReady: boolean;
   mstodoAvailable: boolean;
+  googleConfigured: boolean;
+  googleRedirectUri: string;
   modules: ModuleState[];
+}
+
+interface CalendarRef {
+  id: string;
+  label: string;
+  primary: boolean;
 }
 
 type Editing = { module: ModuleId; id: string | null };
@@ -122,6 +130,9 @@ export function IntegrationsPanel() {
   const [testing, setTesting] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<Record<string, { ok: boolean; message: string }>>({});
   const [openHelp, setOpenHelp] = useState<ModuleId | null>(null);
+  const [flash, setFlash] = useState<{ ok: boolean; message: string } | null>(null);
+  const [calendars, setCalendars] = useState<Record<string, CalendarRef[]>>({});
+  const [chosenCalendars, setChosenCalendars] = useState<Record<string, string[]>>({});
 
   const load = async () => {
     try {
@@ -135,7 +146,51 @@ export function IntegrationsPanel() {
 
   useEffect(() => {
     void load();
+    // O retorno do Google volta para /config com o resultado na query; ler e
+    // limpar evita que a mensagem reapareça a cada recarga.
+    const params = new URLSearchParams(window.location.search);
+    const conectado = params.get('conectado');
+    const erro = params.get('erro');
+    if (conectado || erro) {
+      setFlash({ ok: Boolean(conectado), message: conectado ?? erro ?? '' });
+      window.history.replaceState({}, '', window.location.pathname);
+    }
   }, []);
+
+  // Depois de conectar pelo Google, a pessoa escolhe quais agendas entram.
+  const loadCalendars = async (connId: string) => {
+    try {
+      const res = await fetch(`/api/integrations/agenda/google/calendars?id=${connId}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Falha ao listar as agendas');
+      setCalendars((prev) => ({ ...prev, [connId]: data.calendars }));
+      setChosenCalendars((prev) => ({
+        ...prev,
+        [connId]: data.selected.length > 0
+          ? data.selected
+          : data.calendars.filter((c: CalendarRef) => c.primary).map((c: CalendarRef) => c.id),
+      }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const saveCalendars = async (connId: string) => {
+    try {
+      const data = await send('/api/integrations/agenda/google/calendars', 'PATCH', {
+        id: connId,
+        calendarIds: chosenCalendars[connId] ?? [],
+      });
+      setPayload((prev) => (prev ? { ...prev, modules: data.modules } : prev));
+      setCalendars((prev) => {
+        const next = { ...prev };
+        delete next[connId];
+        return next;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
 
   const startNew = (moduleId: ModuleId) => {
     setEditing({ module: moduleId, id: null });
@@ -162,7 +217,14 @@ export function IntegrationsPanel() {
     setSaving(true);
     setError(null);
     try {
-      const body = { label, values };
+      // Só o que o formulário mostra vai no corpo. Campos ocultos (o token do
+      // OAuth, a origem da agenda) são do servidor — ele os descarta de
+      // qualquer forma, e mandá-los sugeriria que o cliente os controla.
+      const allowed = new Set(visibleFields(editing.module, values).map((f) => f.name));
+      const body = {
+        label,
+        values: Object.fromEntries(Object.entries(values).filter(([name]) => allowed.has(name))),
+      };
       const url = editing.id
         ? `/api/integrations/${editing.module}/connections/${editing.id}`
         : `/api/integrations/${editing.module}/connections`;
@@ -248,6 +310,12 @@ export function IntegrationsPanel() {
           {error}
         </p>
       )}
+      {flash && (
+        <p role="status" className={`conn-result${flash.ok ? ' is-ok' : ' is-bad'}`}>
+          {flash.ok ? <CheckCircle width={14} height={14} /> : <WarningCircle width={14} height={14} />}
+          {flash.message}
+        </p>
+      )}
 
       <p className="conn-intro">
         Cada módulo é independente e opcional. Conecte só o que você usa — o painel mostra apenas os
@@ -284,6 +352,27 @@ export function IntegrationsPanel() {
               </ul>
             )}
 
+            {/* O Google é o caminho confiável para contas Google: o link iCal
+                quebra quando o administrador bloqueia compartilhamento
+                externo, e é fácil colar o link errado. */}
+            {mod.module === 'agenda' && payload.googleConfigured && !isEditing && (
+              <a className="btn btn-primary conn-google" href="/api/integrations/agenda/google/start">
+                Conectar com Google
+              </a>
+            )}
+
+            {/* Sem client no servidor, quem administra a instância precisa
+                saber o que falta — e principalmente qual URI registrar, que é
+                onde o setup costuma falhar. */}
+            {mod.module === 'agenda' && !payload.googleConfigured && (
+              <p className="conn-note">
+                Para conectar contas Google, quem administra este servidor precisa definir{' '}
+                <code>GOOGLE_CLIENT_ID</code> e <code>GOOGLE_CLIENT_SECRET</code>. Criar o client é
+                gratuito; registre esta URI de redirecionamento:{' '}
+                <code className="conn-uri">{payload.googleRedirectUri}</code>
+              </p>
+            )}
+
             {mod.connections.length > 0 && (
               <ul className="conn-list">
                 {mod.connections.map((conn) => {
@@ -311,9 +400,20 @@ export function IntegrationsPanel() {
                         >
                           {testing === conn.id ? 'Testando…' : 'Testar'}
                         </button>
-                        <button type="button" className="btn" onClick={() => startEdit(conn)}>
-                          Editar
-                        </button>
+                        {conn.visible.provider !== 'google' && (
+                          <button type="button" className="btn" onClick={() => startEdit(conn)}>
+                            Editar
+                          </button>
+                        )}
+                        {conn.visible.provider === 'google' && (
+                          <button
+                            type="button"
+                            className="btn"
+                            onClick={() => void loadCalendars(conn.id)}
+                          >
+                            Escolher agendas
+                          </button>
+                        )}
                         <button
                           type="button"
                           className="btn btn-danger"
@@ -322,6 +422,39 @@ export function IntegrationsPanel() {
                           Remover
                         </button>
                       </div>
+
+                      {calendars[conn.id] && (
+                        <fieldset className="conn-calendars">
+                          <legend>Quais agendas mostrar</legend>
+                          {calendars[conn.id].map((cal) => (
+                            <label key={cal.id} className="conn-calendar">
+                              <input
+                                type="checkbox"
+                                checked={(chosenCalendars[conn.id] ?? []).includes(cal.id)}
+                                onChange={(e) =>
+                                  setChosenCalendars((prev) => {
+                                    const current = prev[conn.id] ?? [];
+                                    return {
+                                      ...prev,
+                                      [conn.id]: e.target.checked
+                                        ? [...current, cal.id]
+                                        : current.filter((id) => id !== cal.id),
+                                    };
+                                  })
+                                }
+                              />
+                              <span>{cal.label}</span>
+                            </label>
+                          ))}
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={() => void saveCalendars(conn.id)}
+                          >
+                            Salvar seleção
+                          </button>
+                        </fieldset>
+                      )}
                       {result && (
                         <p className={`conn-result${result.ok ? ' is-ok' : ' is-bad'}`} role="status">
                           {result.ok ? (

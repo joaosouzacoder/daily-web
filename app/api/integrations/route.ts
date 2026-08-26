@@ -4,6 +4,7 @@ import { moduleStates } from '@/lib/vault/connections';
 import { isVaultConfigured } from '@/lib/vault/crypto';
 import { MODULES } from '@/lib/modules';
 import { isAvailable as mstodoAvailable } from '@/lib/cli/mstodo';
+import { isGoogleConfigured, redirectUri } from '@/lib/integrations/google/oauth';
 
 export async function GET() {
   const auth = await requireUser();
@@ -16,6 +17,12 @@ export async function GET() {
     // A CLI do Microsoft To Do só existe onde alguém a instalou: oferecer o
     // provedor sem ela seria empurrar a pessoa para um erro.
     mstodoAvailable: await mstodoAvailable(),
+    // Sem client OAuth no servidor, o botão do Google não aparece — oferecer
+    // um caminho que não existe é pior do que não oferecer.
+    googleConfigured: isGoogleConfigured(),
+    // A URI de retorno precisa bater exatamente com a registrada no Google.
+    // Mostrar a de verdade evita o erro mais comum de montar o client.
+    googleRedirectUri: redirectUri(),
     catalog: MODULES,
     modules: moduleStates(auth.value.id),
   });

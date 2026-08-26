@@ -22,6 +22,13 @@ export interface FieldSpec {
   defaultValue?: string;
   /** Só aparece quando outro campo tem um destes valores. */
   showWhen?: { field: string; equals: string[] };
+  /**
+   * Campo que a conexão guarda mas o formulário nunca mostra — um refresh
+   * token vindo do OAuth, por exemplo. Sem declará-lo, uma edição pela tela
+   * gravaria a conexão sem ele e derrubaria o acesso; declarado e oculto, ele
+   * é preservado e o cliente não consegue escrevê-lo.
+   */
+  hidden?: boolean;
 }
 
 export interface ModuleSpec {
@@ -151,13 +158,17 @@ export const MODULES: Record<ModuleId, ModuleSpec> = {
     summary: 'Compromissos de hoje e amanhã.',
     multi: true,
     instructions: [
-      'Usa o endereço secreto em formato iCal da agenda — sem OAuth e sem custo.',
-      'Google Agenda: Configurações → escolha a agenda → "Endereço secreto no formato iCal".',
+      'Para contas Google, conecte pelo botão do Google: funciona com conta pessoal e corporativa, e não quebra quando o link muda.',
+      'O link iCal serve para os demais provedores — Outlook, Apple, Fastmail, Nextcloud.',
+      'Google Agenda: Configurações → clique na agenda à esquerda → "Integrar agenda" → "Endereço secreto no formato iCal" (termina em .ics).',
       'Outlook: Configurações → Agenda → Agendas compartilhadas → Publicar, e copie o link ICS.',
-      'Vale qualquer URL .ics pública ou secreta, inclusive Apple e Fastmail.',
+      'Em conta corporativa o administrador costuma bloquear o link iCal; nesse caso só a conexão pelo Google funciona.',
       'É somente leitura: o painel mostra os compromissos, não cria nem edita.',
     ],
     fields: [
+      { name: 'provider', label: 'Origem', type: 'text', hidden: true, defaultValue: 'ics' },
+      { name: 'refreshToken', label: 'Token do Google', type: 'password', secret: true, hidden: true },
+      { name: 'calendarIds', label: 'Agendas escolhidas', type: 'text', hidden: true },
       {
         name: 'icsUrl',
         label: 'URL do iCal (.ics)',
@@ -165,7 +176,9 @@ export const MODULES: Record<ModuleId, ModuleSpec> = {
         secret: true,
         required: true,
         placeholder: 'https://calendar.google.com/calendar/ical/.../basic.ics',
-        help: 'Quem tem esse link enxerga a agenda. Ele é guardado cifrado.',
+        help: 'Copie o "Endereço secreto no formato iCal" — não o endereço da barra do navegador.',
+        // Numa conexão do Google não existe link iCal para preencher.
+        showWhen: { field: 'provider', equals: ['ics'] },
       },
     ],
   },
@@ -264,6 +277,7 @@ export function visibleFields(
   values: Record<string, string>,
 ): FieldSpec[] {
   return MODULES[moduleId].fields.filter((field) => {
+    if (field.hidden) return false;
     if (!field.showWhen) return true;
     const current = values[field.showWhen.field] ?? defaultsFor(moduleId)[field.showWhen.field] ?? '';
     return field.showWhen.equals.includes(current);

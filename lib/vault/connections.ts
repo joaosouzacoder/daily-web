@@ -90,7 +90,10 @@ export function saveConnection(
     // de rótulo seria só atrito.
     if (existing) {
       for (const field of MODULES[moduleId].fields) {
-        if (field.secret && !(merged[field.name] ?? '').trim() && existing.values[field.name]) {
+        // Campo oculto nunca esteve no formulário, então o formulário não pode
+        // significar "apague". O mesmo vale para segredo deixado em branco.
+        const keepable = field.hidden || field.secret;
+        if (keepable && !(merged[field.name] ?? '').trim() && existing.values[field.name]) {
           merged[field.name] = existing.values[field.name];
         }
       }
@@ -175,6 +178,8 @@ function summarize(row: Row): ConnectionSummary {
       if (field.secret) {
         if (values[field.name]) secretsSet.push(field.name);
       } else if (values[field.name]) {
+        // Campo oculto não-secreto (a origem da agenda, por exemplo) volta
+        // para a tela: é o que diz se a conexão é do Google ou de um link.
         visible[field.name] = values[field.name];
       }
     }

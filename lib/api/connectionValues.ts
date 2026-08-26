@@ -8,6 +8,9 @@ export function pickDeclaredValues(
 ): Record<string, string> {
   const values: Record<string, string> = {};
   for (const field of MODULES[moduleId].fields) {
+    // Campo oculto é escrito pelo servidor (o refresh token do OAuth, por
+    // exemplo); aceitar do cliente seria deixá-lo forjar a conexão.
+    if (field.hidden) continue;
     const value = incoming[field.name];
     if (typeof value === 'string' && value !== '') values[field.name] = value;
   }

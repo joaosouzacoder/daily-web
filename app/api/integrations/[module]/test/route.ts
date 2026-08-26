@@ -3,7 +3,7 @@ import { requireConnection } from '@/lib/api/context';
 import { isModuleId, type ModuleId } from '@/lib/modules';
 import type { Connection } from '@/lib/vault/connections';
 import * as imap from '@/lib/integrations/imap';
-import * as ics from '@/lib/integrations/ics';
+import * as agenda from '@/lib/integrations/agenda';
 import * as jiraApi from '@/lib/integrations/jiraApi';
 import * as githubApi from '@/lib/integrations/githubApi';
 
@@ -11,7 +11,7 @@ import * as githubApi from '@/lib/integrations/githubApi';
 // responde na primeira leitura do painel.
 const TESTERS: Partial<Record<ModuleId, (conn: Connection) => Promise<void>>> = {
   email: imap.testConnection,
-  agenda: ics.testConnection,
+  agenda: agenda.testConnection,
   jira: jiraApi.testConnection,
   pulls: githubApi.testConnection,
 };

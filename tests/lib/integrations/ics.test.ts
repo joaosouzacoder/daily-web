@@ -123,12 +123,21 @@ describe('icsUrl', () => {
   });
 
   it('recusa URL inválida', () => {
-    expect(() => icsUrl({ ...conn, values: { icsUrl: 'não é url' } })).toThrow(/inválida/);
+    expect(() => icsUrl({ ...conn, values: { icsUrl: 'não é url' } })).toThrow(
+      /não parece uma URL/,
+    );
   });
 
   it('recusa esquema que não seja http nem https', () => {
     expect(() => icsUrl({ ...conn, values: { icsUrl: 'file:///etc/passwd' } })).toThrow(
-      /http ou https/,
+      /https:\/\//,
     );
+  });
+
+  // O erro que motivou o diagnóstico: colar a barra de endereços do navegador.
+  it('nomeia o erro de colar o endereço da página do Google Agenda', () => {
+    expect(() =>
+      icsUrl({ ...conn, values: { icsUrl: 'https://calendar.google.com/calendar/u/0' } }),
+    ).toThrow(/endereço da página/);
   });
 });
