@@ -20,6 +20,11 @@ Only `main` is maintained; there are no release branches.
 - Production now runs from `/srv/daily-web` instead of the development
   checkout, so a deploy cannot overwrite uncommitted work.
 - Documentation is in English. The interface stays in Portuguese.
+- Dependencies brought up to date: React 19.2.8, Vitest 4, Vite 8,
+  `@vitejs/plugin-react` 6, better-sqlite3 13, and the checkout and setup-node
+  actions to v7.
+- `vite-node` is now a direct dev dependency. It used to arrive through
+  Vitest 2, which no longer ships it, and `npm run users` depends on it.
 
 ## [0.2.0] - 2026-08-26
 
