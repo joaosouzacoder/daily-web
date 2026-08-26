@@ -31,9 +31,16 @@ describe('notifications_read', () => {
   });
 });
 
+const JIRA_CONNECTION = {
+  id: 'jira-1',
+  module: 'jira' as const,
+  label: 'Jira',
+  values: { cloud: 'acme', email: 'a@x.com', token: 't' },
+};
+
 describe('getNotifications', () => {
   it('marca como lidas as issues já dispensadas antes', async () => {
-    vi.doMock('@/lib/cli/jira', () => ({
+    vi.doMock('@/lib/integrations/jiraApi', () => ({
       fetchMentions: vi.fn(async () => [
         {
           key: 'ENG-1', summary: 'Corrigir bug', status: '', project: 'ENG',
@@ -43,9 +50,24 @@ describe('getNotifications', () => {
     }));
     const { markRead, getNotifications } = await import('@/lib/notifications');
     markRead('u-1', 'jira_mention', 'ENG-1');
-    const items = await getNotifications('u-1');
+    const items = await getNotifications('u-1', JIRA_CONNECTION);
     expect(items).toHaveLength(1);
     expect(items[0].read).toBe(true);
     expect(items[0].title).toContain('ENG-1');
+  });
+
+  it('não vaza o estado de lida entre usuários', async () => {
+    vi.doMock('@/lib/integrations/jiraApi', () => ({
+      fetchMentions: vi.fn(async () => [
+        {
+          key: 'ENG-1', summary: 'Corrigir bug', status: '', project: 'ENG',
+          url: 'https://x/ENG-1', parent: null, role: 'assignee' as const, kind: '', subtask: false,
+        },
+      ]),
+    }));
+    const { markRead, getNotifications } = await import('@/lib/notifications');
+    markRead('u-1', 'jira_mention', 'ENG-1');
+    const items = await getNotifications('u-2', JIRA_CONNECTION);
+    expect(items[0].read).toBe(false);
   });
 });

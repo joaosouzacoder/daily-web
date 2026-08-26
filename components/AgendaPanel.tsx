@@ -85,7 +85,7 @@ export function AgendaPanel({ agenda, loading = false }: Props) {
               <li key={`${date}-${i}`} className="agenda-item">
                 <span className="agenda-time mono">{item.time || 'dia'}</span>
                 <span className="agenda-title">{item.title}</span>
-                <span className="row-tag mono">{item.account === 'work' ? 'W' : 'P'}</span>
+                {item.accountLabel && <span className="row-tag">{item.accountLabel}</span>}
               </li>
             ))}
           </ul>

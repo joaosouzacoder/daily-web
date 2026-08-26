@@ -872,8 +872,12 @@ textarea.mail-reply-input {
   border-bottom: 0;
 }
 
+/* A subtarefa é filha da tarefa: o recuo e o filete à esquerda dizem isso
+   sem precisar de rótulo. O filete começa alinhado ao checkbox do pai. */
 .subtasks {
-  margin: 0 0 0 calc(var(--s6) + var(--s2));
+  margin: 0 0 0 calc(var(--s6) + var(--s4));
+  padding-left: var(--s4);
+  border-left: 1px solid var(--hairline);
   display: flex;
   flex-direction: column;
   gap: var(--s1);
@@ -947,6 +951,48 @@ textarea.mail-reply-input {
 
 .subtask-toggle[aria-expanded='true'] {
   color: var(--accent);
+}
+
+/* A seta de revelar as subtarefas. Quando a tarefa não tem nenhuma, o mesmo
+   espaço fica vago em vez de sumir: sem isso os checkboxes da lista
+   desalinhariam entre tarefas com e sem subtarefa. */
+.subtask-caret {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition:
+    transform var(--fast) var(--ease),
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+
+.subtask-caret.is-empty {
+  cursor: default;
+}
+
+.subtask-caret:hover:not(.is-empty) {
+  background: var(--surface-hover);
+  color: var(--accent);
+}
+
+.subtask-caret[aria-expanded='true'] {
+  transform: rotate(90deg);
+  color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .subtask-caret {
+    transition: none;
+  }
 }
 
 /* ---------- jira ---------- */
@@ -1556,4 +1602,230 @@ textarea.mail-reply-input {
   .columns > .col {
     animation: none;
   }
+}
+
+/* ---------- integrações (tela de configuração) ---------- */
+
+.conn-intro {
+  margin-bottom: var(--s5);
+  color: var(--text-muted);
+  font-size: var(--step--1);
+  max-width: 60ch;
+}
+
+.conn-card {
+  padding: var(--s4) 0 var(--s5);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.conn-card:last-child {
+  border-bottom: 0;
+}
+
+.conn-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s4);
+  margin-bottom: var(--s3);
+}
+
+.conn-title h3 {
+  font-size: var(--step-1);
+  font-weight: 500;
+}
+
+.conn-summary {
+  color: var(--text-muted);
+  font-size: var(--step--1);
+}
+
+/* O estado do módulo precisa ser legível de relance na lista inteira, então
+   o interruptor carrega o rótulo em vez de depender só da caixa marcada. */
+.conn-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  flex: none;
+  font-size: var(--step--1);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.conn-card.is-on .conn-switch {
+  color: var(--accent);
+}
+
+.conn-help-toggle {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.conn-instructions {
+  margin: var(--s2) 0 var(--s3);
+  padding-left: var(--s4);
+  border-left: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  color: var(--text-muted);
+  font-size: var(--step--1);
+  max-width: 70ch;
+}
+
+.conn-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  margin: var(--s3) 0;
+}
+
+.conn-item {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  padding: var(--s3);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.conn-item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.conn-item-label {
+  font-weight: 500;
+}
+
+.conn-item-detail {
+  font-size: var(--step--1);
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conn-warn {
+  font-size: var(--step--1);
+  color: var(--warn);
+}
+
+.conn-item-actions {
+  display: flex;
+  gap: var(--s2);
+  flex-wrap: wrap;
+}
+
+.conn-result {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  font-size: var(--step--1);
+}
+
+.conn-result.is-ok {
+  color: var(--success);
+}
+
+.conn-result.is-bad {
+  color: var(--danger);
+}
+
+.conn-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  margin-top: var(--s3);
+  padding: var(--s4);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  max-width: 44rem;
+}
+
+.conn-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+}
+
+.conn-label {
+  font-size: var(--step--1);
+  color: var(--text-muted);
+}
+
+.conn-field .field {
+  min-height: 38px;
+}
+
+.conn-help {
+  font-size: 0.75rem;
+  color: var(--text-faint);
+}
+
+.conn-form-actions {
+  display: flex;
+  gap: var(--s2);
+  margin-top: var(--s2);
+}
+
+/* ---------- boas-vindas (nenhum módulo ligado) ---------- */
+
+.welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s4);
+  padding: var(--s8) var(--s4);
+  text-align: center;
+}
+
+.welcome-text {
+  max-width: 46ch;
+  color: var(--text-muted);
+}
+
+/* ---------- pull requests ---------- */
+
+.pull-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.pull-row:last-child {
+  border-bottom: 0;
+}
+
+.pull-title {
+  flex: 1;
+  min-width: 0;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pull-title:hover {
+  text-decoration: underline;
+}
+
+.pull-meta {
+  flex: none;
+  font-size: var(--step--1);
+  color: var(--text-faint);
+}
+
+.row-tag-accent {
+  color: var(--accent);
+  border-color: var(--accent-dim);
 }

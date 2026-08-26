@@ -25,7 +25,7 @@ describe('AgendaPanel', () => {
     render(
       <AgendaPanel
         agenda={{
-          data: [{ account: 'work', date: '2026-08-26', time: '14:00', title: 'Daily' }],
+          data: [{ account: 'cal-1', accountLabel: 'Trabalho', date: '2026-08-26', time: '14:00', title: 'Daily' }],
           error: null,
         }}
       />,
@@ -38,7 +38,7 @@ describe('AgendaPanel', () => {
     render(
       <AgendaPanel
         agenda={{
-          data: [{ account: 'personal', date: '2026-08-27', time: '', title: 'Feriado' }],
+          data: [{ account: 'cal-2', accountLabel: 'Pessoal', date: '2026-08-27', time: '', title: 'Feriado' }],
           error: null,
         }}
       />,

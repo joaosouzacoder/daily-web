@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { editSubtask, checkSubtask, deleteSubtask } from '@/lib/cli/mstodo';
+import { editSubtask, checkSubtask, deleteSubtask } from '@/lib/tasks';
 import { isValidTaskId, isSafePositionalValue } from '@/lib/api/validation';
 import { getCurrentUser } from '@/lib/auth/currentUser';
 

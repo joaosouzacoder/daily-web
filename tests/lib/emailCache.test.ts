@@ -3,21 +3,31 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-vi.mock('@/lib/cli/himalaya', () => ({ fetchBody: vi.fn() }));
+vi.mock('@/lib/integrations/imap', () => ({ fetchBody: vi.fn() }));
 
-import { fetchBody } from '@/lib/cli/himalaya';
+import { fetchBody } from '@/lib/integrations/imap';
 import type { EmailEnvelope } from '@/lib/types';
+import type { Connection } from '@/lib/vault/connections';
 
 let dir: string;
+
+const CONNECTION: Connection = {
+  id: 'mail-1',
+  module: 'email',
+  label: 'Trabalho',
+  values: { preset: 'gmail', user: 'a@x.com', password: 's' },
+};
 
 function envelope(over: Partial<EmailEnvelope>): EmailEnvelope {
   return {
     id: '1',
-    account: 'work',
+    account: CONNECTION.id,
+    accountLabel: CONNECTION.label,
     from: 'Alguém',
     subject: 'Assunto',
     unread: true,
     date: '2026-08-25T10:00:00Z',
+    messageId: '<a@b>',
     ...over,
   };
 }
@@ -47,10 +57,10 @@ describe('cache de corpos de e-mail', () => {
 
   it('não confunde o mesmo id em contas diferentes', async () => {
     const { putCachedBody, getCachedBody } = await import('@/lib/emailCache');
-    putCachedBody('u-1', 'work', '42', 'do trabalho');
-    putCachedBody('u-1', 'personal', '42', 'pessoal');
-    expect(getCachedBody('u-1', 'work', '42')).toBe('do trabalho');
-    expect(getCachedBody('u-1', 'personal', '42')).toBe('pessoal');
+    putCachedBody('u-1', 'mail-1', '42', 'do trabalho');
+    putCachedBody('u-1', 'mail-2', '42', 'pessoal');
+    expect(getCachedBody('u-1', 'mail-1', '42')).toBe('do trabalho');
+    expect(getCachedBody('u-1', 'mail-2', '42')).toBe('pessoal');
   });
 
   it('sobrescreve o corpo quando o mesmo e-mail é guardado de novo', async () => {
@@ -62,31 +72,52 @@ describe('cache de corpos de e-mail', () => {
 
   it('só busca no IMAP o que ainda não está em cache', async () => {
     const { putCachedBody, warmBodyCache } = await import('@/lib/emailCache');
-    putCachedBody('u-1', 'work', '1', 'já tenho');
+    putCachedBody('u-1', CONNECTION.id, '1', 'já tenho');
     vi.mocked(fetchBody).mockResolvedValue('baixado');
 
-    const fetched = await warmBodyCache('u-1', [
+    const fetched = await warmBodyCache('u-1', [CONNECTION], [
       envelope({ id: '1' }),
       envelope({ id: '2' }),
     ]);
 
     expect(fetched).toBe(1);
     expect(fetchBody).toHaveBeenCalledTimes(1);
-    expect(fetchBody).toHaveBeenCalledWith('work', '2');
+    expect(fetchBody).toHaveBeenCalledWith(CONNECTION, '2');
   });
 
   it('um e-mail que falha não interrompe o aquecimento dos outros', async () => {
     const { warmBodyCache, getCachedBody } = await import('@/lib/emailCache');
-    vi.mocked(fetchBody).mockImplementation(async (_account, id) => {
+    vi.mocked(fetchBody).mockImplementation(async (_conn, id) => {
       if (id === '1') throw new Error('IMAP caiu');
       return 'ok';
     });
 
-    const fetched = await warmBodyCache('u-1', [envelope({ id: '1' }), envelope({ id: '2' })]);
+    const fetched = await warmBodyCache('u-1', [CONNECTION], [
+      envelope({ id: '1' }),
+      envelope({ id: '2' }),
+    ]);
 
     expect(fetched).toBe(1);
-    expect(getCachedBody('u-1', 'work', '1')).toBeNull();
-    expect(getCachedBody('u-1', 'work', '2')).toBe('ok');
+    expect(getCachedBody('u-1', CONNECTION.id, '1')).toBeNull();
+    expect(getCachedBody('u-1', CONNECTION.id, '2')).toBe('ok');
+  });
+
+  // O envelope aponta para a caixa por id. Se a conexão foi removida entre o
+  // refresh e o aquecimento, não há credencial para buscar o corpo.
+  it('ignora envelope de uma caixa que não está mais na lista', async () => {
+    const { warmBodyCache } = await import('@/lib/emailCache');
+    vi.mocked(fetchBody).mockResolvedValue('baixado');
+
+    const fetched = await warmBodyCache('u-1', [], [envelope({ id: '1' })]);
+
+    expect(fetched).toBe(0);
+    expect(fetchBody).not.toHaveBeenCalled();
+  });
+
+  it('não devolve para um usuário o corpo cacheado por outro', async () => {
+    const { putCachedBody, getCachedBody } = await import('@/lib/emailCache');
+    putCachedBody('u-1', CONNECTION.id, '42', 'meu corpo');
+    expect(getCachedBody('u-2', CONNECTION.id, '42')).toBeNull();
   });
 
   it('descarta corpos com mais de 30 dias e preserva os recentes', async () => {

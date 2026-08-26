@@ -1,80 +1,188 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
-vi.mock('@/lib/cli/himalaya', () => ({ listEnvelopes: vi.fn() }));
-vi.mock('@/lib/cli/gcalcli', () => ({ fetchAgenda: vi.fn() }));
-vi.mock('@/lib/cli/pulls', () => ({ fetchPulls: vi.fn() }));
-vi.mock('@/lib/cli/jira', () => ({ fetchIssues: vi.fn() }));
-vi.mock('@/lib/cli/mstodo', () => ({ fetchTasks: vi.fn() }));
-vi.mock('@/lib/notifications', () => ({ getNotifications: vi.fn() }));
-vi.mock('@/lib/auth/users', () => ({ listUsers: vi.fn(() => [{ id: 'u-1' }]) }));
-vi.mock('@/lib/pomodoro', () => ({
-  getPomodoroState: vi.fn(() => ({
-    enabled: true, phase: 'focus', running: false, remainingSeconds: 1500,
-    focusMinutes: 25, restMinutes: 5, completedFocusCount: 0,
-  })),
-}));
+vi.mock('@/lib/integrations/imap', () => ({ listEnvelopes: vi.fn(), fetchBody: vi.fn() }));
+vi.mock('@/lib/integrations/ics', () => ({ fetchAgenda: vi.fn() }));
+vi.mock('@/lib/integrations/githubApi', () => ({ fetchPulls: vi.fn() }));
+vi.mock('@/lib/integrations/jiraApi', () => ({ fetchIssues: vi.fn(), fetchMentions: vi.fn() }));
+vi.mock('@/lib/tasks', () => ({ fetchTasks: vi.fn() }));
 
-import { listEnvelopes } from '@/lib/cli/himalaya';
-import { fetchAgenda } from '@/lib/cli/gcalcli';
-import { fetchPulls } from '@/lib/cli/pulls';
-import { fetchIssues } from '@/lib/cli/jira';
-import { fetchTasks } from '@/lib/cli/mstodo';
-import { getNotifications } from '@/lib/notifications';
-import { refreshAll, getCachedState } from '@/lib/refresher';
+import { listEnvelopes } from '@/lib/integrations/imap';
+import { fetchAgenda } from '@/lib/integrations/ics';
+import { fetchPulls } from '@/lib/integrations/githubApi';
+import { fetchIssues, fetchMentions } from '@/lib/integrations/jiraApi';
+import { fetchTasks } from '@/lib/tasks';
 
-beforeEach(() => {
+let dir: string;
+
+const USER = 'user-1';
+const OTHER = 'user-2';
+
+function envelope(over: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: '1',
+    account: 'mail-1',
+    accountLabel: 'Trabalho',
+    from: 'Alguém',
+    subject: 'Assunto',
+    unread: true,
+    date: '2026-08-26T10:00:00Z',
+    messageId: '<a@b>',
+    ...over,
+  };
+}
+
+beforeEach(async () => {
+  dir = mkdtempSync(path.join(tmpdir(), 'daily-web-refresh-'));
+  process.env.DAILY_WEB_DB_PATH = path.join(dir, 'test.db');
+  process.env.DAILY_WEB_SECRET_KEY = Buffer.alloc(32, 3).toString('base64');
+  vi.clearAllMocks();
+
+  const { getDb } = await import('@/lib/db');
+  getDb();
+  const { resetCachesForTests } = await import('@/lib/refresher');
+  resetCachesForTests();
+
   vi.mocked(listEnvelopes).mockResolvedValue([]);
   vi.mocked(fetchAgenda).mockResolvedValue([]);
-  vi.mocked(fetchPulls).mockResolvedValue({ lines: [] });
+  vi.mocked(fetchPulls).mockResolvedValue({ items: [], errors: [] });
   vi.mocked(fetchIssues).mockResolvedValue([]);
+  vi.mocked(fetchMentions).mockResolvedValue([]);
   vi.mocked(fetchTasks).mockResolvedValue([]);
-  vi.mocked(getNotifications).mockResolvedValue([]);
 });
 
-describe('refreshAll', () => {
-  // Este teste precisa rodar antes de qualquer refreshAll('u-1') no arquivo: `cache` é um
-  // singleton em nível de módulo que não é resetado entre `it`s (o vitest isola módulos
-  // por arquivo, não por teste), então "null antes do primeiro refresh" só é verificável
-  // se for de fato o primeiro refresh do arquivo.
-  it('getCachedState devolve null antes do primeiro refresh e o estado depois', async () => {
-    expect(getCachedState('u-1')).toBeNull();
-    await refreshAll('u-1');
-    expect(getCachedState('u-1')).not.toBeNull();
+afterEach(() => {
+  rmSync(dir, { recursive: true, force: true });
+});
+
+async function connect(userId: string, moduleId: 'email' | 'agenda' | 'jira' | 'pulls', values: Record<string, string>) {
+  const { saveConnection } = await import('@/lib/vault/connections');
+  return saveConnection(userId, moduleId, moduleId, values);
+}
+
+describe('módulos desligados', () => {
+  it('não chama integração de módulo que o usuário não ligou', async () => {
+    const { refreshAll } = await import('@/lib/refresher');
+    await refreshAll(USER);
+
+    expect(listEnvelopes).not.toHaveBeenCalled();
+    expect(fetchAgenda).not.toHaveBeenCalled();
+    expect(fetchIssues).not.toHaveBeenCalled();
+    expect(fetchPulls).not.toHaveBeenCalled();
   });
 
-  it('preenche o estado quando todas as fontes respondem', async () => {
-    const state = await refreshAll('u-1');
+  // Painel desligado não é "vazio" nem "com erro": é ausência. A tela usa
+  // isso para não desenhar a seção.
+  it('devolve dado e erro nulos para o módulo desligado', async () => {
+    const { refreshAll } = await import('@/lib/refresher');
+    const state = await refreshAll(USER);
+
+    expect(state.email).toEqual({ data: null, error: null });
+    expect(state.modules).not.toContain('email');
+  });
+
+  it('anuncia os módulos ligados no estado', async () => {
+    await connect(USER, 'agenda', { icsUrl: 'https://x/a.ics' });
+    const { refreshAll } = await import('@/lib/refresher');
+    const state = await refreshAll(USER);
+
+    expect(state.modules).toContain('agenda');
+    expect(fetchAgenda).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('várias conexões no mesmo módulo', () => {
+  it('junta os e-mails das duas caixas', async () => {
+    await connect(USER, 'email', { preset: 'gmail', user: 'a@x.com', password: 's' });
+    await connect(USER, 'email', { preset: 'gmail', user: 'b@x.com', password: 's' });
+
+    vi.mocked(listEnvelopes)
+      .mockResolvedValueOnce([envelope({ id: '1' })])
+      .mockResolvedValueOnce([envelope({ id: '2' })]);
+
+    const { refreshAll } = await import('@/lib/refresher');
+    const state = await refreshAll(USER);
+
+    expect(state.email.data).toHaveLength(2);
     expect(state.email.error).toBeNull();
-    expect(state.jira.data).toEqual([]);
-    expect(state.pomodoro.phase).toBe('focus');
+    expect(state.mailboxes).toHaveLength(2);
   });
 
-  it('isola o erro de um painel sem derrubar os outros', async () => {
-    vi.mocked(fetchIssues).mockRejectedValue(new Error('JIRA_TOKEN ausente'));
-    const state = await refreshAll('u-1');
-    expect(state.jira.error).toBe('JIRA_TOKEN ausente');
-    // PanelResult<T>.data é T | null; no erro, o panel() da brief zera data para null
-    // (não `[]`) — é o comportamento tipo-correto e consistente com os demais painéis.
-    expect(state.jira.data).toBeNull();
-    expect(state.email.error).toBeNull();
-  });
+  // Uma caixa fora do ar não pode apagar da tela os e-mails da outra.
+  it('mantém os dados da caixa que funcionou e reporta o erro da outra', async () => {
+    await connect(USER, 'email', { preset: 'gmail', user: 'a@x.com', password: 's' });
+    await connect(USER, 'email', { preset: 'gmail', user: 'b@x.com', password: 's' });
 
-  it('busca e-mail e agenda das duas contas', async () => {
-    await refreshAll('u-1');
-    expect(listEnvelopes).toHaveBeenCalledWith('work', 30);
-    expect(listEnvelopes).toHaveBeenCalledWith('personal', 30);
-    expect(fetchAgenda).toHaveBeenCalledWith('work');
-    expect(fetchAgenda).toHaveBeenCalledWith('personal');
-  });
+    vi.mocked(listEnvelopes)
+      .mockResolvedValueOnce([envelope({ id: '1' })])
+      .mockRejectedValueOnce(new Error('Pessoal: senha recusada'));
 
-  it('mantém os dados da conta que funcionou quando a outra conta falha', async () => {
-    vi.mocked(listEnvelopes).mockImplementation(async (account) => {
-      if (account === 'work') throw new Error('work OAuth expirado');
-      return [{ id: '1', account: 'personal', from: 'a@b.com', subject: 'x', unread: false, date: '2026-08-25' }];
-    });
-    const state = await refreshAll('u-1');
+    const { refreshAll } = await import('@/lib/refresher');
+    const state = await refreshAll(USER);
+
     expect(state.email.data).toHaveLength(1);
-    expect(state.email.data?.[0].account).toBe('personal');
-    expect(state.email.error).toContain('work OAuth expirado');
+    expect(state.email.error).toContain('senha recusada');
+  });
+
+  it('só reporta erro quando nenhuma caixa respondeu', async () => {
+    await connect(USER, 'email', { preset: 'gmail', user: 'a@x.com', password: 's' });
+    vi.mocked(listEnvelopes).mockRejectedValue(new Error('caiu'));
+
+    const { refreshAll } = await import('@/lib/refresher');
+    const state = await refreshAll(USER);
+
+    expect(state.email.data).toBeNull();
+    expect(state.email.error).toContain('caiu');
+  });
+});
+
+describe('isolamento entre usuários', () => {
+  it('usa a conexão do próprio usuário, não a de outro', async () => {
+    await connect(USER, 'jira', { cloud: 'acme-do-joao', email: 'a@x.com', token: 't' });
+    await connect(OTHER, 'jira', { cloud: 'acme-da-maria', email: 'b@x.com', token: 'u' });
+
+    const { refreshAll } = await import('@/lib/refresher');
+    await refreshAll(OTHER);
+
+    expect(fetchIssues).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(fetchIssues).mock.calls[0][0].values.cloud).toBe('acme-da-maria');
+  });
+
+  it('não devolve para um usuário o cache do outro', async () => {
+    await connect(USER, 'email', { preset: 'gmail', user: 'a@x.com', password: 's' });
+    vi.mocked(listEnvelopes).mockResolvedValue([envelope()]);
+
+    const { refreshAll, getCachedState } = await import('@/lib/refresher');
+    await refreshAll(USER);
+
+    expect(getCachedState(USER)?.email.data).toHaveLength(1);
+    expect(getCachedState(OTHER)).toBeNull();
+  });
+
+  it('dropCache derruba só o cache pedido', async () => {
+    await connect(USER, 'email', { preset: 'gmail', user: 'a@x.com', password: 's' });
+    await connect(OTHER, 'email', { preset: 'gmail', user: 'b@x.com', password: 's' });
+
+    const { refreshAll, getCachedState, dropCache } = await import('@/lib/refresher');
+    await refreshAll(USER);
+    await refreshAll(OTHER);
+    dropCache(USER);
+
+    expect(getCachedState(USER)).toBeNull();
+    expect(getCachedState(OTHER)).not.toBeNull();
+  });
+});
+
+describe('notificações', () => {
+  it('só busca menções quando o Jira está conectado', async () => {
+    const { refreshAll } = await import('@/lib/refresher');
+    await refreshAll(USER);
+    expect(fetchMentions).not.toHaveBeenCalled();
+
+    await connect(USER, 'jira', { cloud: 'acme', email: 'a@x.com', token: 't' });
+    await refreshAll(USER);
+    expect(fetchMentions).toHaveBeenCalledTimes(1);
   });
 });

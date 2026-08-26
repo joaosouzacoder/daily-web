@@ -1,27 +1,26 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { PanelResult, PullsDigest } from '@/lib/types';
+import type { PanelResult, PullRequestItem, PullsDigest } from '@/lib/types';
 import { Section } from './ui/Section';
 import { EmptyState } from './ui/EmptyState';
 import { SkeletonRows } from './ui/Skeleton';
 
-const URL_RE = /(https?:\/\/\S+)/g;
-
-function renderLine(line: string, key: number) {
-  const parts = line.split(URL_RE);
+// Os PRs vinham como linhas de texto de uma CLI, então a única coisa a fazer
+// era achar a URL no meio da frase. Agora chegam estruturados da API do
+// GitHub, e a linha pode dizer de quem é e o que está esperando você.
+function PullRow({ pull }: { pull: PullRequestItem }) {
   return (
-    <div key={key} className="pulls-line">
-      {parts.map((part, i) =>
-        i % 2 === 1 ? (
-          <a key={i} href={part} target="_blank" rel="noreferrer">
-            {part}
-          </a>
-        ) : (
-          <span key={i}>{part}</span>
-        ),
-      )}
-    </div>
+    <li className="pull-row">
+      <a className="pull-title" href={pull.url} target="_blank" rel="noreferrer">
+        {pull.title}
+      </a>
+      <span className="pull-meta mono">
+        {pull.repo}#{pull.number}
+      </span>
+      {pull.draft && <span className="row-tag">rascunho</span>}
+      {pull.awaitingYou && <span className="row-tag row-tag-accent">revisar</span>}
+    </li>
   );
 }
 
@@ -81,27 +80,41 @@ export function PullsPanel({ pulls, className, onChanged, loading = false }: Pro
     onChanged?.();
   };
 
-  const lines = pulls.data?.lines ?? [];
+  const items = pulls.data?.items ?? [];
+  // Um repositório renomeado falha sozinho; mostrar isso junto dos que deram
+  // certo é mais útil do que substituir o painel inteiro por um erro.
+  const repoErrors = pulls.data?.errors ?? [];
 
   return (
     <div className={className}>
-      <Section eyebrow="PRs & Issues">
+      <Section eyebrow="Pull requests" count={items.length > 0 ? String(items.length) : undefined}>
         {pulls.error && (
           <p role="alert" className="panel-error">
             {pulls.error}
           </p>
         )}
-
-        {loading && lines.length === 0 && <SkeletonRows count={4} />}
-
-        {!loading && lines.length === 0 && !pulls.error && (
-          <EmptyState message="Nada pendente nos repositórios rastreados." />
+        {repoErrors.length > 0 && (
+          <p role="alert" className="panel-error">
+            {repoErrors.join('; ')}
+          </p>
         )}
 
-        {lines.length > 0 && <div>{lines.map((line, i) => renderLine(line, i))}</div>}
+        {loading && items.length === 0 && <SkeletonRows count={4} />}
+
+        {!loading && items.length === 0 && !pulls.error && (
+          <EmptyState message="Nada pendente nos repositórios acompanhados." />
+        )}
+
+        {items.length > 0 && (
+          <ul>
+            {items.map((pull) => (
+              <PullRow key={`${pull.repo}#${pull.number}`} pull={pull} />
+            ))}
+          </ul>
+        )}
 
         <details className="pulls-repos">
-          <summary>Repositórios rastreados</summary>
+          <summary>Repositórios acompanhados</summary>
           <div className="pulls-repo-list">
             {repos.map((repo) => (
               <span key={repo} className="chip chip-removable">
@@ -111,7 +124,7 @@ export function PullsPanel({ pulls, className, onChanged, loading = false }: Pro
                 </button>
               </span>
             ))}
-            {repos.length === 0 && <span className="empty">Nenhum repositório rastreado ainda.</span>}
+            {repos.length === 0 && <span className="empty">Nenhum repositório acompanhado ainda.</span>}
           </div>
           <div className="pulls-repo-add">
             <input

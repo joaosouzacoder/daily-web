@@ -118,6 +118,7 @@ describe('TasksPanel', () => {
         onChanged={() => {}}
       />,
     );
+    fireEvent.click(screen.getByRole('button', { name: 'expandir subtarefas de Tarefa' }));
     fireEvent.click(screen.getByLabelText('concluir subtarefa Etapa'));
     await waitFor(() =>
       expect(fetchSpy).toHaveBeenCalledWith(
@@ -182,6 +183,68 @@ describe('TasksPanel', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Concluídas' }));
     expect(screen.getByText('Já feita')).toBeInTheDocument();
+  });
+
+  it('mantém as subtarefas escondidas até clicarem na seta', () => {
+    render(
+      <TasksPanel
+        tasks={{
+          data: [task({ subtasks: [{ id: 's1', title: 'Etapa', completed: false }] })],
+          error: null,
+        }}
+        onChanged={() => {}}
+      />,
+    );
+    expect(screen.queryByText('Etapa')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'expandir subtarefas de Tarefa' }));
+    expect(screen.getByText('Etapa')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'recolher subtarefas de Tarefa' }));
+    expect(screen.queryByText('Etapa')).toBeNull();
+  });
+
+  // O contador mantém a subtarefa visível como informação mesmo recolhida:
+  // dá para saber que existe e quanto falta sem abrir.
+  it('mostra o quanto das subtarefas já foi feito mesmo recolhido', () => {
+    render(
+      <TasksPanel
+        tasks={{
+          data: [
+            task({
+              subtasks: [
+                { id: 's1', title: 'Etapa', completed: true },
+                { id: 's2', title: 'Outra', completed: false },
+              ],
+            }),
+          ],
+          error: null,
+        }}
+        onChanged={() => {}}
+      />,
+    );
+    expect(screen.getByTitle('subtarefas concluídas').textContent).toBe('1/2');
+  });
+
+  it('não oferece seta em tarefa sem subtarefa', () => {
+    render(<TasksPanel tasks={{ data: [task({})], error: null }} onChanged={() => {}} />);
+    expect(screen.queryByRole('button', { name: /subtarefas de Tarefa/ })).toBeNull();
+  });
+
+  // Quem clica no "+" quer ver o campo — e o que já existe ali junto.
+  it('o + abre o campo e revela as subtarefas existentes', () => {
+    render(
+      <TasksPanel
+        tasks={{
+          data: [task({ subtasks: [{ id: 's1', title: 'Etapa', completed: false }] })],
+          error: null,
+        }}
+        onChanged={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'adicionar subtarefa em Tarefa' }));
+    expect(screen.getByLabelText('nova subtarefa de Tarefa')).toBeInTheDocument();
+    expect(screen.getByText('Etapa')).toBeInTheDocument();
   });
 
   it('mostra o estado vazio quando não há tarefas', () => {

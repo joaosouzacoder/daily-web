@@ -1,5 +1,6 @@
 import { getDb } from './db';
-import { fetchBody } from './cli/himalaya';
+import { fetchBody } from './integrations/imap';
+import type { Connection } from './vault/connections';
 import type { Account, EmailEnvelope } from './types';
 
 // Buscar o corpo no IMAP na hora do clique custa segundos. O refresher vai
@@ -51,12 +52,19 @@ export function isCached(userId: string, account: Account, messageId: string): b
 
 // Roda em segundo plano depois de cada refresh: só busca o que ainda não
 // está em cache, um de cada vez, para não abrir dezenas de conexões IMAP.
-export async function warmBodyCache(userId: string, envelopes: EmailEnvelope[]): Promise<number> {
+export async function warmBodyCache(
+  userId: string,
+  connections: Connection[],
+  envelopes: EmailEnvelope[],
+): Promise<number> {
+  const byId = new Map(connections.map((conn) => [conn.id, conn]));
   let fetched = 0;
   for (const envelope of envelopes) {
     if (isCached(userId, envelope.account, envelope.id)) continue;
+    const conn = byId.get(envelope.account);
+    if (!conn) continue;
     try {
-      const body = await fetchBody(envelope.account, envelope.id);
+      const body = await fetchBody(conn, envelope.id);
       putCachedBody(userId, envelope.account, envelope.id, body);
       fetched += 1;
     } catch {

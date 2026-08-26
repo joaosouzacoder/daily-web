@@ -1,16 +1,22 @@
-import type { DashboardState, PanelResult } from '@/lib/types';
-import { listEnvelopes } from './cli/himalaya';
-import { fetchAgenda } from './cli/gcalcli';
-import { fetchPulls } from './cli/pulls';
-import { fetchIssues } from './cli/jira';
-import { fetchTasks } from './cli/mstodo';
+import type { DashboardState, MailboxRef, PanelResult } from '@/lib/types';
+import * as imap from './integrations/imap';
+import * as ics from './integrations/ics';
+import * as jiraApi from './integrations/jiraApi';
+import * as githubApi from './integrations/githubApi';
+import { fetchTasks } from './tasks';
 import { getNotifications } from './notifications';
 import { getPomodoroState } from './pomodoro';
 import { warmBodyCache, pruneOldBodies } from './emailCache';
 import { listUsers } from './auth/users';
+import { enabledModules, listConnections } from './vault/connections';
+import type { Connection } from './vault/connections';
 
 const EMAIL_LIMIT = 30;
 const JIRA_FILTER = 'both' as const;
+
+/** Módulo desligado não é erro nem lista vazia: é ausência. O painel some da
+ *  tela em vez de mostrar "nada por aqui" para quem nunca quis aquilo. */
+const OFF: PanelResult<never> = { data: null, error: null };
 
 async function panel<T>(fn: () => Promise<T>): Promise<PanelResult<T>> {
   try {
@@ -20,16 +26,18 @@ async function panel<T>(fn: () => Promise<T>): Promise<PanelResult<T>> {
   }
 }
 
-async function mergedAccountsPanel<T>(
-  work: () => Promise<T[]>,
-  personal: () => Promise<T[]>,
+/** Junta o resultado de várias conexões do mesmo módulo. Uma caixa fora do ar
+ *  não pode apagar as outras da tela, então o sucesso parcial devolve dados e
+ *  erro ao mesmo tempo. */
+async function mergeConnections<T>(
+  connections: Connection[],
+  fn: (conn: Connection) => Promise<T[]>,
 ): Promise<PanelResult<T[]>> {
-  const [workResult, personalResult] = await Promise.allSettled([work(), personal()]);
-  const data: T[] = [
-    ...(workResult.status === 'fulfilled' ? workResult.value : []),
-    ...(personalResult.status === 'fulfilled' ? personalResult.value : []),
-  ];
-  const errors = [workResult, personalResult]
+  if (connections.length === 0) return { data: [], error: null };
+
+  const settled = await Promise.allSettled(connections.map((conn) => fn(conn)));
+  const data = settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
+  const errors = settled
     .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
     .map((r) => (r.reason instanceof Error ? r.reason.message : String(r.reason)));
 
@@ -44,23 +52,29 @@ const caches = new Map<string, DashboardState>();
 let timer: ReturnType<typeof setInterval> | null = null;
 
 export async function refreshAll(userId: string): Promise<DashboardState> {
+  const modules = enabledModules(userId);
+  const has = (id: string) => modules.includes(id as never);
+
+  const mailConnections = has('email') ? listConnections(userId, 'email') : [];
+  const calendars = has('agenda') ? listConnections(userId, 'agenda') : [];
+  const jiraConnection = has('jira') ? (listConnections(userId, 'jira')[0] ?? null) : null;
+  const pullsConnection = has('pulls') ? (listConnections(userId, 'pulls')[0] ?? null) : null;
+
   const [email, agenda, pulls, jira, tasks, notifications] = await Promise.all([
-    mergedAccountsPanel(
-      () => listEnvelopes('work', EMAIL_LIMIT),
-      () => listEnvelopes('personal', EMAIL_LIMIT),
-    ),
-    mergedAccountsPanel(
-      () => fetchAgenda('work'),
-      () => fetchAgenda('personal'),
-    ),
-    panel(() => fetchPulls(userId)),
-    panel(() => fetchIssues(userId, JIRA_FILTER)),
-    panel(() => fetchTasks(userId)),
-    panel(() => getNotifications(userId)),
+    has('email') ? mergeConnections(mailConnections, (c) => imap.listEnvelopes(c, EMAIL_LIMIT)) : OFF,
+    has('agenda') ? mergeConnections(calendars, (c) => ics.fetchAgenda(c)) : OFF,
+    pullsConnection ? panel(() => githubApi.fetchPulls(pullsConnection)) : OFF,
+    jiraConnection ? panel(() => jiraApi.fetchIssues(jiraConnection, JIRA_FILTER)) : OFF,
+    has('tasks') ? panel(() => fetchTasks(userId)) : OFF,
+    jiraConnection ? panel(() => getNotifications(userId, jiraConnection)) : OFF,
   ]);
+
+  const mailboxes: MailboxRef[] = mailConnections.map((c) => ({ id: c.id, label: c.label }));
 
   const state: DashboardState = {
     updatedAt: new Date().toISOString(),
+    modules,
+    mailboxes,
     email,
     agenda,
     pulls,
@@ -74,10 +88,9 @@ export async function refreshAll(userId: string): Promise<DashboardState> {
   // Baixa os corpos que ainda faltam em segundo plano, sem segurar a
   // resposta: quando o usuário clicar, o e-mail já estará no banco.
   if (email.data && email.data.length > 0) {
-    void warmBodyCache(userId, email.data)
-      .catch(() => {
-        // Aquecimento é oportunista: uma falha aqui não afeta o painel.
-      });
+    void warmBodyCache(userId, mailConnections, email.data).catch(() => {
+      // Aquecimento é oportunista: uma falha aqui não afeta o painel.
+    });
   }
 
   return state;
@@ -87,6 +100,10 @@ export function getCachedState(userId: string): DashboardState | null {
   const cache = caches.get(userId);
   if (!cache) return null;
   return { ...cache, pomodoro: getPomodoroState(userId) };
+}
+
+export function dropCache(userId: string): void {
+  caches.delete(userId);
 }
 
 // Atualiza todo mundo que está cadastrado. Com o punhado de usuários que esta

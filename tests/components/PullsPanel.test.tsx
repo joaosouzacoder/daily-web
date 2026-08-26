@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import { PullsPanel } from '@/components/PullsPanel';
+import type { PullRequestItem } from '@/lib/types';
 
 beforeEach(() => {
   vi.spyOn(global, 'fetch').mockResolvedValue(
@@ -13,30 +14,67 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+function pull(over: Partial<PullRequestItem>): PullRequestItem {
+  return {
+    repo: 'joao/daily-web',
+    number: 3,
+    title: 'Arrumar o build',
+    url: 'https://github.com/joao/daily-web/pull/3',
+    author: 'joao',
+    draft: false,
+    awaitingYou: false,
+    updatedAt: '2026-08-26T10:00:00Z',
+    ...over,
+  };
+}
+
 describe('PullsPanel', () => {
-  it('renderiza cada linha do digest e transforma URLs em links', () => {
+  it('lista cada PR com link para o GitHub', () => {
+    render(<PullsPanel pulls={{ data: { items: [pull({})], errors: [] }, error: null }} />);
+    const link = screen.getByRole('link', { name: 'Arrumar o build' });
+    expect(link).toHaveAttribute('href', 'https://github.com/joao/daily-web/pull/3');
+    expect(screen.getByText('joao/daily-web#3')).toBeInTheDocument();
+  });
+
+  it('marca o PR que está esperando a sua revisão', () => {
+    render(
+      <PullsPanel
+        pulls={{ data: { items: [pull({ awaitingYou: true })], errors: [] }, error: null }}
+      />,
+    );
+    expect(screen.getByText('revisar')).toBeInTheDocument();
+  });
+
+  it('marca rascunho', () => {
+    render(<PullsPanel pulls={{ data: { items: [pull({ draft: true })], errors: [] }, error: null }} />);
+    expect(screen.getByText('rascunho')).toBeInTheDocument();
+  });
+
+  // Um repositório renomeado falha sozinho; os PRs dos outros continuam na
+  // tela em vez de sumirem junto com ele.
+  it('mostra o erro de um repositório sem esconder os PRs que vieram', () => {
     render(
       <PullsPanel
         pulls={{
-          data: { lines: ['daily-web', 'PR #3 https://github.com/joaosouzacoder/daily-web/pull/3'] },
+          data: { items: [pull({})], errors: ['joao/antigo: GitHub respondeu 404'] },
           error: null,
         }}
       />,
     );
-    const link = screen.getByRole('link');
-    expect(link).toHaveAttribute('href', 'https://github.com/joaosouzacoder/daily-web/pull/3');
+    expect(screen.getByText('Arrumar o build')).toBeInTheDocument();
+    expect(screen.getByRole('alert').textContent).toContain('404');
   });
 
   it('mostra o erro do painel quando presente', () => {
-    render(<PullsPanel pulls={{ data: { lines: [] }, error: 'ghpending falhou: sem token' }} />);
-    expect(screen.getByRole('alert').textContent).toContain('sem token');
+    render(<PullsPanel pulls={{ data: { items: [], errors: [] }, error: 'o GitHub recusou o token' }} />);
+    expect(screen.getByRole('alert').textContent).toContain('recusou o token');
   });
 
-  it('busca e lista os repositórios rastreados ao montar', async () => {
+  it('busca e lista os repositórios acompanhados ao montar', async () => {
     vi.mocked(global.fetch).mockResolvedValue(
       new Response(JSON.stringify({ repos: ['joaosouzacoder/daily-web'] }), { status: 200 }),
     );
-    render(<PullsPanel pulls={{ data: { lines: [] }, error: null }} />);
+    render(<PullsPanel pulls={{ data: { items: [], errors: [] }, error: null }} />);
     await waitFor(() => expect(screen.getByText('joaosouzacoder/daily-web')).toBeInTheDocument());
   });
 
@@ -45,7 +83,7 @@ describe('PullsPanel', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ repos: [] }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ repos: ['a/b'] }), { status: 200 }));
     const onChanged = vi.fn();
-    render(<PullsPanel pulls={{ data: { lines: [] }, error: null }} onChanged={onChanged} />);
+    render(<PullsPanel pulls={{ data: { items: [], errors: [] }, error: null }} onChanged={onChanged} />);
     fireEvent.change(screen.getByLabelText('novo repositório'), { target: { value: 'a/b' } });
     fireEvent.click(screen.getByText('Adicionar'));
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
@@ -59,7 +97,7 @@ describe('PullsPanel', () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce(new Response(JSON.stringify({ repos: [] }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'repositório inválido' }), { status: 400 }));
-    render(<PullsPanel pulls={{ data: { lines: [] }, error: null }} />);
+    render(<PullsPanel pulls={{ data: { items: [], errors: [] }, error: null }} />);
     fireEvent.change(screen.getByLabelText('novo repositório'), { target: { value: '-x' } });
     fireEvent.click(screen.getByText('Adicionar'));
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('repositório inválido'));
@@ -70,7 +108,7 @@ describe('PullsPanel', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ repos: ['a/b'] }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ repos: [] }), { status: 200 }));
     const onChanged = vi.fn();
-    render(<PullsPanel pulls={{ data: { lines: [] }, error: null }} onChanged={onChanged} />);
+    render(<PullsPanel pulls={{ data: { items: [], errors: [] }, error: null }} onChanged={onChanged} />);
     await waitFor(() => expect(screen.getByText('a/b')).toBeInTheDocument());
     fireEvent.click(screen.getByLabelText('remover a/b'));
     await waitFor(() => expect(onChanged).toHaveBeenCalled());

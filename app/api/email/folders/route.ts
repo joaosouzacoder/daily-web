@@ -1,16 +1,15 @@
-import { NextResponse } from 'next/server';
-import { listFolders } from '@/lib/cli/himalaya';
-import type { Account } from '@/lib/types';
+import { NextRequest, NextResponse } from 'next/server';
+import { listFolders } from '@/lib/integrations/imap';
+import { requireConnection, upstreamError } from '@/lib/api/context';
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   const account = new URL(request.url).searchParams.get('account');
-  if (account !== 'work' && account !== 'personal') {
-    return NextResponse.json({ error: 'conta inválida' }, { status: 400 });
-  }
+  const guard = await requireConnection('email', account);
+  if (!guard.ok) return guard.response;
+
   try {
-    const folders = await listFolders(account as Account);
-    return NextResponse.json({ folders });
+    return NextResponse.json({ folders: await listFolders(guard.value.connection) });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 502 });
+    return upstreamError(err);
   }
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Label, Trash } from 'iconoir-react';
-import type { Account, EmailEnvelope, PanelResult } from '@/lib/types';
+import type { Account, EmailEnvelope, MailboxRef, PanelResult } from '@/lib/types';
 import type { ActiveFilter } from '@/lib/filters';
 import { matchesQuery, relativeTime } from '@/lib/filters';
 import { Section } from './ui/Section';
@@ -15,6 +15,8 @@ import { SkeletonRows } from './ui/Skeleton';
 
 interface Props {
   email: PanelResult<EmailEnvelope[]>;
+  /** Caixas cadastradas pelo usuário: são elas que viram os chips de filtro. */
+  mailboxes: MailboxRef[];
   onChanged: () => void;
   loading?: boolean;
 }
@@ -27,7 +29,9 @@ interface BatchTargetResult {
 }
 
 type Sort = 'recent' | 'oldest';
-type AccountFilter = 'all' | 'work' | 'personal';
+// Era 'work' | 'personal'. Agora é o id de uma caixa cadastrada — quantas a
+// pessoa quiser, com o nome que ela deu.
+type AccountFilter = 'all' | string;
 
 function key(m: EmailEnvelope): string {
   return `${m.account}:${m.id}`;
@@ -59,7 +63,7 @@ async function postBatch(
   return (data.results ?? []) as BatchTargetResult[];
 }
 
-export function EmailPanel({ email, onChanged, loading = false }: Props) {
+export function EmailPanel({ email, mailboxes, onChanged, loading = false }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [tagMenuKey, setTagMenuKey] = useState<string | null>(null);
@@ -146,7 +150,7 @@ export function EmailPanel({ email, onChanged, loading = false }: Props) {
     ...(query.trim() ? [{ id: 'query', label: `Busca: ${query.trim()}` }] : []),
     ...(onlyUnread ? [{ id: 'unread', label: 'Não lidos' }] : []),
     ...(account !== 'all'
-      ? [{ id: 'account', label: account === 'work' ? 'Trabalho' : 'Pessoal' }]
+      ? [{ id: 'account', label: mailboxes.find((b) => b.id === account)?.label ?? account }]
       : []),
   ];
 
@@ -283,15 +287,17 @@ export function EmailPanel({ email, onChanged, loading = false }: Props) {
         <Chip active={onlyUnread} onClick={() => setOnlyUnread((v) => !v)}>
           Não lidos
         </Chip>
-        <Chip active={account === 'work'} onClick={() => setAccount(account === 'work' ? 'all' : 'work')}>
-          Trabalho
-        </Chip>
-        <Chip
-          active={account === 'personal'}
-          onClick={() => setAccount(account === 'personal' ? 'all' : 'personal')}
-        >
-          Pessoal
-        </Chip>
+        {/* Uma caixa só não precisa de filtro por caixa. */}
+        {mailboxes.length > 1 &&
+          mailboxes.map((box) => (
+            <Chip
+              key={box.id}
+              active={account === box.id}
+              onClick={() => setAccount(account === box.id ? 'all' : box.id)}
+            >
+              {box.label}
+            </Chip>
+          ))}
         <select
           className="field"
           aria-label="ordenar e-mails"
@@ -352,7 +358,7 @@ export function EmailPanel({ email, onChanged, loading = false }: Props) {
                     <span className="row-meta">{m.from}</span>
                   </button>
                   <span className="row-time mono">{relativeTime(m.date)}</span>
-                  <span className="row-tag mono">{m.account === 'work' ? 'W' : 'P'}</span>
+                  {mailboxes.length > 1 && <span className="row-tag">{m.accountLabel}</span>}
                   <div className="row-actions">
                     <div className="row-tagger">
                       <button

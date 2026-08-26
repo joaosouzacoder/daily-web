@@ -44,37 +44,86 @@ function seedLegacyDatabase(): string {
   return 'u-joao';
 }
 
+// Uma credencial como ela era guardada entre o estágio 2 e o multiusuário
+// completo: uma linha por provedor.
+function seedLegacyCredential(userId: string, provider: string, ciphertext: string): void {
+  const legacy = new Database(dbFile);
+  legacy.exec(`
+    CREATE TABLE IF NOT EXISTS credentials (
+      user_id TEXT NOT NULL, provider TEXT NOT NULL, ciphertext TEXT NOT NULL,
+      updated_at TEXT NOT NULL, PRIMARY KEY (user_id, provider)
+    );
+  `);
+  legacy
+    .prepare('INSERT INTO credentials VALUES (?,?,?,?)')
+    .run(userId, provider, ciphertext, '2026-01-02');
+  legacy.close();
+}
+
 describe('migração para escopo por usuário', () => {
-  it('preserva o cache e as notificações lidas, atribuindo ao primeiro admin', async () => {
+  it('preserva as notificações lidas, atribuindo ao primeiro admin', async () => {
     const owner = seedLegacyDatabase();
     const { getDb } = await import('@/lib/db');
-    const db = getDb();
 
-    const body = db.prepare('SELECT user_id, body FROM email_bodies').get() as { user_id: string; body: string };
-    expect(body).toEqual({ user_id: owner, body: 'corpo antigo' });
-
-    const read = db.prepare('SELECT user_id, external_id FROM notifications_read').get() as { user_id: string };
+    const read = getDb()
+      .prepare('SELECT user_id, external_id FROM notifications_read')
+      .get() as { user_id: string };
     expect(read.user_id).toBe(owner);
   });
 
-  it('cria a tabela de credenciais', async () => {
+  // As caixas deixaram de ser 'work'/'personal' e viraram conexões com id
+  // próprio: um corpo indexado pelo nome antigo não pertence a conexão
+  // nenhuma. Descartar é mais barato do que adivinhar — o cache se refaz no
+  // primeiro ciclo do refresher.
+  it('descarta o cache de e-mail preso aos nomes de conta antigos', async () => {
     seedLegacyDatabase();
     const { getDb } = await import('@/lib/db');
-    const cols = getDb().prepare('PRAGMA table_info(credentials)').all() as { name: string }[];
-    expect(cols.map((c) => c.name)).toEqual(['user_id', 'provider', 'ciphertext', 'updated_at']);
+    const count = getDb().prepare('SELECT count(*) c FROM email_bodies').get() as { c: number };
+    expect(count.c).toBe(0);
+  });
+
+  it('cria as tabelas de conexões e de módulos', async () => {
+    seedLegacyDatabase();
+    const { getDb } = await import('@/lib/db');
+    const conn = getDb().prepare('PRAGMA table_info(connections)').all() as { name: string }[];
+    expect(conn.map((c) => c.name)).toEqual([
+      'id',
+      'user_id',
+      'module',
+      'label',
+      'ciphertext',
+      'created_at',
+      'updated_at',
+    ]);
+    const mods = getDb().prepare('PRAGMA table_info(module_settings)').all() as { name: string }[];
+    expect(mods.map((c) => c.name)).toEqual(['user_id', 'module', 'enabled', 'updated_at']);
+  });
+
+  it('leva a credencial antiga para a conexão do módulo correspondente', async () => {
+    const owner = seedLegacyDatabase();
+    seedLegacyCredential(owner, 'github', 'cifrado-github');
+
+    const { getDb } = await import('@/lib/db');
+    const row = getDb()
+      .prepare('SELECT module, ciphertext FROM connections WHERE user_id = ?')
+      .get(owner) as { module: string; ciphertext: string };
+    // O ciphertext é copiado sem ser aberto: a migração roda na subida,
+    // quando a chave pode nem estar no ambiente.
+    expect(row).toEqual({ module: 'pulls', ciphertext: 'cifrado-github' });
   });
 
   it('roda uma vez só — reabrir não duplica nem apaga dados', async () => {
-    seedLegacyDatabase();
+    const owner = seedLegacyDatabase();
+    seedLegacyCredential(owner, 'jira', 'cifrado-jira');
     const { getDb } = await import('@/lib/db');
-    getDb();
     const version = getDb().pragma('user_version', { simple: true });
 
     vi.resetModules();
     const again = await import('@/lib/db');
     const db = again.getDb();
     expect(db.pragma('user_version', { simple: true })).toBe(version);
-    expect((db.prepare('SELECT count(*) c FROM email_bodies').get() as { c: number }).c).toBe(1);
+    expect((db.prepare('SELECT count(*) c FROM connections').get() as { c: number }).c).toBe(1);
+    expect((db.prepare('SELECT count(*) c FROM notifications_read').get() as { c: number }).c).toBe(1);
   });
 
   it('banco novo já nasce migrado', async () => {

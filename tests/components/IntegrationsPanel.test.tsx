@@ -1,32 +1,57 @@
-import { describe, expect, it, vi, afterEach } from 'vitest';
-import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
+import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
+import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
 import { IntegrationsPanel } from '@/components/IntegrationsPanel';
 
-const payload = {
-  vaultReady: true,
-  inheritsMachineEnv: false,
-  fields: {
-    jira: [
-      { name: 'cloud', label: 'Domínio Jira Cloud', secret: false },
-      { name: 'token', label: 'API token', secret: true },
-    ],
-    github: [{ name: 'token', label: 'Personal access token', secret: true }],
-    mstodo: [{ name: 'clientId', label: 'Application (client) ID', secret: false }],
-  },
-  credentials: [
-    { provider: 'jira', configured: true, updatedAt: '2026-08-26T00:00:00Z', visible: { cloud: 'acme' } },
-    { provider: 'github', configured: false, updatedAt: null, visible: {} },
-    { provider: 'mstodo', configured: false, updatedAt: null, visible: {} },
-  ],
-};
-
-function mockFetch(over: (url: string, init?: RequestInit) => Response | null = () => null, base = payload) {
-  vi.spyOn(global, 'fetch').mockImplementation(async (input, init) => {
-    const custom = over(String(input), init as RequestInit);
-    if (custom) return custom;
-    return new Response(JSON.stringify(base));
-  });
+interface ModuleFixture {
+  module: string;
+  label: string;
+  summary: string;
+  multi: boolean;
+  enabled: boolean;
+  configured: boolean;
+  connections: unknown[];
 }
+
+function mod(over: Partial<ModuleFixture>): ModuleFixture {
+  return {
+    module: 'email',
+    label: 'E-mail',
+    summary: 'Caixa de entrada',
+    multi: true,
+    enabled: false,
+    configured: false,
+    connections: [],
+    ...over,
+  };
+}
+
+const EMPTY_MODULES = [
+  mod({ module: 'email', label: 'E-mail', multi: true }),
+  mod({ module: 'agenda', label: 'Agenda', multi: true }),
+  mod({ module: 'jira', label: 'Jira', multi: false }),
+  mod({ module: 'pulls', label: 'Pull requests', multi: false }),
+  mod({ module: 'tasks', label: 'Tarefas', multi: false, enabled: true }),
+];
+
+function payload(over: Record<string, unknown> = {}) {
+  return {
+    vaultReady: true,
+    mstodoAvailable: false,
+    modules: EMPTY_MODULES,
+    ...over,
+  };
+}
+
+function mockFetch(handler: (url: string, init?: RequestInit) => unknown) {
+  vi.spyOn(global, 'fetch').mockImplementation(
+    async (input: RequestInfo | URL, init?: RequestInit) =>
+      new Response(JSON.stringify(handler(String(input), init))),
+  );
+}
+
+beforeEach(() => {
+  mockFetch(() => payload());
+});
 
 afterEach(() => {
   cleanup();
@@ -34,80 +59,174 @@ afterEach(() => {
 });
 
 describe('IntegrationsPanel', () => {
-  it('mostra o que está configurado e o que não está', async () => {
-    mockFetch();
+  it('lista todos os módulos, mesmo os não configurados', async () => {
     render(<IntegrationsPanel />);
-    expect(await screen.findByText('Jira')).toBeInTheDocument();
-    expect(screen.getByText(/acme/)).toBeInTheDocument();
-    expect(screen.getAllByText('não configurado')).toHaveLength(2);
+    await waitFor(() => expect(screen.getByText('E-mail')).toBeInTheDocument());
+    for (const label of ['Agenda', 'Jira', 'Pull requests', 'Tarefas']) {
+      expect(screen.getByText(label)).toBeInTheDocument();
+    }
   });
 
-  it('salva a credencial pelo formulário', async () => {
-    const puts: { url: string; body: string }[] = [];
-    mockFetch((url, init) => {
-      if (init?.method === 'PUT') {
-        puts.push({ url, body: String(init.body) });
-        return new Response(JSON.stringify({ credential: {} }));
-      }
-      return null;
-    });
+  it('avisa quando o servidor não tem chave para guardar credencial', async () => {
+    mockFetch(() => payload({ vaultReady: false }));
     render(<IntegrationsPanel />);
-    await screen.findByText('GitHub');
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toContain('DAILY_WEB_SECRET_KEY'),
+    );
+  });
 
-    // GitHub e To Do estão ambos por configurar; o primeiro botão é o do GitHub.
-    fireEvent.click(screen.getAllByRole('button', { name: 'Configurar' })[0]);
-    fireEvent.change(screen.getByLabelText('GitHub — Personal access token'), {
-      target: { value: 'ghp_token' },
+  it('mostra o passo a passo de como obter a credencial', async () => {
+    render(<IntegrationsPanel />);
+    await waitFor(() => expect(screen.getByText('Agenda')).toBeInTheDocument());
+
+    const helpButtons = screen.getAllByRole('button', { name: 'Como conseguir isso' });
+    fireEvent.click(helpButtons[1]);
+    expect(screen.getByText(/Endereço secreto no formato iCal/)).toBeInTheDocument();
+  });
+
+  // O preset é o que torna a configuração de e-mail viável para quem não sabe
+  // o host do próprio provedor.
+  it('esconde host e porta quando o provedor é conhecido e revela no manual', async () => {
+    render(<IntegrationsPanel />);
+    await waitFor(() => expect(screen.getByText('E-mail')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByRole('button', { name: 'Conectar' })[0]);
+
+    expect(screen.queryByLabelText(/Servidor IMAP/)).toBeNull();
+
+    fireEvent.change(screen.getByLabelText(/Provedor/), { target: { value: 'custom' } });
+    expect(screen.getByLabelText(/Servidor IMAP/)).toBeInTheDocument();
+  });
+
+  it('grava a conexão nova no módulo certo', async () => {
+    const calls: { url: string; body: unknown }[] = [];
+    mockFetch((url, init) => {
+      if (init?.method === 'POST') {
+        calls.push({ url, body: JSON.parse(String(init.body)) });
+        return { modules: EMPTY_MODULES };
+      }
+      return payload();
+    });
+
+    render(<IntegrationsPanel />);
+    await waitFor(() => expect(screen.getByText('Agenda')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByRole('button', { name: 'Conectar' })[1]);
+
+    fireEvent.change(screen.getByLabelText('Nome desta conexão'), {
+      target: { value: 'Pessoal' },
+    });
+    fireEvent.change(screen.getByLabelText(/URL do iCal/), {
+      target: { value: 'https://exemplo/a.ics' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
 
-    await waitFor(() => expect(puts).toHaveLength(1));
-    expect(puts[0].url).toBe('/api/credentials/github');
-    expect(JSON.parse(puts[0].body)).toEqual({ values: { token: 'ghp_token' } });
-  });
-
-  // O campo secreto nunca vem do servidor; abrir "Editar" não pode revelá-lo.
-  it('não preenche o campo secreto ao editar uma credencial existente', async () => {
-    mockFetch();
-    render(<IntegrationsPanel />);
-    await screen.findByText('Jira');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
-    expect(screen.getByLabelText('Jira — Domínio Jira Cloud')).toHaveValue('acme');
-    expect(screen.getByLabelText('Jira — API token')).toHaveValue('');
-  });
-
-  it('remove a credencial depois de confirmar', async () => {
-    const deleted: string[] = [];
-    mockFetch((url, init) => {
-      if (init?.method === 'DELETE') {
-        deleted.push(url);
-        return new Response(JSON.stringify({ ok: true }));
-      }
-      return null;
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0].url).toBe('/api/integrations/agenda/connections');
+    expect(calls[0].body).toEqual({
+      label: 'Pessoal',
+      values: { icsUrl: 'https://exemplo/a.ics' },
     });
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
-    render(<IntegrationsPanel />);
-    await screen.findByText('Jira');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Remover' }));
-    await waitFor(() => expect(deleted).toEqual(['/api/credentials/jira']));
   });
 
-  it('avisa e bloqueia o salvamento quando falta a chave do cofre', async () => {
-    mockFetch(() => null, { ...payload, vaultReady: false });
-    render(<IntegrationsPanel />);
-    expect(await screen.findByText(/DAILY_WEB_SECRET_KEY/)).toBeInTheDocument();
+  it('liga e desliga o módulo', async () => {
+    const calls: { url: string; body: unknown }[] = [];
+    mockFetch((url, init) => {
+      if (init?.method === 'PATCH') {
+        calls.push({ url, body: JSON.parse(String(init.body)) });
+        return { modules: EMPTY_MODULES };
+      }
+      return payload();
+    });
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Configurar' })[0]);
-    expect(screen.getByRole('button', { name: 'Salvar' })).toBeDisabled();
+    render(<IntegrationsPanel />);
+    await waitFor(() => expect(screen.getByText('Jira')).toBeInTheDocument());
+    fireEvent.click(screen.getByLabelText('ligar Jira'));
+
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0].url).toBe('/api/integrations/jira');
+    expect(calls[0].body).toEqual({ enabled: true });
   });
 
-  // O dono da máquina herda o env do serviço; dizer "não configurado" para ele
-  // sugeriria que o painel está quebrado quando não está.
-  it('diz ao dono da máquina que ele está usando a configuração do serviço', async () => {
-    mockFetch(() => null, { ...payload, inheritsMachineEnv: true });
+  it('mostra o resultado do teste de conexão sem tratar falha como erro da app', async () => {
+    const configured = EMPTY_MODULES.map((m) =>
+      m.module === 'jira'
+        ? {
+            ...m,
+            enabled: true,
+            configured: true,
+            connections: [
+              {
+                id: 'jira-1',
+                module: 'jira',
+                label: 'Jira',
+                visible: { cloud: 'acme' },
+                secretsSet: ['token'],
+                updatedAt: '2026-08-26',
+                unreadable: false,
+              },
+            ],
+          }
+        : m,
+    );
+    mockFetch((url, init) => {
+      if (init?.method === 'POST' && url.endsWith('/test')) {
+        return { ok: false, message: 'Jira recusou o e-mail ou o API token' };
+      }
+      return payload({ modules: configured });
+    });
+
     render(<IntegrationsPanel />);
-    expect(await screen.findAllByText('usando a configuração da máquina')).toHaveLength(2);
+    await waitFor(() => expect(screen.getByText('acme')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Testar' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('status').textContent).toContain('recusou o e-mail'),
+    );
+  });
+
+  // O segredo nunca volta do servidor; o campo precisa dizer que existe algo
+  // guardado, senão quem edita o rótulo acha que apagou o token.
+  it('avisa que o segredo está guardado ao editar', async () => {
+    const configured = EMPTY_MODULES.map((m) =>
+      m.module === 'jira'
+        ? {
+            ...m,
+            configured: true,
+            connections: [
+              {
+                id: 'jira-1',
+                module: 'jira',
+                label: 'Jira',
+                visible: { cloud: 'acme', email: 'a@x.com' },
+                secretsSet: ['token'],
+                updatedAt: '2026-08-26',
+                unreadable: false,
+              },
+            ],
+          }
+        : m,
+    );
+    mockFetch(() => payload({ modules: configured }));
+
+    render(<IntegrationsPanel />);
+    await waitFor(() => expect(screen.getByText('acme')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+
+    expect(screen.getByLabelText(/API token/)).toHaveAttribute(
+      'placeholder',
+      expect.stringContaining('guardado'),
+    );
+  });
+
+  it('não oferece o Microsoft To Do quando a CLI não está instalada', async () => {
+    render(<IntegrationsPanel />);
+    await waitFor(() => expect(screen.getByText('Tarefas')).toBeInTheDocument());
+
+    // Pelo cartão, não pelo índice: a posição muda quando um módulo entra.
+    const card = screen.getByText('Tarefas').closest('article') as HTMLElement;
+    fireEvent.click(within(card).getByRole('button', { name: 'Conectar' }));
+
+    const select = within(card).getByLabelText(/Onde guardar/) as HTMLSelectElement;
+    const values = Array.from(select.options).map((o) => o.value);
+    expect(values).toEqual(['local']);
   });
 });

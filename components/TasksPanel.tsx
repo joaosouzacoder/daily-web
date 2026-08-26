@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { NavArrowRight } from 'iconoir-react';
 import type { PanelResult, TaskPriority, TodoTask } from '@/lib/types';
 import type { ActiveFilter } from '@/lib/filters';
 import { matchesQuery } from '@/lib/filters';
@@ -154,6 +155,25 @@ export function TasksPanel({ tasks, onChanged, loading = false }: Props) {
   // Concluída é ruído no dia a dia: some por padrão e só volta se pedirem.
   const [showCompleted, setShowCompleted] = useState(false);
   const [addingSubtaskFor, setAddingSubtaskFor] = useState<string | null>(null);
+  // Subtarefa é detalhe da tarefa pai: fica recolhida até alguém pedir para
+  // ver. Sem isso, uma lista com dez tarefas de três etapas vira quarenta
+  // linhas e a lista principal deixa de ser legível de relance.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const toggleExpanded = (id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  // Quem clica no "+" quer ver o campo — e o que já existe ali junto.
+  const startAddingSubtask = (id: string) => {
+    setAddingSubtaskFor((cur) => (cur === id ? null : id));
+    setExpanded((prev) => new Set(prev).add(id));
+  };
 
   const all = useMemo(() => tasks.data ?? [], [tasks.data]);
 
@@ -287,14 +307,27 @@ export function TasksPanel({ tasks, onChanged, loading = false }: Props) {
             {group.tasks.map((task) => (
               <li key={task.id} className="task-item">
                 <div className={`row task-row${task.completed ? ' is-done' : ''}`}>
+                  {/* A seta só existe onde há o que revelar. Numa tarefa sem
+                      subtarefa ela seria um controle que não faz nada. */}
+                  {task.subtasks.length > 0 ? (
+                    <button
+                      type="button"
+                      className="subtask-caret"
+                      aria-label={`${expanded.has(task.id) ? 'recolher' : 'expandir'} subtarefas de ${task.title}`}
+                      aria-expanded={expanded.has(task.id)}
+                      onClick={() => toggleExpanded(task.id)}
+                    >
+                      <NavArrowRight width={14} height={14} />
+                    </button>
+                  ) : (
+                    <span className="subtask-caret is-empty" aria-hidden="true" />
+                  )}
                   <button
                     type="button"
                     className="subtask-toggle"
                     aria-label={`adicionar subtarefa em ${task.title}`}
                     aria-expanded={addingSubtaskFor === task.id}
-                    onClick={() =>
-                      setAddingSubtaskFor((cur) => (cur === task.id ? null : task.id))
-                    }
+                    onClick={() => startAddingSubtask(task.id)}
                   >
                     +
                   </button>
@@ -323,6 +356,9 @@ export function TasksPanel({ tasks, onChanged, loading = false }: Props) {
                       {task.subtasks.filter((s) => s.completed).length}/{task.subtasks.length}
                     </span>
                   )}
+                  {/* O contador acima é o que faz a subtarefa escondida ainda
+                      ser visível como informação: dá para ver que existe e
+                      quanto falta sem abrir. */}
                   <button
                     type="button"
                     className="btn btn-ghost btn-danger"
@@ -332,7 +368,7 @@ export function TasksPanel({ tasks, onChanged, loading = false }: Props) {
                     Apagar
                   </button>
                 </div>
-                {(task.subtasks.length > 0 || addingSubtaskFor === task.id) && (
+                {(expanded.has(task.id) || addingSubtaskFor === task.id) && (
                   <SubtaskList
                     task={task}
                     onChanged={onChanged}

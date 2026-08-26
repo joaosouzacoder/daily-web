@@ -1,23 +1,43 @@
-export type Account = 'work' | 'personal';
+// Uma conta era 'work' ou 'personal' — dois valores fixos, os do dono da
+// máquina. Agora é o id de uma conexão cadastrada, então o tipo é o rótulo que
+// acompanha o dado, não uma enumeração no código.
+export type Account = string;
 
 export interface EmailEnvelope {
   id: string;
   account: Account;
+  accountLabel: string;
   from: string;
   subject: string;
   unread: boolean;
   date: string;
+  messageId: string;
 }
 
 export interface AgendaItem {
   account: Account;
+  accountLabel: string;
   date: string;
   time: string;
   title: string;
 }
 
+export interface PullRequestItem {
+  repo: string;
+  number: number;
+  title: string;
+  url: string;
+  author: string;
+  draft: boolean;
+  /** Pediram a sua revisão. */
+  awaitingYou: boolean;
+  updatedAt: string;
+}
+
 export interface PullsDigest {
-  lines: string[];
+  items: PullRequestItem[];
+  /** Repositórios que falharam sozinhos, sem derrubar os outros. */
+  errors: string[];
 }
 
 export type JiraRole = 'assignee' | 'reporter' | 'both';
@@ -86,8 +106,17 @@ export interface PanelResult<T> {
   error: string | null;
 }
 
+export interface MailboxRef {
+  id: string;
+  label: string;
+}
+
 export interface DashboardState {
   updatedAt: string;
+  /** Módulos que este usuário ligou. O painel só desenha o que está aqui. */
+  modules: string[];
+  /** Caixas de e-mail do usuário, para os filtros e o envio de resposta. */
+  mailboxes: MailboxRef[];
   email: PanelResult<EmailEnvelope[]>;
   agenda: PanelResult<AgendaItem[]>;
   pulls: PanelResult<PullsDigest>;

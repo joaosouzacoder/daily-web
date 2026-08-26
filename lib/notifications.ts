@@ -1,5 +1,6 @@
 import { getDb } from './db';
-import { fetchMentions } from './cli/jira';
+import { fetchMentions } from './integrations/jiraApi';
+import type { Connection } from './vault/connections';
 import type { NotificationItem } from '@/lib/types';
 
 export function isRead(userId: string, source: string, externalId: string): boolean {
@@ -18,8 +19,11 @@ export function markRead(userId: string, source: string, externalId: string): vo
     .run(userId, source, externalId, new Date().toISOString());
 }
 
-export async function getNotifications(userId: string): Promise<NotificationItem[]> {
-  const mentions = await fetchMentions(userId);
+export async function getNotifications(
+  userId: string,
+  connection: Connection,
+): Promise<NotificationItem[]> {
+  const mentions = await fetchMentions(connection);
   return mentions.map((issue) => ({
     id: issue.key,
     source: 'jira_mention' as const,

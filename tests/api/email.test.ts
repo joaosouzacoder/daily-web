@@ -1,186 +1,206 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
+import { NextRequest } from 'next/server';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
-// As rotas resolvem o usuário pelo cookie; aqui basta um usuário fixo para o
-// teste focar no que ele mede.
-vi.mock('@/lib/auth/currentUser', () => ({
-  getCurrentUser: vi.fn(async () => ({
-    id: 'u-1', username: 'joao', passwordHash: 'x', isAdmin: true, createdAt: '2026-01-01',
-  })),
-}));
-
-vi.mock('@/lib/cli/himalaya', () => ({
+vi.mock('@/lib/integrations/imap', () => ({
   setSeen: vi.fn(),
-  moveTo: vi.fn(),
+  applyTag: vi.fn(),
   deleteEmail: vi.fn(),
   listFolders: vi.fn(),
-  fetchBody: vi.fn(),
-  gmailUrl: vi.fn(),
   sendReply: vi.fn(),
+  fetchBody: vi.fn(),
 }));
 
-vi.mock('@/lib/emailCache', () => ({
-  getCachedBody: vi.fn(() => 'corpo do e-mail'),
-  putCachedBody: vi.fn(),
-}));
+const currentUser = vi.fn();
+vi.mock('@/lib/auth/currentUser', () => ({ getCurrentUser: () => currentUser() }));
 
-vi.mock('@/lib/ai/replyDraft', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/ai/replyDraft')>('@/lib/ai/replyDraft');
-  return { ...actual, draftReply: vi.fn(async () => 'rascunho gerado') };
-});
-
-import { setSeen, moveTo, deleteEmail, listFolders, sendReply } from '@/lib/cli/himalaya';
-import { draftReply, MissingApiKeyError } from '@/lib/ai/replyDraft';
-import { POST as replyRoute } from '@/app/api/email/reply/route';
-import { POST as draftRoute } from '@/app/api/email/reply/draft/route';
+import { setSeen, applyTag, deleteEmail, listFolders, sendReply } from '@/lib/integrations/imap';
 import { POST as markRoute } from '@/app/api/email/mark/route';
 import { POST as batchRoute } from '@/app/api/email/batch/route';
 import { GET as foldersRoute } from '@/app/api/email/folders/route';
+import { POST as tagRoute } from '@/app/api/email/tag/route';
+import { POST as replyRoute } from '@/app/api/email/reply/route';
 
-beforeEach(() => vi.clearAllMocks());
+let dir: string;
+let mailId: string;
+let otherMailId: string;
 
-function jsonRequest(body: unknown): Request {
-  return new Request('http://localhost/api', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
+const ME = { id: 'u-1', username: 'joao', passwordHash: 'x', isAdmin: true, createdAt: '' };
+const SOMEONE_ELSE = { id: 'u-2', username: 'maria', passwordHash: 'x', isAdmin: false, createdAt: '' };
+
+function req(body: unknown): NextRequest {
+  return new NextRequest('http://localhost/api', { method: 'POST', body: JSON.stringify(body) });
 }
 
+beforeEach(async () => {
+  dir = mkdtempSync(path.join(tmpdir(), 'daily-web-email-api-'));
+  process.env.DAILY_WEB_DB_PATH = path.join(dir, 'test.db');
+  process.env.DAILY_WEB_SECRET_KEY = Buffer.alloc(32, 5).toString('base64');
+  vi.clearAllMocks();
+  currentUser.mockResolvedValue(ME);
+
+  const { getDb } = await import('@/lib/db');
+  getDb();
+  const { saveConnection } = await import('@/lib/vault/connections');
+  mailId = saveConnection(ME.id, 'email', 'Trabalho', {
+    preset: 'gmail',
+    user: 'a@x.com',
+    password: 's',
+  });
+  otherMailId = saveConnection(SOMEONE_ELSE.id, 'email', 'Dela', {
+    preset: 'gmail',
+    user: 'b@x.com',
+    password: 's',
+  });
+});
+
+afterEach(() => {
+  rmSync(dir, { recursive: true, force: true });
+});
+
 describe('POST /api/email/mark', () => {
-  it('chama setSeen com os dados do corpo', async () => {
-    await markRoute(jsonRequest({ account: 'work', id: '1', seen: true }));
-    expect(setSeen).toHaveBeenCalledWith('work', '1', true);
-  });
-});
-
-describe('POST /api/email/batch', () => {
-  it('marca lido em lote', async () => {
-    await batchRoute(jsonRequest({ targets: [{ account: 'work', id: '1' }, { account: 'personal', id: '2' }], action: 'read' }));
-    expect(setSeen).toHaveBeenCalledWith('work', '1', true);
-    expect(setSeen).toHaveBeenCalledWith('personal', '2', true);
+  it('marca como lido na conexão do usuário', async () => {
+    const res = await markRoute(req({ account: mailId, id: '42', seen: true }));
+    expect(res.status).toBe(200);
+    expect(vi.mocked(setSeen).mock.calls[0][0].id).toBe(mailId);
+    expect(vi.mocked(setSeen).mock.calls[0][1]).toBe('42');
   });
 
-  it('exclui em lote', async () => {
-    await batchRoute(jsonRequest({ targets: [{ account: 'work', id: '1' }], action: 'delete' }));
-    expect(deleteEmail).toHaveBeenCalledWith('work', '1');
-  });
-
-  it('mover sem pasta devolve 400', async () => {
-    const res = await batchRoute(jsonRequest({ targets: [{ account: 'work', id: '1' }], action: 'move' }));
-    expect(res.status).toBe(400);
-    expect(moveTo).not.toHaveBeenCalled();
-  });
-
-  it('mover com pasta chama moveTo', async () => {
-    await batchRoute(jsonRequest({ targets: [{ account: 'work', id: '1' }], action: 'move', folder: 'Arquivo' }));
-    expect(moveTo).toHaveBeenCalledWith('work', '1', 'Arquivo');
-  });
-
-  it('pasta inválida ao mover devolve 400', async () => {
-    const res = await batchRoute(jsonRequest({ targets: [{ account: 'work', id: '1' }], action: 'move', folder: '-rf' }));
-    expect(res.status).toBe(400);
-    expect(moveTo).not.toHaveBeenCalled();
-  });
-
-  it('ação desconhecida devolve ok:false por item, em vez de reportar sucesso silencioso', async () => {
-    const res = await batchRoute(
-      jsonRequest({ targets: [{ account: 'work', id: '1' }], action: 'arquivar' }),
-    );
-    const data = await res.json();
-    expect(data.results).toEqual([{ account: 'work', id: '1', ok: false, error: 'ação inválida' }]);
-    expect(setSeen).not.toHaveBeenCalled();
-    expect(deleteEmail).not.toHaveBeenCalled();
-    expect(moveTo).not.toHaveBeenCalled();
-  });
-
-  it('falha em um alvo não impede os demais e reporta resultado por item', async () => {
-    vi.mocked(setSeen).mockImplementation(async (_account, id) => {
-      if (id === 'fail') throw new Error('cli error');
-    });
-    const res = await batchRoute(jsonRequest({
-      targets: [{ account: 'work', id: '1' }, { account: 'work', id: 'fail' }, { account: 'personal', id: '2' }],
-      action: 'read',
-    }));
-    const data = await res.json();
-    expect(setSeen).toHaveBeenCalledWith('work', '1', true);
-    expect(setSeen).toHaveBeenCalledWith('work', 'fail', true);
-    expect(setSeen).toHaveBeenCalledWith('personal', '2', true);
-    expect(data.results).toEqual([
-      { account: 'work', id: '1', ok: true },
-      { account: 'work', id: 'fail', ok: false, error: 'cli error' },
-      { account: 'personal', id: '2', ok: true },
-    ]);
-  });
-});
-
-describe('validação de entrada', () => {
-  it('conta inválida no /mark devolve 400', async () => {
-    const res = await markRoute(jsonRequest({ account: 'invalida', id: '1', seen: true }));
+  it('rejeita id fora do formato sem tocar no IMAP', async () => {
+    const res = await markRoute(req({ account: mailId, id: '../x', seen: true }));
     expect(res.status).toBe(400);
     expect(setSeen).not.toHaveBeenCalled();
   });
 
-  it('id com traço inicial no /mark devolve 400', async () => {
-    const res = await markRoute(jsonRequest({ account: 'work', id: '-rf', seen: true }));
-    expect(res.status).toBe(400);
+  // O isolamento não é "proibido": a conexão de outra pessoa simplesmente
+  // não existe para esta sessão.
+  it('não deixa usar a caixa de outro usuário', async () => {
+    const res = await markRoute(req({ account: otherMailId, id: '42', seen: true }));
+    expect(res.status).toBe(404);
+    expect(setSeen).not.toHaveBeenCalled();
+  });
+
+  it('exige sessão', async () => {
+    currentUser.mockResolvedValue(null);
+    const res = await markRoute(req({ account: mailId, id: '42', seen: true }));
+    expect(res.status).toBe(401);
     expect(setSeen).not.toHaveBeenCalled();
   });
 });
 
 describe('GET /api/email/folders', () => {
-  it('conta inválida devolve 400', async () => {
-    const res = await foldersRoute(new Request('http://localhost/api/email/folders?account=invalida'));
-    expect(res.status).toBe(400);
-    expect(listFolders).not.toHaveBeenCalled();
+  it('lista as pastas da conexão', async () => {
+    vi.mocked(listFolders).mockResolvedValue(['INBOX', 'Clientes']);
+    const res = await foldersRoute(
+      new NextRequest(`http://localhost/api/email/folders?account=${mailId}`),
+    );
+    expect((await res.json()).folders).toEqual(['INBOX', 'Clientes']);
   });
 
-  it('conta válida devolve as pastas', async () => {
-    vi.mocked(listFolders).mockResolvedValue(['INBOX', 'Trash']);
-    const res = await foldersRoute(new Request('http://localhost/api/email/folders?account=work'));
-    const data = await res.json();
-    expect(data.folders).toEqual(['INBOX', 'Trash']);
+  it('recusa a caixa de outro usuário', async () => {
+    const res = await foldersRoute(
+      new NextRequest(`http://localhost/api/email/folders?account=${otherMailId}`),
+    );
+    expect(res.status).toBe(404);
+    expect(listFolders).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/email/tag', () => {
+  it('aplica a etiqueta', async () => {
+    const res = await tagRoute(req({ account: mailId, id: '42', tag: 'Clientes' }));
+    expect(res.status).toBe(200);
+    expect(vi.mocked(applyTag).mock.calls[0][2]).toBe('Clientes');
+  });
+
+  it('rejeita etiqueta com caractere fora do permitido', async () => {
+    const res = await tagRoute(req({ account: mailId, id: '42', tag: '../etc' }));
+    expect(res.status).toBe(400);
+    expect(applyTag).not.toHaveBeenCalled();
   });
 });
 
 describe('POST /api/email/reply', () => {
-  it('envia a resposta pelo himalaya', async () => {
-    const res = await replyRoute(jsonRequest({ account: 'work', id: '1', body: 'Confirmado.' }) as never);
+  it('envia a resposta', async () => {
+    const res = await replyRoute(req({ account: mailId, id: '42', body: 'Combinado.' }));
     expect(res.status).toBe(200);
-    expect(sendReply).toHaveBeenCalledWith('work', '1', 'Confirmado.');
+    expect(vi.mocked(sendReply).mock.calls[0][2]).toBe('Combinado.');
   });
 
-  it('resposta vazia devolve 400 sem chamar o CLI', async () => {
-    const res = await replyRoute(jsonRequest({ account: 'work', id: '1', body: '   ' }) as never);
+  it('recusa resposta vazia', async () => {
+    const res = await replyRoute(req({ account: mailId, id: '42', body: '   ' }));
     expect(res.status).toBe(400);
     expect(sendReply).not.toHaveBeenCalled();
   });
 
-  it('conta inválida devolve 400', async () => {
-    const res = await replyRoute(jsonRequest({ account: 'x', id: '1', body: 'oi' }) as never);
-    expect(res.status).toBe(400);
-    expect(sendReply).not.toHaveBeenCalled();
+  it('devolve 502 quando o SMTP falha', async () => {
+    vi.mocked(sendReply).mockRejectedValue(new Error('Trabalho: senha recusada'));
+    const res = await replyRoute(req({ account: mailId, id: '42', body: 'oi' }));
+    expect(res.status).toBe(502);
+    expect((await res.json()).error).toContain('senha recusada');
   });
 });
 
-describe('POST /api/email/reply/draft', () => {
-  it('gera o rascunho a partir do corpo em cache', async () => {
-    const res = await draftRoute(
-      jsonRequest({ account: 'work', id: '1', from: 'Milton', subject: 'PR', instruction: 'aceita' }) as never,
+describe('POST /api/email/batch', () => {
+  it('aplica a ação em cada alvo', async () => {
+    const res = await batchRoute(
+      req({
+        action: 'read',
+        targets: [
+          { account: mailId, id: '1' },
+          { account: mailId, id: '2' },
+        ],
+      }),
     );
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ text: 'rascunho gerado' });
-    expect(draftReply).toHaveBeenCalledWith({
-      from: 'Milton',
-      subject: 'PR',
-      body: 'corpo do e-mail',
-      instruction: 'aceita',
-    });
+    const data = await res.json();
+    expect(data.results.every((r: { ok: boolean }) => r.ok)).toBe(true);
+    expect(setSeen).toHaveBeenCalledTimes(2);
   });
 
-  // Sem chave a falha é de configuração, não do IMAP: 503 deixa a mensagem
-  // "ANTHROPIC_API_KEY não configurada" chegar à tela em vez de virar 502.
-  it('sem ANTHROPIC_API_KEY devolve 503', async () => {
-    vi.mocked(draftReply).mockRejectedValueOnce(new MissingApiKeyError());
-    const res = await draftRoute(jsonRequest({ account: 'work', id: '1' }) as never);
-    expect(res.status).toBe(503);
+  // Cada alvo falha por conta própria: um e-mail que já foi apagado não pode
+  // cancelar a ação sobre os outros nove.
+  it('reporta falha por alvo sem derrubar os demais', async () => {
+    vi.mocked(deleteEmail)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('sumiu'));
+
+    const res = await batchRoute(
+      req({
+        action: 'delete',
+        targets: [
+          { account: mailId, id: '1' },
+          { account: mailId, id: '2' },
+        ],
+      }),
+    );
+    const data = await res.json();
+    expect(data.results[0].ok).toBe(true);
+    expect(data.results[1]).toMatchObject({ ok: false, error: 'sumiu' });
+  });
+
+  it('marca como falha o alvo que aponta para a caixa de outro usuário', async () => {
+    const res = await batchRoute(
+      req({ action: 'read', targets: [{ account: otherMailId, id: '1' }] }),
+    );
+    const data = await res.json();
+    expect(data.results[0]).toMatchObject({ ok: false, error: 'conta não encontrada' });
+    expect(setSeen).not.toHaveBeenCalled();
+  });
+
+  it('recusa ação desconhecida', async () => {
+    const res = await batchRoute(
+      req({ action: 'apagar-tudo', targets: [{ account: mailId, id: '1' }] }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('exige pasta na ação de mover', async () => {
+    const res = await batchRoute(
+      req({ action: 'move', targets: [{ account: mailId, id: '1' }] }),
+    );
+    expect(res.status).toBe(400);
+    expect(applyTag).not.toHaveBeenCalled();
   });
 });

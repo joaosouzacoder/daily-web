@@ -1,19 +1,21 @@
 import { NextResponse } from 'next/server';
-import { fetchBody } from '@/lib/cli/himalaya';
+import { fetchBody } from '@/lib/integrations/imap';
 import { getCachedBody, putCachedBody } from '@/lib/emailCache';
-import { isValidAccount, isValidEmailId } from '@/lib/api/validation';
-import { getCurrentUser } from '@/lib/auth/currentUser';
+import { isValidEmailId } from '@/lib/api/validation';
+import { requireConnection, upstreamError } from '@/lib/api/context';
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ account: string; id: string }> },
 ) {
   const { account, id } = await params;
-  if (!isValidAccount(account) || !isValidEmailId(id)) {
-    return NextResponse.json({ error: 'conta ou id inválido' }, { status: 400 });
+  if (!isValidEmailId(id)) {
+    return NextResponse.json({ error: 'id inválido' }, { status: 400 });
   }
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: 'não autenticado' }, { status: 401 });
+
+  const guard = await requireConnection('email', account);
+  if (!guard.ok) return guard.response;
+  const { user, connection } = guard.value;
 
   // O corpo quase sempre já foi baixado pelo refresher: responde do banco
   // e só vai ao IMAP quando é um e-mail que o aquecimento ainda não pegou.
@@ -23,10 +25,10 @@ export async function GET(
   }
 
   try {
-    const text = await fetchBody(account, id);
+    const text = await fetchBody(connection, id);
     putCachedBody(user.id, account, id, text);
     return NextResponse.json({ text, cached: false });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 502 });
+    return upstreamError(err);
   }
 }

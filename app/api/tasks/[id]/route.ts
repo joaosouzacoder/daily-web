@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { editTask, completeTask, reopenTask, deleteTask } from '@/lib/cli/mstodo';
+import { editTask, setCompleted, deleteTask } from '@/lib/tasks';
 import { parseDueInput } from '@/lib/dateParsing';
 import { isValidTaskId, isValidTaskPriority, isValidRecur, isSafePositionalValue } from '@/lib/api/validation';
 import { getCurrentUser } from '@/lib/auth/currentUser';
@@ -15,11 +15,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!user) return NextResponse.json({ error: 'não autenticado' }, { status: 401 });
   try {
     if (body.completed === true) {
-      await completeTask(user.id, id);
+      await setCompleted(user.id, id, true);
       return NextResponse.json({ ok: true });
     }
     if (body.completed === false) {
-      await reopenTask(user.id, id);
+      await setCompleted(user.id, id, false);
       return NextResponse.json({ ok: true });
     }
 

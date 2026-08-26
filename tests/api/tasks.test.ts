@@ -8,11 +8,12 @@ vi.mock('@/lib/auth/currentUser', () => ({
   })),
 }));
 
-vi.mock('@/lib/cli/mstodo', () => ({
+// O provedor de tarefas é escolhido por conexão (local ou Microsoft To Do);
+// as rotas falam com o despachante, que é o que estes testes medem.
+vi.mock('@/lib/tasks', () => ({
   addTask: vi.fn(async () => 'NEW-ID'),
   editTask: vi.fn(),
-  completeTask: vi.fn(),
-  reopenTask: vi.fn(),
+  setCompleted: vi.fn(),
   deleteTask: vi.fn(),
   addSubtask: vi.fn(),
   editSubtask: vi.fn(),
@@ -20,7 +21,7 @@ vi.mock('@/lib/cli/mstodo', () => ({
   checkSubtask: vi.fn(),
 }));
 
-import { addTask, editTask, completeTask, reopenTask, deleteTask, addSubtask, editSubtask, checkSubtask } from '@/lib/cli/mstodo';
+import { addTask, editTask, setCompleted, deleteTask, addSubtask, editSubtask, checkSubtask } from '@/lib/tasks';
 import { POST as createRoute } from '@/app/api/tasks/route';
 import { PATCH as patchRoute, DELETE as deleteRoute } from '@/app/api/tasks/[id]/route';
 import { POST as createSubtaskRoute } from '@/app/api/tasks/[id]/subtasks/route';
@@ -77,14 +78,14 @@ describe('POST /api/tasks', () => {
 });
 
 describe('PATCH /api/tasks/[id]', () => {
-  it('completed=true chama completeTask', async () => {
+  it('completed=true conclui a tarefa', async () => {
     await patchRoute(req({ completed: true }), params({ id: 'T1' }));
-    expect(completeTask).toHaveBeenCalledWith('u-1', 'T1');
+    expect(setCompleted).toHaveBeenCalledWith('u-1', 'T1', true);
   });
 
-  it('completed=false chama reopenTask', async () => {
+  it('completed=false reabre a tarefa', async () => {
     await patchRoute(req({ completed: false }), params({ id: 'T1' }));
-    expect(reopenTask).toHaveBeenCalledWith('u-1', 'T1');
+    expect(setCompleted).toHaveBeenCalledWith('u-1', 'T1', false);
   });
 
   it('edição de campos chama editTask com a data já parseada', async () => {
@@ -92,10 +93,10 @@ describe('PATCH /api/tasks/[id]', () => {
     expect(editTask).toHaveBeenCalledWith('u-1', 'T1', expect.objectContaining({ due: expect.any(String) }));
   });
 
-  it('id iniciado com "-" devolve 400 sem chamar completeTask/editTask', async () => {
+  it('id iniciado com "-" devolve 400 sem concluir nem editar', async () => {
     const res = await patchRoute(req({ completed: true }), params({ id: '-rf' }));
     expect(res.status).toBe(400);
-    expect(completeTask).not.toHaveBeenCalled();
+    expect(setCompleted).not.toHaveBeenCalled();
     expect(editTask).not.toHaveBeenCalled();
   });
 
@@ -130,7 +131,7 @@ describe('DELETE /api/tasks/[id]', () => {
     expect(deleteTask).not.toHaveBeenCalled();
   });
 
-  it('falha do CLI devolve 502 com mensagem estruturada, em vez de propagar um erro genérico', async () => {
+  it('falha do provedor devolve 502 com mensagem estruturada, em vez de propagar um erro genérico', async () => {
     vi.mocked(deleteTask).mockRejectedValueOnce(new Error('mstodo falhou: sem credenciais'));
     const res = await deleteRoute(req({}), params({ id: 'T1' }));
     expect(res.status).toBe(502);
