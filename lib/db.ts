@@ -25,6 +25,14 @@ export function getDb(): Database.Database {
       PRIMARY KEY (source, external_id)
     );
 
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      is_admin INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS email_bodies (
       account TEXT NOT NULL,
       message_id TEXT NOT NULL,

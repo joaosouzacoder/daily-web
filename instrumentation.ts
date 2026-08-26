@@ -1,6 +1,12 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME !== 'nodejs') return;
 
+  // Semeia o operador vindo do env antes de qualquer request: sem isso, a
+  // primeira subida depois do multiusuário deixaria a tabela vazia e ninguém
+  // conseguiria logar.
+  const { bootstrapFirstUser } = await import('@/lib/auth/users');
+  bootstrapFirstUser();
+
   const { startRefreshLoop } = await import('@/lib/refresher');
   const { getPomodoroState, onPhaseChange } = await import('@/lib/pomodoro');
 

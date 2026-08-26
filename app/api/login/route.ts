@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyPassword, verifyUsername } from '@/lib/auth/password';
+import { verifyPassword } from '@/lib/auth/password';
 import { createSessionToken } from '@/lib/auth/session';
+import { findUserByUsername } from '@/lib/auth/users';
 import { isRateLimited, registerFailedAttempt, clearAttempts, extractClientIp } from '@/lib/auth/rateLimit';
 
 const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+
+// Hash bcrypt válido de uma senha que ninguém usa. Quando o username não
+// existe, comparamos contra ele mesmo assim: sem isso, "usuário inexistente"
+// responde em microssegundos e "senha errada" leva o tempo do bcrypt, o que
+// denuncia quais contas existem.
+const DUMMY_HASH = '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy';
 
 export async function POST(request: NextRequest) {
   const ip = extractClientIp(request.headers.get('x-forwarded-for'));
@@ -15,22 +22,20 @@ export async function POST(request: NextRequest) {
   const username = typeof body?.username === 'string' ? body.username : '';
   const password = typeof body?.password === 'string' ? body.password : '';
 
-  const expectedUser = process.env.DASHBOARD_USER ?? '';
-  const expectedHash = process.env.DASHBOARD_PASSWORD_HASH ?? '';
   const secret = process.env.SESSION_SECRET ?? '';
-
-  if (!expectedUser || !expectedHash || !secret) {
+  if (!secret) {
     return NextResponse.json({ error: 'servidor sem configuração de autenticação' }, { status: 500 });
   }
 
-  const ok = verifyUsername(username, expectedUser) && (await verifyPassword(password, expectedHash));
-  if (!ok) {
+  const user = findUserByUsername(username);
+  const ok = await verifyPassword(password, user?.passwordHash ?? DUMMY_HASH);
+  if (!user || !ok) {
     registerFailedAttempt(ip);
     return NextResponse.json({ error: 'usuário ou senha inválidos' }, { status: 401 });
   }
 
   clearAttempts(ip);
-  const token = await createSessionToken(username, secret);
+  const token = await createSessionToken(user.id, user.username, secret);
   const response = NextResponse.json({ ok: true });
   response.cookies.set('daily_web_session', token, {
     httpOnly: true,

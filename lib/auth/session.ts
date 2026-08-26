@@ -1,6 +1,7 @@
 const encoder = new TextEncoder();
 
 export interface SessionPayload {
+  userId: string;
   user: string;
   issuedAt: number;
 }
@@ -23,8 +24,12 @@ function fromBase64Url(value: string): Uint8Array {
   return new Uint8Array(Buffer.from(value, 'base64url'));
 }
 
-export async function createSessionToken(user: string, secret: string): Promise<string> {
-  const payload: SessionPayload = { user, issuedAt: Date.now() };
+export async function createSessionToken(
+  userId: string,
+  user: string,
+  secret: string,
+): Promise<string> {
+  const payload: SessionPayload = { userId, user, issuedAt: Date.now() };
   const payloadB64 = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
   const key = await hmacKey(secret);
   const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(payloadB64));
@@ -54,6 +59,9 @@ export async function verifySessionToken(
   } catch {
     return null;
   }
+  // Cookie emitido antes do multiusuário não carrega userId. Aceitá-lo daria
+  // uma sessão sem dono, que as fases seguintes não saberiam atribuir.
+  if (typeof payload?.userId !== 'string' || payload.userId === '') return null;
   if (Date.now() - payload.issuedAt > maxAgeMs) return null;
   return payload;
 }

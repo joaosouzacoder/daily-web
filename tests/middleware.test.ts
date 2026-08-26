@@ -32,7 +32,7 @@ function forgeTokenWithEmptySecret(user: string): string {
 describe('middleware', () => {
   it('deixa passar uma requisição de API com token válido quando SESSION_SECRET está configurado', async () => {
     process.env.SESSION_SECRET = 'real-secret';
-    const token = await createSessionToken('joao', 'real-secret');
+    const token = await createSessionToken('u-1', 'joao', 'real-secret');
     const res = await middleware(makeRequest('/api/tasks', token));
     expect(res.status).toBe(200);
   });

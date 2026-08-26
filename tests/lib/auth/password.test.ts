@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import bcrypt from 'bcryptjs';
-import { verifyPassword, verifyUsername } from '@/lib/auth/password';
+import { verifyPassword } from '@/lib/auth/password';
 
 describe('verifyPassword', () => {
   it('aceita a senha certa contra o hash bcrypt', async () => {
@@ -11,12 +11,5 @@ describe('verifyPassword', () => {
   it('rejeita senha errada', async () => {
     const hash = await bcrypt.hash('minha-senha', 10);
     expect(await verifyPassword('outra-senha', hash)).toBe(false);
-  });
-});
-
-describe('verifyUsername', () => {
-  it('compara usuário exato', () => {
-    expect(verifyUsername('joao', 'joao')).toBe(true);
-    expect(verifyUsername('joao', 'Joao')).toBe(false);
   });
 });
