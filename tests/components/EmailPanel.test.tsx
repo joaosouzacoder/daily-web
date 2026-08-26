@@ -48,13 +48,13 @@ afterEach(() => {
 
 describe('EmailPanel', () => {
   it('lista os e-mails com assunto e remetente', () => {
-    render(<EmailPanel mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={() => {}} />);
+    render(<EmailPanel onSeenChanged={() => {}} onRemoved={() => {}} mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={() => {}} />);
     expect(screen.getByText('Revisão do PR')).toBeInTheDocument();
     expect(screen.getByText('Milton Yoshida')).toBeInTheDocument();
   });
 
   it('filtra por busca textual sem chamar a API', () => {
-    render(<EmailPanel mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={() => {}} />);
+    render(<EmailPanel onSeenChanged={() => {}} onRemoved={() => {}} mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={() => {}} />);
     const before = vi.mocked(global.fetch).mock.calls.length;
     fireEvent.change(screen.getByLabelText('buscar e-mails'), { target: { value: 'token' } });
     expect(screen.queryByText('Revisão do PR')).toBeNull();
@@ -63,27 +63,27 @@ describe('EmailPanel', () => {
   });
 
   it('filtra por não lidos e mostra o contador de resultados', () => {
-    render(<EmailPanel mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={() => {}} />);
+    render(<EmailPanel onSeenChanged={() => {}} onRemoved={() => {}} mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={() => {}} />);
     fireEvent.click(screen.getByRole('button', { name: 'Não lidos' }));
     expect(screen.getByText('1 de 2')).toBeInTheDocument();
     expect(screen.queryByText('Token adicionado')).toBeNull();
   });
 
   it('remove um filtro ativo pelo chip', () => {
-    render(<EmailPanel mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={() => {}} />);
+    render(<EmailPanel onSeenChanged={() => {}} onRemoved={() => {}} mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={() => {}} />);
     fireEvent.click(screen.getByRole('button', { name: 'Não lidos' }));
     fireEvent.click(screen.getByRole('button', { name: 'remover filtro Não lidos' }));
     expect(screen.getByText('Token adicionado')).toBeInTheDocument();
   });
 
   it('mostra o estado vazio quando o filtro não acha nada', () => {
-    render(<EmailPanel mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={() => {}} />);
+    render(<EmailPanel onSeenChanged={() => {}} onRemoved={() => {}} mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={() => {}} />);
     fireEvent.change(screen.getByLabelText('buscar e-mails'), { target: { value: 'zzzz' } });
     expect(screen.getByText(/nenhum e-mail/i)).toBeInTheDocument();
   });
 
   it('mostra o erro do painel quando presente', () => {
-    render(<EmailPanel mailboxes={MAILBOXES} email={{ data: null, error: 'himalaya falhou' }} onChanged={() => {}} />);
+    render(<EmailPanel onSeenChanged={() => {}} onRemoved={() => {}} mailboxes={MAILBOXES} email={{ data: null, error: 'himalaya falhou' }} onChanged={() => {}} />);
     expect(screen.getByRole('alert').textContent).toContain('himalaya falhou');
   });
 
@@ -98,7 +98,7 @@ describe('EmailPanel', () => {
       return new Response(JSON.stringify({ folders: [] }));
     });
     const onChanged = vi.fn();
-    render(<EmailPanel mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={onChanged} />);
+    render(<EmailPanel onSeenChanged={() => {}} onRemoved={() => {}} mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={onChanged} />);
     fireEvent.click(screen.getByLabelText('selecionar Revisão do PR'));
     fireEvent.click(screen.getByRole('button', { name: 'Marcar lido' }));
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('falharam'));
@@ -106,7 +106,7 @@ describe('EmailPanel', () => {
   });
 
   it('abre o e-mail no acordeão em vez de um diálogo', async () => {
-    render(<EmailPanel mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={() => {}} />);
+    render(<EmailPanel onSeenChanged={() => {}} onRemoved={() => {}} mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={() => {}} />);
     const row = screen.getByRole('button', { name: /^Revisão do PR/ });
     expect(row).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(row);
@@ -126,7 +126,7 @@ describe('EmailPanel', () => {
       return new Response(JSON.stringify({ folders: [] }));
     });
     const onChanged = vi.fn();
-    render(<EmailPanel mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={onChanged} />);
+    render(<EmailPanel onSeenChanged={() => {}} onRemoved={() => {}} mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={onChanged} />);
     fireEvent.click(screen.getByRole('button', { name: /^Revisão do PR/ }));
 
     const send = await screen.findByRole('button', { name: 'Enviar resposta' });
@@ -154,7 +154,7 @@ describe('EmailPanel', () => {
       if (url.includes('/body')) return new Response(JSON.stringify({ text: 'corpo' }));
       return new Response(JSON.stringify({ folders: [] }));
     });
-    render(<EmailPanel mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={() => {}} />);
+    render(<EmailPanel onSeenChanged={() => {}} onRemoved={() => {}} mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={() => {}} />);
     fireEvent.click(screen.getByRole('button', { name: /^Revisão do PR/ }));
     fireEvent.click(await screen.findByRole('button', { name: 'Responder com IA' }));
     await waitFor(() =>
@@ -173,7 +173,7 @@ describe('EmailPanel', () => {
       return new Response(JSON.stringify({ folders: ['Financeiro', 'Recibos'] }));
     });
     const onChanged = vi.fn();
-    render(<EmailPanel mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={onChanged} />);
+    render(<EmailPanel onSeenChanged={() => {}} onRemoved={() => {}} mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={onChanged} />);
 
     const tagger = screen.getByRole('button', { name: 'etiquetar Revisão do PR' });
     expect(tagger).toHaveAttribute('aria-expanded', 'false');
@@ -191,7 +191,7 @@ describe('EmailPanel', () => {
   });
 
   it('o e-mail aberto não traz mais os botões Etiquetar, Excluir e Fechar', async () => {
-    render(<EmailPanel mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={() => {}} />);
+    render(<EmailPanel onSeenChanged={() => {}} onRemoved={() => {}} mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={() => {}} />);
     fireEvent.click(screen.getByRole('button', { name: /^Revisão do PR/ }));
     await waitFor(() => expect(screen.getByLabelText('corpo do e-mail')).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: 'Etiquetar' })).toBeNull();
@@ -212,10 +212,21 @@ describe('EmailPanel', () => {
       return new Response(JSON.stringify({ folders: [] }));
     });
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
-    const onChanged = vi.fn();
-    render(<EmailPanel mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={onChanged} />);
+    const onRemoved = vi.fn();
+    render(
+      <EmailPanel
+        onSeenChanged={() => {}}
+        onRemoved={onRemoved}
+        mailboxes={MAILBOXES}
+        email={{ data: items, error: null }}
+        onChanged={() => {}}
+      />,
+    );
 
     fireEvent.click(screen.getByRole('button', { name: 'excluir Revisão do PR' }));
+
+    // A linha sai da tela antes de a ida ao IMAP terminar.
+    expect(onRemoved).toHaveBeenCalledWith([{ account: 'mail-1', id: '1' }]);
 
     await waitFor(() => expect(bodies).toHaveLength(1));
     expect(JSON.parse(bodies[0])).toEqual({
@@ -223,12 +234,11 @@ describe('EmailPanel', () => {
       action: 'delete',
     });
     expect(confirmSpy).toHaveBeenCalled();
-    expect(onChanged).toHaveBeenCalled();
   });
 
   it('cancelar a confirmação não exclui nada', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(false);
-    render(<EmailPanel mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={() => {}} />);
+    render(<EmailPanel onSeenChanged={() => {}} onRemoved={() => {}} mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={() => {}} />);
     const before = vi.mocked(global.fetch).mock.calls.length;
     fireEvent.click(screen.getByRole('button', { name: 'excluir Revisão do PR' }));
     expect(vi.mocked(global.fetch).mock.calls.length).toBe(before);

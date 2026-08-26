@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { addSubtask } from '@/lib/tasks';
 import { isValidTaskId, isSafePositionalValue } from '@/lib/api/validation';
 import { getCurrentUser } from '@/lib/auth/currentUser';
+import { refreshTasks } from '@/lib/refresher';
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -20,6 +21,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!user) return NextResponse.json({ error: 'não autenticado' }, { status: 401 });
   try {
     await addSubtask(user.id, id, title.trim());
+    await refreshTasks(user.id);
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 502 });

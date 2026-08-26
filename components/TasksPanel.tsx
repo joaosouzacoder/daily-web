@@ -19,6 +19,10 @@ import { SkeletonRows } from './ui/Skeleton';
 interface Props {
   tasks: PanelResult<TodoTask[]>;
   onChanged: () => void;
+  /** Refletem a ação na tela antes de o servidor responder. */
+  onCompletedChanged: (id: string, completed: boolean) => void;
+  onRemoved: (id: string) => void;
+  onSubtaskChanged: (taskId: string, itemId: string, completed: boolean) => void;
   loading?: boolean;
 }
 
@@ -52,18 +56,22 @@ function SubtaskList({
   task,
   onChanged,
   onError,
+  onSubtaskChanged,
   adding,
   onDoneAdding,
 }: {
   task: TodoTask;
   onChanged: () => void;
   onError: (message: string) => void;
+  onSubtaskChanged: (taskId: string, itemId: string, completed: boolean) => void;
   adding: boolean;
   onDoneAdding: () => void;
 }) {
   const [newTitle, setNewTitle] = useState('');
 
   const toggleSubtask = async (subtaskId: string, completed: boolean) => {
+    onSubtaskChanged(task.id, subtaskId, completed);
+
     const res = await fetch(`/api/tasks/${task.id}/subtasks/${subtaskId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -71,9 +79,8 @@ function SubtaskList({
     });
     if (!res.ok) {
       onError(await readErrorMessage(res, 'Falha ao atualizar subtarefa'));
-      return;
+      onChanged();
     }
-    onChanged();
   };
 
   const addSubtask = async () => {
@@ -145,7 +152,14 @@ function SubtaskList({
   );
 }
 
-export function TasksPanel({ tasks, onChanged, loading = false }: Props) {
+export function TasksPanel({
+  tasks,
+  onChanged,
+  onCompletedChanged,
+  onRemoved,
+  onSubtaskChanged,
+  loading = false,
+}: Props) {
   const [editing, setEditing] = useState<TodoTask | 'new' | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -222,27 +236,39 @@ export function TasksPanel({ tasks, onChanged, loading = false }: Props) {
   };
 
   const toggleComplete = async (task: TodoTask) => {
+    const completed = !task.completed;
+    // Tarefa que repete não é concluída: ela pula para a próxima data. Marcar
+    // otimista aqui daria um pisca de "feita" antes de o servidor corrigir.
+    const recorrente = task.recur !== '';
+    if (!recorrente) onCompletedChanged(task.id, completed);
+    setActionError(null);
+
     const res = await fetch(`/api/tasks/${task.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ completed: !task.completed }),
+      body: JSON.stringify({ completed }),
     });
     if (!res.ok) {
       setActionError(await readErrorMessage(res, 'Falha ao atualizar tarefa'));
+      onChanged();
       return;
     }
-    setActionError(null);
+    // A resposta confirma; recarregar mantém a lista alinhada com o servidor
+    // (uma recorrente, por exemplo, volta com data nova).
     onChanged();
   };
 
   const remove = async (task: TodoTask) => {
+    onRemoved(task.id);
+    setActionError(null);
+
     const res = await fetch(`/api/tasks/${task.id}`, { method: 'DELETE' });
     if (!res.ok) {
       setActionError(await readErrorMessage(res, 'Falha ao apagar tarefa'));
+      // A tarefa continua existindo: recarrega para ela voltar à lista.
+      onChanged();
       return;
     }
-    setActionError(null);
-    onChanged();
   };
 
   return (
@@ -373,6 +399,7 @@ export function TasksPanel({ tasks, onChanged, loading = false }: Props) {
                     task={task}
                     onChanged={onChanged}
                     onError={setActionError}
+                    onSubtaskChanged={onSubtaskChanged}
                     adding={addingSubtaskFor === task.id}
                     onDoneAdding={() => setAddingSubtaskFor(null)}
                   />

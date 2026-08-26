@@ -3,6 +3,8 @@ import { setSeen, applyTag, deleteEmail } from '@/lib/integrations/imap';
 import { isValidEmailId, isValidFolder } from '@/lib/api/validation';
 import { requireUser } from '@/lib/api/context';
 import { findConnection } from '@/lib/vault/connections';
+import { patchCachedState } from '@/lib/refresher';
+import { markEmailsSeen, removeEmails } from '@/lib/statePatches';
 
 interface Target {
   account: unknown;
@@ -73,6 +75,20 @@ export async function POST(request: NextRequest) {
           error: r.reason instanceof Error ? r.reason.message : String(r.reason),
         },
   );
+
+  // Só os alvos que deram certo entram na correção: um e-mail que falhou
+  // precisa continuar na tela, do jeito que está.
+  const done = results.filter((r) => r.ok).map((r) => ({ account: r.account, id: r.id }));
+  if (done.length > 0) {
+    patchCachedState(auth.value.id, (state) => {
+      if (action === 'read') return markEmailsSeen(state, done, true);
+      if (action === 'unread') return markEmailsSeen(state, done, false);
+      // Apagar tira da caixa; mover é uma cópia para a pasta escolhida, então
+      // a mensagem continua na entrada, só marcada como lida.
+      if (action === 'delete') return removeEmails(state, done);
+      return markEmailsSeen(state, done, true);
+    });
+  }
 
   return NextResponse.json({ results });
 }

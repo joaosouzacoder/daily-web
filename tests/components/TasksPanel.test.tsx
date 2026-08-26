@@ -41,6 +41,9 @@ describe('TasksPanel', () => {
   it('lista as tarefas agrupadas por faixa de prazo', () => {
     render(
       <TasksPanel
+        onCompletedChanged={() => {}}
+        onRemoved={() => {}}
+        onSubtaskChanged={() => {}}
         tasks={{ data: [task({ id: '1', title: 'Tarefa solta' })], error: null }}
         onChanged={() => {}}
       />,
@@ -52,6 +55,9 @@ describe('TasksPanel', () => {
   it('filtra por busca textual', () => {
     render(
       <TasksPanel
+        onCompletedChanged={() => {}}
+        onRemoved={() => {}}
+        onSubtaskChanged={() => {}}
         tasks={{
           data: [task({ id: '1', title: 'Comprar pão' }), task({ id: '2', title: 'Revisar PR' })],
           error: null,
@@ -67,6 +73,9 @@ describe('TasksPanel', () => {
   it('filtra por prioridade alta', () => {
     render(
       <TasksPanel
+        onCompletedChanged={() => {}}
+        onRemoved={() => {}}
+        onSubtaskChanged={() => {}}
         tasks={{
           data: [
             task({ id: '1', title: 'Urgente', priority: 'high' }),
@@ -85,7 +94,7 @@ describe('TasksPanel', () => {
   it('conclui uma tarefa e avisa onChanged', async () => {
     const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(new Response('{}'));
     const onChanged = vi.fn();
-    render(<TasksPanel tasks={{ data: [task({})], error: null }} onChanged={onChanged} />);
+    render(<TasksPanel onCompletedChanged={() => {}} onRemoved={() => {}} onSubtaskChanged={() => {}} tasks={{ data: [task({})], error: null }} onChanged={onChanged} />);
     fireEvent.click(screen.getByLabelText('concluir Tarefa'));
     await waitFor(() =>
       expect(fetchSpy).toHaveBeenCalledWith(
@@ -96,21 +105,72 @@ describe('TasksPanel', () => {
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
   });
 
-  it('mostra erro e não avisa onChanged quando concluir falha', async () => {
+  // Ao falhar, a marcação otimista precisa ser desfeita — e a fonte da
+  // verdade é o servidor, então recarregar é justamente o certo a fazer.
+  it('mostra o erro e recarrega para desfazer quando concluir falha', async () => {
     vi.spyOn(global, 'fetch').mockImplementation(
       async () => new Response(JSON.stringify({ error: 'mstodo falhou' }), { status: 502 }),
     );
     const onChanged = vi.fn();
-    render(<TasksPanel tasks={{ data: [task({})], error: null }} onChanged={onChanged} />);
+    const onCompletedChanged = vi.fn();
+    render(
+      <TasksPanel
+        onCompletedChanged={onCompletedChanged}
+        onRemoved={() => {}}
+        onSubtaskChanged={() => {}}
+        tasks={{ data: [task({})], error: null }}
+        onChanged={onChanged}
+      />,
+    );
     fireEvent.click(screen.getByLabelText('concluir Tarefa'));
+
+    // A tela reage antes da resposta.
+    expect(onCompletedChanged).toHaveBeenCalledWith('1', true);
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('mstodo falhou'));
-    expect(onChanged).not.toHaveBeenCalled();
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+  });
+
+  it('conclui na tela antes de o servidor responder', () => {
+    vi.spyOn(global, 'fetch').mockImplementation(() => new Promise(() => {}));
+    const onCompletedChanged = vi.fn();
+    render(
+      <TasksPanel
+        onCompletedChanged={onCompletedChanged}
+        onRemoved={() => {}}
+        onSubtaskChanged={() => {}}
+        tasks={{ data: [task({})], error: null }}
+        onChanged={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText('concluir Tarefa'));
+    expect(onCompletedChanged).toHaveBeenCalledWith('1', true);
+  });
+
+  // Recorrente não vira "feita": ela pula para a próxima data. Antecipar o
+  // risco seria mostrar um estado que o servidor vai desmentir.
+  it('não antecipa a conclusão de uma tarefa que repete', () => {
+    vi.spyOn(global, 'fetch').mockImplementation(() => new Promise(() => {}));
+    const onCompletedChanged = vi.fn();
+    render(
+      <TasksPanel
+        onCompletedChanged={onCompletedChanged}
+        onRemoved={() => {}}
+        onSubtaskChanged={() => {}}
+        tasks={{ data: [task({ recur: 'weekly' })], error: null }}
+        onChanged={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText('concluir Tarefa'));
+    expect(onCompletedChanged).not.toHaveBeenCalled();
   });
 
   it('marca uma subtarefa pela API certa', async () => {
     const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(new Response('{}'));
     render(
       <TasksPanel
+        onCompletedChanged={() => {}}
+        onRemoved={() => {}}
+        onSubtaskChanged={() => {}}
         tasks={{
           data: [task({ subtasks: [{ id: 's1', title: 'Etapa', completed: false }] })],
           error: null,
@@ -129,7 +189,7 @@ describe('TasksPanel', () => {
   });
 
   it('o campo de subtarefa só aparece depois de clicar no +', () => {
-    render(<TasksPanel tasks={{ data: [task({})], error: null }} onChanged={() => {}} />);
+    render(<TasksPanel onCompletedChanged={() => {}} onRemoved={() => {}} onSubtaskChanged={() => {}} tasks={{ data: [task({})], error: null }} onChanged={() => {}} />);
     expect(screen.queryByLabelText('nova subtarefa de Tarefa')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'adicionar subtarefa em Tarefa' }));
     expect(screen.getByLabelText('nova subtarefa de Tarefa')).toBeInTheDocument();
@@ -137,7 +197,7 @@ describe('TasksPanel', () => {
 
   it('adiciona uma subtarefa pela API certa', async () => {
     const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(new Response('{}'));
-    render(<TasksPanel tasks={{ data: [task({})], error: null }} onChanged={() => {}} />);
+    render(<TasksPanel onCompletedChanged={() => {}} onRemoved={() => {}} onSubtaskChanged={() => {}} tasks={{ data: [task({})], error: null }} onChanged={() => {}} />);
     fireEvent.click(screen.getByRole('button', { name: 'adicionar subtarefa em Tarefa' }));
     fireEvent.change(screen.getByLabelText('nova subtarefa de Tarefa'), {
       target: { value: 'Etapa nova' },
@@ -154,6 +214,9 @@ describe('TasksPanel', () => {
   it('esconde tarefas concluídas por padrão', () => {
     render(
       <TasksPanel
+        onCompletedChanged={() => {}}
+        onRemoved={() => {}}
+        onSubtaskChanged={() => {}}
         tasks={{
           data: [
             task({ id: '1', title: 'Pendente' }),
@@ -171,6 +234,9 @@ describe('TasksPanel', () => {
   it('mostra as concluídas quando o filtro é ligado', () => {
     render(
       <TasksPanel
+        onCompletedChanged={() => {}}
+        onRemoved={() => {}}
+        onSubtaskChanged={() => {}}
         tasks={{
           data: [
             task({ id: '1', title: 'Pendente' }),
@@ -188,6 +254,9 @@ describe('TasksPanel', () => {
   it('mantém as subtarefas escondidas até clicarem na seta', () => {
     render(
       <TasksPanel
+        onCompletedChanged={() => {}}
+        onRemoved={() => {}}
+        onSubtaskChanged={() => {}}
         tasks={{
           data: [task({ subtasks: [{ id: 's1', title: 'Etapa', completed: false }] })],
           error: null,
@@ -209,6 +278,9 @@ describe('TasksPanel', () => {
   it('mostra o quanto das subtarefas já foi feito mesmo recolhido', () => {
     render(
       <TasksPanel
+        onCompletedChanged={() => {}}
+        onRemoved={() => {}}
+        onSubtaskChanged={() => {}}
         tasks={{
           data: [
             task({
@@ -227,7 +299,7 @@ describe('TasksPanel', () => {
   });
 
   it('não oferece seta em tarefa sem subtarefa', () => {
-    render(<TasksPanel tasks={{ data: [task({})], error: null }} onChanged={() => {}} />);
+    render(<TasksPanel onCompletedChanged={() => {}} onRemoved={() => {}} onSubtaskChanged={() => {}} tasks={{ data: [task({})], error: null }} onChanged={() => {}} />);
     expect(screen.queryByRole('button', { name: /subtarefas de Tarefa/ })).toBeNull();
   });
 
@@ -235,6 +307,9 @@ describe('TasksPanel', () => {
   it('o + abre o campo e revela as subtarefas existentes', () => {
     render(
       <TasksPanel
+        onCompletedChanged={() => {}}
+        onRemoved={() => {}}
+        onSubtaskChanged={() => {}}
         tasks={{
           data: [task({ subtasks: [{ id: 's1', title: 'Etapa', completed: false }] })],
           error: null,
@@ -248,7 +323,7 @@ describe('TasksPanel', () => {
   });
 
   it('mostra o estado vazio quando não há tarefas', () => {
-    render(<TasksPanel tasks={{ data: [], error: null }} onChanged={() => {}} />);
+    render(<TasksPanel onCompletedChanged={() => {}} onRemoved={() => {}} onSubtaskChanged={() => {}} tasks={{ data: [], error: null }} onChanged={() => {}} />);
     expect(screen.getByText(/nenhuma tarefa/i)).toBeInTheDocument();
   });
 });

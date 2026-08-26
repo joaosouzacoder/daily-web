@@ -11,9 +11,17 @@ import { JiraPanel } from '@/components/JiraPanel';
 import { TasksPanel } from '@/components/TasksPanel';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { DEFAULT_AGENDA_DAYS } from '@/lib/agendaWindow';
+import {
+  markEmailsSeen,
+  markNotificationRead,
+  removeEmails,
+  removeTask,
+  setSubtaskCompleted,
+  setTaskCompleted,
+} from '@/lib/statePatches';
 
 export default function DashboardPage() {
-  const { state, loading, refreshNow, reload } = useDashboardState();
+  const { state, loading, refreshNow, reload, mutate } = useDashboardState();
   const booting = loading && !state;
 
   // Cada pessoa liga os módulos que usa. Um painel de módulo desligado não
@@ -29,6 +37,8 @@ export default function DashboardPage() {
         email={state?.email ?? { data: [], error: null }}
         mailboxes={state?.mailboxes ?? []}
         onChanged={reload}
+        onSeenChanged={(targets, seen) => mutate((s) => markEmailsSeen(s, targets, seen))}
+        onRemoved={(targets) => mutate((s) => removeEmails(s, targets))}
         loading={booting}
       />
     ),
@@ -37,6 +47,11 @@ export default function DashboardPage() {
         key="tasks"
         tasks={state?.tasks ?? { data: [], error: null }}
         onChanged={reload}
+        onCompletedChanged={(id, completed) => mutate((s) => setTaskCompleted(s, id, completed))}
+        onRemoved={(id) => mutate((s) => removeTask(s, id))}
+        onSubtaskChanged={(taskId, itemId, completed) =>
+          mutate((s) => setSubtaskCompleted(s, taskId, itemId, completed))
+        }
         loading={booting}
       />
     ),
@@ -78,6 +93,7 @@ export default function DashboardPage() {
             <NotificationsBell
               notifications={state?.notifications ?? { data: [], error: null }}
               onChanged={reload}
+              onMarkedRead={(id) => mutate((s) => markNotificationRead(s, id))}
             />
           ) : null
         }

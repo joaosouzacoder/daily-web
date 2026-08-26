@@ -111,6 +111,30 @@ export function dropCache(userId: string): void {
   caches.delete(userId);
 }
 
+/**
+ * Corrige o cache logo depois de uma ação. Sem isto, o painel recarrega e
+ * recebe de volta o estado anterior — a ação parece não ter acontecido até o
+ * próximo ciclo do refresher, que pode estar a minutos de distância.
+ */
+export function patchCachedState(
+  userId: string,
+  patch: (state: DashboardState) => DashboardState,
+): void {
+  const cache = caches.get(userId);
+  if (!cache) return;
+  caches.set(userId, patch(cache));
+}
+
+/** Recarrega só as tarefas. É barato no provedor local (SQLite) e, no
+ *  mstodo, custa a mesma CLI que a ação já pagou — muito menos do que refazer
+ *  e-mail, agenda, Jira e GitHub por causa de um checkbox. */
+export async function refreshTasks(userId: string): Promise<void> {
+  const cache = caches.get(userId);
+  if (!cache) return;
+  const tasks = await panel(() => fetchTasks(userId));
+  caches.set(userId, { ...cache, tasks });
+}
+
 // Atualiza todo mundo que está cadastrado. Com o punhado de usuários que esta
 // app comporta isso é mais simples — e mais previsível — do que rastrear quem
 // tem sessão aberta.

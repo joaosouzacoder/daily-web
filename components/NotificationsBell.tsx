@@ -6,9 +6,11 @@ import type { NotificationItem, PanelResult } from '@/lib/types';
 interface Props {
   notifications: PanelResult<NotificationItem[]>;
   onChanged: () => void;
+  /** Marca como lida na tela antes de o servidor responder. */
+  onMarkedRead: (id: string) => void;
 }
 
-export function NotificationsBell({ notifications, onChanged }: Props) {
+export function NotificationsBell({ notifications, onChanged, onMarkedRead }: Props) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const items = notifications.data ?? [];
@@ -24,14 +26,19 @@ export function NotificationsBell({ notifications, onChanged }: Props) {
   }, [open]);
 
   const markRead = async (item: NotificationItem) => {
+    // O badge cai agora, não quando o servidor responder: a ação é local e
+    // não há motivo para a tela esperar uma ida ao banco.
+    onMarkedRead(item.id);
+    setError(null);
+
     const res = await fetch(`/api/notifications/${item.id}/read`, { method: 'POST' });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       setError(data.error ?? 'Falha ao marcar como lida');
+      // Desfaz recarregando do servidor, que é a fonte da verdade.
+      onChanged();
       return;
     }
-    setError(null);
-    onChanged();
   };
 
   return (

@@ -1,0 +1,96 @@
+import type { DashboardState, EmailEnvelope, NotificationItem, TodoTask } from './types';
+
+// Depois de uma ação, o painel não pode continuar mostrando o estado
+// anterior. Refazer o `refreshAll` inteiro custa uma ida ao IMAP, ao Jira e ao
+// GitHub por causa de um clique; estas funções corrigem só a fatia que a ação
+// mudou, e são puras para poderem ser testadas sem banco nem rede.
+
+export interface EmailTarget {
+  account: string;
+  id: string;
+}
+
+function sameEmail(envelope: EmailEnvelope, target: EmailTarget): boolean {
+  return envelope.account === target.account && envelope.id === target.id;
+}
+
+function mapEmails(
+  state: DashboardState,
+  fn: (list: EmailEnvelope[]) => EmailEnvelope[],
+): DashboardState {
+  if (!state.email.data) return state;
+  return { ...state, email: { ...state.email, data: fn(state.email.data) } };
+}
+
+export function markEmailsSeen(
+  state: DashboardState,
+  targets: EmailTarget[],
+  seen: boolean,
+): DashboardState {
+  return mapEmails(state, (list) =>
+    list.map((envelope) =>
+      targets.some((t) => sameEmail(envelope, t)) ? { ...envelope, unread: !seen } : envelope,
+    ),
+  );
+}
+
+/** Apagado ou movido para outra pasta, some da caixa de entrada. */
+export function removeEmails(state: DashboardState, targets: EmailTarget[]): DashboardState {
+  return mapEmails(state, (list) =>
+    list.filter((envelope) => !targets.some((t) => sameEmail(envelope, t))),
+  );
+}
+
+export function markNotificationRead(state: DashboardState, id: string): DashboardState {
+  if (!state.notifications.data) return state;
+  const data: NotificationItem[] = state.notifications.data.map((item) =>
+    item.id === id ? { ...item, read: true } : item,
+  );
+  return { ...state, notifications: { ...state.notifications, data } };
+}
+
+export function countUnreadNotifications(state: DashboardState): number {
+  return (state.notifications.data ?? []).filter((item) => !item.read).length;
+}
+
+function mapTasks(
+  state: DashboardState,
+  fn: (list: TodoTask[]) => TodoTask[],
+): DashboardState {
+  if (!state.tasks.data) return state;
+  return { ...state, tasks: { ...state.tasks, data: fn(state.tasks.data) } };
+}
+
+export function setTaskCompleted(
+  state: DashboardState,
+  id: string,
+  completed: boolean,
+): DashboardState {
+  return mapTasks(state, (list) =>
+    list.map((task) => (task.id === id ? { ...task, completed } : task)),
+  );
+}
+
+export function removeTask(state: DashboardState, id: string): DashboardState {
+  return mapTasks(state, (list) => list.filter((task) => task.id !== id));
+}
+
+export function setSubtaskCompleted(
+  state: DashboardState,
+  taskId: string,
+  itemId: string,
+  completed: boolean,
+): DashboardState {
+  return mapTasks(state, (list) =>
+    list.map((task) =>
+      task.id === taskId
+        ? {
+            ...task,
+            subtasks: task.subtasks.map((sub) =>
+              sub.id === itemId ? { ...sub, completed } : sub,
+            ),
+          }
+        : task,
+    ),
+  );
+}

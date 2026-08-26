@@ -10,7 +10,7 @@ export async function register() {
   const { startRefreshLoop } = await import('@/lib/refresher');
   const { getPomodoroState, onPhaseChange, activePomodoroUsers } = await import('@/lib/pomodoro');
 
-  startRefreshLoop(Number(process.env.REFRESH_SECONDS ?? '300'));
+  startRefreshLoop(Number(process.env.REFRESH_SECONDS ?? '60'));
 
   // getPomodoroState() lazily detects phase transitions and fires onPhaseChange
   // listeners as a side effect — it only runs when something calls it. This

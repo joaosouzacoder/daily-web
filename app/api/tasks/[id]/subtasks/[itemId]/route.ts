@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { editSubtask, checkSubtask, deleteSubtask } from '@/lib/tasks';
 import { isValidTaskId, isSafePositionalValue } from '@/lib/api/validation';
 import { getCurrentUser } from '@/lib/auth/currentUser';
+import { refreshTasks } from '@/lib/refresher';
 
 export async function PATCH(
   request: Request,
@@ -24,6 +25,7 @@ export async function PATCH(
     if (typeof body.title === 'string' && body.title.trim()) {
       await editSubtask(user.id, id, itemId, body.title.trim());
     }
+    await refreshTasks(user.id);
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 502 });
@@ -42,6 +44,7 @@ export async function DELETE(
   if (!user) return NextResponse.json({ error: 'não autenticado' }, { status: 401 });
   try {
     await deleteSubtask(user.id, id, itemId);
+    await refreshTasks(user.id);
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 502 });

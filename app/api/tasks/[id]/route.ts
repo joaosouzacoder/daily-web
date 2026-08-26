@@ -3,6 +3,7 @@ import { editTask, setCompleted, deleteTask } from '@/lib/tasks';
 import { parseDueInput } from '@/lib/dateParsing';
 import { isValidTaskId, isValidTaskPriority, isValidRecur, isSafePositionalValue } from '@/lib/api/validation';
 import { getCurrentUser } from '@/lib/auth/currentUser';
+import { refreshTasks } from '@/lib/refresher';
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -16,11 +17,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   try {
     if (body.completed === true) {
       await setCompleted(user.id, id, true);
-      return NextResponse.json({ ok: true });
+      await refreshTasks(user.id);
+    return NextResponse.json({ ok: true });
     }
     if (body.completed === false) {
       await setCompleted(user.id, id, false);
-      return NextResponse.json({ ok: true });
+      await refreshTasks(user.id);
+    return NextResponse.json({ ok: true });
     }
 
     if (body.title !== undefined && !isSafePositionalValue(body.title)) {
@@ -46,6 +49,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     await editTask(user.id, id, { title: body.title, due, time, recur: body.recur, priority: body.priority });
+    await refreshTasks(user.id);
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 502 });
@@ -61,6 +65,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   if (!user) return NextResponse.json({ error: 'não autenticado' }, { status: 401 });
   try {
     await deleteTask(user.id, id);
+    await refreshTasks(user.id);
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 502 });

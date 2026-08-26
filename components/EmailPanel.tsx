@@ -18,6 +18,9 @@ interface Props {
   /** Caixas cadastradas pelo usuário: são elas que viram os chips de filtro. */
   mailboxes: MailboxRef[];
   onChanged: () => void;
+  /** Aplica a mudança na tela antes de o servidor responder. */
+  onSeenChanged: (targets: { account: string; id: string }[], seen: boolean) => void;
+  onRemoved: (targets: { account: string; id: string }[]) => void;
   loading?: boolean;
 }
 
@@ -63,7 +66,14 @@ async function postBatch(
   return (data.results ?? []) as BatchTargetResult[];
 }
 
-export function EmailPanel({ email, mailboxes, onChanged, loading = false }: Props) {
+export function EmailPanel({
+  email,
+  mailboxes,
+  onChanged,
+  onSeenChanged,
+  onRemoved,
+  loading = false,
+}: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [tagMenuKey, setTagMenuKey] = useState<string | null>(null);
@@ -98,6 +108,8 @@ export function EmailPanel({ email, mailboxes, onChanged, loading = false }: Pro
   }, [tagMenuKey]);
 
   const applyTag = async (m: EmailEnvelope, tag: string) => {
+    // Copiar para a pasta marca como lida no servidor; a tela acompanha.
+    onSeenChanged([{ account: m.account, id: m.id }], true);
     const res = await fetch('/api/email/tag', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -107,6 +119,7 @@ export function EmailPanel({ email, mailboxes, onChanged, loading = false }: Pro
     setTagMenuKey(null);
     if (!res.ok) {
       setBatchError(data.error ?? 'Falha ao aplicar etiqueta');
+      onChanged();
       return;
     }
     setBatchError(null);
@@ -120,16 +133,20 @@ export function EmailPanel({ email, mailboxes, onChanged, loading = false }: Pro
 
   const removeEmail = async (m: EmailEnvelope) => {
     if (!window.confirm('Excluir este e-mail?')) return;
-    const [result] = await postBatch([{ account: m.account, id: m.id }], 'delete');
+    const alvo = [{ account: m.account, id: m.id }];
+
+    // Some da lista agora. Esperar a ida ao IMAP deixaria a linha parada por
+    // um segundo depois do clique, como se nada tivesse acontecido.
+    setBatchError(null);
+    setOpenKey((prev) => (prev === key(m) ? null : prev));
+    onRemoved(alvo);
+
+    const [result] = await postBatch(alvo, 'delete');
     if (result && !result.ok) {
       setBatchError(result.error ?? 'Falha ao excluir');
-      return;
+      // Recarrega para o e-mail voltar: ele não foi apagado de verdade.
+      onChanged();
     }
-    setBatchError(null);
-    // A linha some do próximo refresh; fechar o acordeão evita ficar com o
-    // corpo de um e-mail que não existe mais na tela.
-    setOpenKey((prev) => (prev === key(m) ? null : prev));
-    onChanged();
   };
 
   const all = useMemo(() => email.data ?? [], [email.data]);
@@ -214,6 +231,13 @@ export function EmailPanel({ email, mailboxes, onChanged, loading = false }: Pro
       .filter((m) => selected.has(key(m)))
       .map((m) => ({ account: m.account, id: m.id }));
     if (targets.length === 0) return;
+
+    // A seleção reage na hora; o que falhar volta na correção abaixo.
+    if (action === 'read') onSeenChanged(targets, true);
+    else if (action === 'unread') onSeenChanged(targets, false);
+    else if (action === 'delete') onRemoved(targets);
+    else onSeenChanged(targets, true);
+
     const results = await postBatch(targets, action, folder);
     const failed = results.filter((r) => !r.ok);
     if (failed.length > 0) {
@@ -223,11 +247,12 @@ export function EmailPanel({ email, mailboxes, onChanged, loading = false }: Pro
           .join(', ')}`,
       );
       setSelected(new Set(failed.map((f) => `${f.account}:${f.id}`)));
-    } else {
-      setBatchError(null);
-      setSelected(new Set());
+      // Alguma coisa não foi feita: o servidor é quem sabe o estado real.
+      onChanged();
+      return;
     }
-    onChanged();
+    setBatchError(null);
+    setSelected(new Set());
   };
 
   const openMessageData = all.find((m) => key(m) === openKey) ?? null;
@@ -412,6 +437,7 @@ export function EmailPanel({ email, mailboxes, onChanged, loading = false }: Pro
                     email={m}
                     onClose={() => setOpenKey(null)}
                     onChanged={onChanged}
+                    onSeenChanged={onSeenChanged}
                     appliedTags={appliedTags[key(m)] ?? []}
                   />
                 )}
@@ -428,11 +454,13 @@ function EmailDetail({
   email,
   onClose,
   onChanged,
+  onSeenChanged,
   appliedTags,
 }: {
   email: EmailEnvelope;
   onClose: () => void;
   onChanged: () => void;
+  onSeenChanged: (targets: { account: string; id: string }[], seen: boolean) => void;
   appliedTags: string[];
 }) {
   const [body, setBody] = useState<string | null>(null);
@@ -506,17 +534,19 @@ function EmailDetail({
         // Só marca como lido depois que o corpo carregou — evita marcar
         // um e-mail que o usuário nem chegou a ver por causa de erro.
         if (email.unread) {
+          // O ponto de não lido some junto com a abertura, sem esperar o IMAP.
+          onSeenChanged([{ account: email.account, id: email.id }], true);
           return postJson('/api/email/mark', {
             account: email.account,
             id: email.id,
             seen: true,
-          }).then(onChanged);
+          });
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [email.account, email.id, email.unread, onChanged]);
+  }, [email.account, email.id, email.unread, onSeenChanged]);
 
   // Abre logo abaixo da linha clicada, não no meio da tela: o e-mail fica
   // no lugar onde o olho já estava.

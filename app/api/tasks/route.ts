@@ -3,6 +3,7 @@ import { addTask, editTask } from '@/lib/tasks';
 import { parseDueInput } from '@/lib/dateParsing';
 import { isValidTaskPriority, isValidRecur, isSafePositionalValue } from '@/lib/api/validation';
 import { getCurrentUser } from '@/lib/auth/currentUser';
+import { refreshTasks } from '@/lib/refresher';
 
 export async function POST(request: Request) {
   const user = await getCurrentUser();
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
     if (due !== undefined || body.priority !== undefined || body.recur !== undefined) {
       await editTask(user.id, id, { due, time, priority: body.priority, recur: body.recur });
     }
+    await refreshTasks(user.id);
     return NextResponse.json({ id });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 502 });
