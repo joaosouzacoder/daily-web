@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { NextRequest } from 'next/server';
 
 vi.mock('@/lib/cli/pulls', () => ({
   listTrackedRepos: vi.fn(),
@@ -11,8 +12,8 @@ import { GET, POST, DELETE } from '@/app/api/pulls/repos/route';
 
 beforeEach(() => vi.clearAllMocks());
 
-function jsonRequest(method: string, body: unknown): Request {
-  return new Request('http://localhost/api', { method, body: JSON.stringify(body) });
+function jsonRequest(method: string, body: unknown): NextRequest {
+  return new NextRequest('http://localhost/api', { method, body: JSON.stringify(body) });
 }
 
 describe('GET /api/pulls/repos', () => {

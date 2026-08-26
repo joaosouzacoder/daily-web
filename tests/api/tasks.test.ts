@@ -32,7 +32,9 @@ function req(body: unknown): Request {
   return new Request('http://localhost/api', { method: 'POST', body: JSON.stringify(body) });
 }
 
-const params = (p: Record<string, string>) => ({ params: Promise.resolve(p) });
+// Genérico para o tipo do objeto sobreviver: os handlers do Next 16.3 exigem
+// `Promise<{ id: string }>`, e um `Record<string, string>` não satisfaz isso.
+const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 describe('POST /api/tasks', () => {
   it('título vazio devolve 400 sem chamar addTask', async () => {
