@@ -9,6 +9,8 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Added
+- Scrollbars are styled to match the app instead of falling back to the
+  browser default, which the resizable grid made visible everywhere.
 - The dashboard is rearrangeable: hold Ctrl and drag a panel to move it, drag
   its corner to resize. The arrangement is stored per user. A button pins the
   same mode for touch screens.

@@ -44,6 +44,10 @@
   --s7: 3rem;
   --s8: 4rem;
 
+  /* barra de rolagem */
+  --scrollbar-thumb: #37314a;
+  --scrollbar-thumb-hover: var(--accent-dim);
+
   /* movimento */
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
   --fast: 140ms;
@@ -2007,7 +2011,12 @@ textarea.mail-reply-input {
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-right: var(--s2);
+  /* O espaço da barra fica reservado mesmo quando ela não está lá. Sem isto o
+     conteúdo pula de lado no exato momento em que o painel encolhe o
+     suficiente para transbordar — que é o instante em que se está
+     redimensionando e olhando para ele. */
+  scrollbar-gutter: stable;
+  padding-right: var(--s1);
 }
 
 .dashboard-grid.is-arranging .grid-panel {
@@ -2094,4 +2103,63 @@ textarea.mail-reply-input {
 
 .grid-bar .grid-hint {
   margin-bottom: 0;
+}
+
+/* ---------- barra de rolagem ---------- */
+
+/* A barra padrão do navegador é clara e destoa de tudo — aparece assim que um
+   painel fica pequeno demais para o conteúdo, que é justamente o caso comum
+   depois que a grade passou a ser redimensionável.
+
+   O tamanho e o raio só são controláveis pelos pseudoelementos -webkit-, então
+   é por eles que a barra é desenhada. O Chrome 121+ também entende
+   `scrollbar-color`, mas quando ela está presente ele ignora os
+   pseudoelementos e perde o arredondamento — por isso a versão padrão fica
+   restrita ao Firefox, que é quem não tem a outra. */
+
+*::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+/* Trilho transparente: a barra flutua sobre o fundo do painel em vez de
+   desenhar uma faixa que divide a caixa em duas. */
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: 999px;
+  /* A borda transparente com recorte no padding afina o polegar sem reduzir
+     a área de clique, que continua sendo os 12px inteiros. */
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  transition: background-color var(--fast) var(--ease);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background-color: var(--accent);
+}
+
+/* O quadradinho onde a barra vertical encontra a horizontal. */
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *::-webkit-scrollbar-thumb {
+    transition: none;
+  }
 }
