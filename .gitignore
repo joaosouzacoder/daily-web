@@ -26,3 +26,7 @@ next-env.d.ts
 # superpowers scratch (worktrees, sdd workspaces)
 .worktrees/
 .superpowers/
+
+# Planos de implementação gerados: andaime de trabalho, não documentação.
+# Os specs em docs/superpowers/specs/ ficam versionados.
+docs/superpowers/plans/

@@ -1,3 +1,4 @@
+# EXEMPLO — cole dentro de `http.services` no dynamic.yml do seu Traefik.
     daily-web-app:
       loadBalancer:
         servers:

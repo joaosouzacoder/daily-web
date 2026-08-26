@@ -4,7 +4,7 @@
 
 [`daily-tui`](https://github.com/joaosouzacoder/daily-tui) é um painel TUI em Rust que agrega e-mail, agenda, PRs, Jira, tarefas e um pomodoro para deixar rodando num monitor. Ele não fala diretamente com Gmail/Google/Jira/GitHub — só executa CLIs já instaladas e autenticadas na máquina (`himalaya`, `gcalcli`, `jira`, `mstodo`, `ghpending`) e formata a saída.
 
-`daily-web` é a versão web do mesmo painel: mesmas features, acessível em `dashboard.joaosouzacoder.com.br`, atrás de login e senha, pensado para ficar aberto num segundo monitor. Não segue o layout do TUI — é uma página única, tema Catppuccin Mocha.
+`daily-web` é a versão web do mesmo painel: mesmas features, acessível em um domínio próprio, atrás de login e senha, pensado para ficar aberto num segundo monitor. Não segue o layout do TUI — é uma página única, tema Catppuccin Mocha.
 
 Roda nesta VPS (`srv1544093`, Hostinger, IP `187.127.5.71`), a mesma que já hospeda o PergunteAI atrás de Traefik. As CLIs de dados são instaladas e autenticadas **nesta VPS**, separadas das contas já configuradas no notebook do usuário — cada credencial é própria desta máquina.
 
@@ -51,7 +51,7 @@ SQLite (`better-sqlite3`), uma tabela: `notifications_read(source, external_id, 
 
 ## Deploy nesta VPS
 
-Mesmo padrão do PergunteAI: processo host via `systemd` (usuário `jgabr`), escutando em `127.0.0.1:8010`. Nova entrada no `dynamic.yml` (file provider) do Traefik existente, roteando `Host(\`dashboard.joaosouzacoder.com.br\`)` → `http://127.0.0.1:8010`, TLS via `letsencrypt` (Cloudflare em modo Full/Strict, mesmo esquema do pergunteai). Registro DNS no Cloudflare é responsabilidade do usuário.
+Mesmo padrão do PergunteAI: processo host via `systemd` (usuário dedicado), escutando em `127.0.0.1:8010`. Nova entrada no `dynamic.yml` (file provider) do Traefik existente, roteando `Host(\`dashboard.exemplo.com\`)` → `http://127.0.0.1:8010`, TLS via `letsencrypt` (Cloudflare em modo Full/Strict, mesmo esquema do pergunteai). Registro DNS no Cloudflare é responsabilidade do usuário.
 
 Deploy manual (`scripts/deploy.sh`: `git pull` + `npm ci` + `npm run build` + `systemctl restart daily-web`) — sem CI/CD, não se justifica para uma ferramenta pessoal.
 

@@ -1,5 +1,7 @@
+# EXEMPLO — cole dentro de `http.routers` no dynamic.yml do seu Traefik e
+# troque o Host pelo seu domínio.
     daily-web-app:
-      rule: "Host(`dashboard.joaosouzacoder.com.br`)"
+      rule: "Host(`dashboard.exemplo.com`)"
       priority: 200
       entryPoints:
         - websecure

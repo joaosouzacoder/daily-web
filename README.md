@@ -1,87 +1,117 @@
 # daily-web
 
-Dashboard pessoal (Catppuccin Mocha) com paridade de features com o
-[daily-tui](https://github.com/joaosouzacoder/daily-tui): e-mail, agenda, PRs,
-Jira, tarefas e pomodoro, atrás de login/senha, pensado para ficar aberto num
-segundo monitor. Roda em `dashboard.joaosouzacoder.com.br`.
+Dashboard pessoal para deixar aberto num segundo monitor: e-mail, agenda, pull
+requests, Jira, tarefas e pomodoro numa página só, atrás de login.
 
-Arquitetura completa em
-[`docs/superpowers/specs/2026-08-25-daily-web-design.md`](docs/superpowers/specs/2026-08-25-daily-web-design.md).
+É a versão web do [daily-tui](https://github.com/joaosouzacoder/daily-tui), com
+as mesmas features. Como o TUI, ele **não fala direto com Gmail, Google, Jira
+ou GitHub** — ele executa CLIs já instaladas e autenticadas na máquina e
+formata a saída. Isso é o que torna o setup barato e o que cria o principal
+pré-requisito, abaixo.
 
-## Desenvolvimento
+Next.js 16 · React 19 · SQLite · sem framework de UI, CSS na mão (Catppuccin
+Mocha).
+
+## Pré-requisitos
+
+Este é o degrau mais alto: os painéis só mostram dados se as CLIs
+correspondentes estiverem **instaladas e autenticadas na máquina que roda a
+app**. Cada uma é independente — sem o `jira` configurado, só o painel do Jira
+mostra erro; o resto do dashboard continua funcionando.
+
+| Painel | CLI | Projeto |
+|---|---|---|
+| E-mail | `himalaya` | <https://github.com/pimalaya/himalaya> |
+| Agenda | `gcalcli` | <https://github.com/insanum/gcalcli> |
+| Pull requests | `ghpending` | CLI própria |
+| Jira | `jira` | CLI própria |
+| Tarefas | `mstodo` | CLI própria |
+
+Além disso: Node.js 22+ e, para o rascunho de resposta com IA,
+uma `ANTHROPIC_API_KEY`.
+
+## Rodando local
 
 ```sh
 npm install
-npm run dev      # http://localhost:8010
-npm test         # roda a suíte inteira uma vez
+cp .env.example .env.local     # preencha o que for testar
+npm run dev                    # http://localhost:8010
+```
+
+Crie o primeiro usuário:
+
+```sh
+npm run users -- add <username> <senha> --admin
+```
+
+Também existem `list`, `password <username> <nova-senha>` e
+`remove <username>`.
+
+Alternativa: preencher `DASHBOARD_USER` e `DASHBOARD_PASSWORD_HASH` no env —
+na primeira subida com a tabela vazia eles semeiam o primeiro admin. Gere o
+hash com:
+
+```sh
+node -e "require('bcryptjs').hash(process.argv[1], 10).then(console.log)" 'sua-senha'
+```
+
+## Testes
+
+```sh
+npm test           # suíte inteira, uma vez
 npm run test:watch
 ```
 
-Copie `.env.example` para `.env.local` e preencha o que for testar localmente.
+## Configuração
 
-## Deploy nesta VPS (primeira vez)
+Tudo vem de variáveis de ambiente; veja `.env.example` para a lista comentada.
+As que não têm default e você provavelmente precisa:
 
-1. **Gerar o hash da senha** (usa o bcryptjs já instalado como dependência):
+- `SESSION_SECRET` — obrigatório. Sem ele nenhum login é aceito, de propósito.
+  Gere com `openssl rand -hex 32`.
+- `PUBLIC_ORIGIN` — origem pública HTTPS, usada para montar o redirect de login
+  sem confiar no `Host` enviado pelo cliente.
+- `DAILY_WEB_DB_PATH` — default `./data/daily-web.db`.
 
-   ```sh
-   node -e "require('bcryptjs').hash(process.argv[1], 10).then(console.log)" 'sua-senha-aqui'
-   ```
+## Deploy
 
-2. **Criar `/etc/daily-web/env`** (fora do git) com base em `.env.example`,
-   preenchendo `DASHBOARD_USER`, o hash gerado acima em
-   `DASHBOARD_PASSWORD_HASH`, um `SESSION_SECRET` aleatório
-   (`openssl rand -hex 32`), e `PUBLIC_ORIGIN` com a origem pública HTTPS do
-   dashboard (`https://dashboard.joaosouzacoder.com.br`):
+O diretório `deploy/` traz **um exemplo** do setup que este projeto usa:
+processo host via systemd escutando em `127.0.0.1:8010`, com Traefik na frente
+terminando TLS. Os arquivos contêm caminhos e domínio específicos daquela
+máquina (usuário do SO, shims do asdf, host do roteador) — trate como
+referência, não como configuração pronta.
 
-   ```sh
-   sudo mkdir -p /etc/daily-web
-   sudo cp .env.example /etc/daily-web/env
-   sudo chmod 600 /etc/daily-web/env
-   sudo nano /etc/daily-web/env
-   ```
+Os passos, em resumo:
 
-3. **Instalar o serviço systemd:**
+1. Crie `/etc/daily-web/env` (fora do git, `chmod 600`) a partir de
+   `.env.example`.
+2. Ajuste `deploy/daily-web.service` para o seu usuário, diretório e caminho do
+   `npm` (`which npm`), e instale com `systemctl enable --now`.
+3. Mescle `deploy/traefik-*-snippet.yml` no `dynamic.yml` do seu Traefik, ou
+   use o proxy que preferir.
+4. Aponte o DNS para a máquina.
 
-   ```sh
-   sudo cp deploy/daily-web.service /etc/systemd/system/daily-web.service
-   sudo systemctl daemon-reload
-   sudo systemctl enable --now daily-web
-   ```
+`scripts/deploy.sh` faz o ciclo seguinte (pull, build, restart) e também
+assume esse layout.
 
-   O `ExecStart` do unit aponta para o `npm` do asdf
-   (`/home/jgabr/.asdf/shims/npm`), que é como Node.js está instalado nesta
-   VPS — o PATH padrão do systemd não inclui os shims do asdf. Se o alvo do
-   deploy instalar Node.js de outra forma (nvm, pacote do sistema, etc.),
-   ajuste `Environment=PATH=...` e `ExecStart=` em
-   `deploy/daily-web.service` para o caminho real do `npm` (`which npm`)
-   antes de copiar o arquivo.
+## Segurança
 
-4. **Mesclar o Traefik**: adicionar o conteúdo de
-   `deploy/traefik-router-snippet.yml` dentro de `http.routers` e de
-   `deploy/traefik-service-snippet.yml` dentro de `http.services` em
-   `/docker/traefik/dynamic.yml` (o Traefik já observa esse arquivo — não
-   precisa reiniciar o container).
+Leia [SECURITY.md](SECURITY.md) antes de expor isto em qualquer lugar. Resumo:
+a app executa CLIs do sistema com dados vindos da requisição, então quem tem
+sessão tem, por construção, bastante alcance. Foi feita para rodar na sua
+máquina, para você e para pessoas em quem você confia — não é multi-tenant.
 
-5. **Cloudflare**: criar o registro `A` (ou `CNAME`) de `dashboard` apontando
-   para o IP desta VPS, no mesmo modo (proxied) usado pelos outros
-   subdomínios.
+## Roadmap
 
-6. **Conferir**: `curl -I https://dashboard.joaosouzacoder.com.br` deve
-   redirecionar para `/login`.
+Suporte a múltiplos usuários com credenciais próprias está em andamento, em
+quatro estágios. O primeiro (usuários no banco) está pronto; o desenho completo
+e o raciocínio estão em
+[`docs/superpowers/specs/2026-08-26-multiusuario-design.md`](docs/superpowers/specs/2026-08-26-multiusuario-design.md).
 
-## Deploys seguintes
+## Licença
 
-```sh
-./scripts/deploy.sh
-```
+[PolyForm Noncommercial 1.0.0](LICENSE) — livre para uso pessoal, estudo,
+pesquisa, ONGs e instituições públicas; uso comercial não é permitido.
 
-## Autenticação das CLIs de dados
-
-`himalaya`, `gcalcli`, `jira`, `mstodo` e `ghpending` precisam estar
-instaladas e autenticadas **nesta VPS** (contas próprias, separadas do
-notebook) antes que os painéis correspondentes mostrem dados — enquanto isso,
-o painel mostra o erro da CLI no lugar dos dados, sem derrubar o resto do
-dashboard. Ver a seção "Autenticação headless das CLIs" da spec para o
-raciocínio; o passo a passo de cada CLI é o mesmo do
-[README do daily-tui](https://github.com/joaosouzacoder/daily-tui#configuração-das-contas),
-adaptado para rodar sem navegador local quando aplicável.
+Isto **não é uma licença open source** no sentido da OSI, que não admite
+restrição de campo de uso. É source-available.

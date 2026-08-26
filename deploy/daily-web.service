@@ -1,20 +1,26 @@
+# EXEMPLO — ajuste antes de instalar.
+# Os valores abaixo são placeholders; troque usuário, diretório, PATH e fuso
+# pelos da sua máquina. Instale com:
+#   sudo cp deploy/daily-web.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now daily-web
+
 [Unit]
 Description=daily-web dashboard
 After=network.target
 
 [Service]
 Type=simple
-User=jgabr
-WorkingDirectory=/home/jgabr/projects/daily-web
+User=SEU_USUARIO
+WorkingDirectory=/caminho/para/daily-web
 EnvironmentFile=/etc/daily-web/env
-# npm aqui vem do asdf (shims), que não está no PATH padrão do systemd.
-# Se o Node.js desta máquina for instalado de outra forma (nvm, apt, etc.),
-# ajuste o PATH e o ExecStart abaixo para o caminho real do `npm` (`which npm`).
-Environment=PATH=/home/jgabr/.asdf/shims:/home/jgabr/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-# Garante que "hoje"/"amanhã" e a janela da agenda usem o fuso do usuário
+# O PATH padrão do systemd é mínimo e normalmente não inclui o `npm`. Descubra
+# o caminho real com `which npm` e ajuste as duas linhas abaixo — gerenciadores
+# de versão (asdf, nvm, fnm) instalam fora dos diretórios do sistema.
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# Garante que "hoje"/"amanhã" e a janela da agenda usem o fuso esperado
 # (o código já resolve isso via getters locais — isto é só belt-and-braces).
 Environment=TZ=America/Sao_Paulo
-ExecStart=/home/jgabr/.asdf/shims/npm start
+ExecStart=/usr/bin/npm start
 Restart=on-failure
 RestartSec=5
 
