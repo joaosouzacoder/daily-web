@@ -46,7 +46,10 @@ interface RawUser {
   login?: string;
 }
 
-interface RawPull {
+// O endpoint /issues devolve issues e pull requests na mesma lista; o campo
+// `pull_request` é o que separa os dois. Buscar por ali traz as issues, que
+// o endpoint /pulls não devolve, numa chamada só por repositório.
+interface RawItem {
   number: number;
   title: string;
   html_url: string;
@@ -54,6 +57,7 @@ interface RawPull {
   user?: { login?: string } | null;
   requested_reviewers?: { login?: string }[] | null;
   updated_at?: string;
+  pull_request?: unknown;
 }
 
 /**
@@ -64,21 +68,42 @@ interface RawPull {
  * Quem escolheu acompanhar o repositório já disse o que quer ver.
  */
 export function toPullItems(
-  pulls: RawPull[],
+  items: RawItem[],
   repo: string,
   login: string,
 ): PullRequestItem[] {
-  return pulls.map((pull) => ({
+  return items.map((item) => ({
     repo,
-    number: pull.number,
-    title: pull.title,
-    url: pull.html_url,
-    author: pull.user?.login ?? '',
-    draft: pull.draft ?? false,
-    awaitingYou: (pull.requested_reviewers ?? []).some((r) => r.login === login),
-    mine: pull.user?.login === login,
-    updatedAt: pull.updated_at ?? '',
+    number: item.number,
+    title: item.title,
+    url: item.html_url,
+    author: item.user?.login ?? '',
+    draft: item.draft ?? false,
+    awaitingYou: (item.requested_reviewers ?? []).some((r) => r.login === login),
+    mine: item.user?.login === login,
+    isPullRequest: item.pull_request !== undefined && item.pull_request !== null,
+    updatedAt: item.updated_at ?? '',
   }));
+}
+
+export interface RepoGroup {
+  repo: string;
+  issues: PullRequestItem[];
+  pulls: PullRequestItem[];
+}
+
+/** Agrupa por repositório e separa issue de pull request. Uma lista corrida
+ *  misturava as duas coisas e não dizia de onde cada uma vinha. */
+export function groupByRepo(items: PullRequestItem[]): RepoGroup[] {
+  const porRepo = new Map<string, RepoGroup>();
+  for (const item of items) {
+    const grupo = porRepo.get(item.repo) ?? { repo: item.repo, issues: [], pulls: [] };
+    (item.isPullRequest ? grupo.pulls : grupo.issues).push(item);
+    porRepo.set(item.repo, grupo);
+  }
+  return [...porRepo.values()]
+    .map((g) => ({ ...g, issues: rankPulls(g.issues), pulls: rankPulls(g.pulls) }))
+    .sort((a, b) => a.repo.localeCompare(b.repo));
 }
 
 /** Primeiro o que pediram para você revisar, depois o que é seu, e o resto
@@ -106,8 +131,11 @@ export async function fetchPulls(conn: Connection): Promise<PullsDigest> {
 
   const results = await Promise.allSettled(
     repos.map(async (repo) => {
-      const pulls = (await request(token, `/repos/${repo}/pulls?state=open&per_page=100`)) as RawPull[];
-      return toPullItems(pulls, repo, login);
+      const items = (await request(
+        token,
+        `/repos/${repo}/issues?state=open&per_page=100&sort=updated`,
+      )) as RawItem[];
+      return toPullItems(items, repo, login);
     }),
   );
 

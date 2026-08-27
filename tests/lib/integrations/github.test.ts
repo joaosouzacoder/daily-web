@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseRepoList, rankPulls, serializeRepoList, toPullItems } from '@/lib/integrations/githubApi';
+import { groupByRepo, parseRepoList, rankPulls, serializeRepoList, toPullItems } from '@/lib/integrations/githubApi';
 import type { PullRequestItem } from '@/lib/types';
 
 const ME = 'joaosouzacoder';
@@ -59,6 +59,7 @@ function item(over: Partial<PullRequestItem>): PullRequestItem {
     draft: false,
     awaitingYou: false,
     mine: false,
+    isPullRequest: true,
     updatedAt: '2026-08-01T00:00:00Z',
     ...over,
   };
@@ -91,5 +92,50 @@ describe('lista de repositórios', () => {
 
   it('devolve vazio para string vazia', () => {
     expect(parseRepoList('')).toEqual([]);
+  });
+});
+
+describe('groupByRepo', () => {
+  function pull(over: Partial<PullRequestItem>): PullRequestItem {
+    return { ...item({}), isPullRequest: true, ...over };
+  }
+
+  // O endpoint /issues devolve issue e pull request na mesma lista; sem
+  // separar, o painel misturava as duas coisas.
+  it('separa issue de pull request dentro do repositório', () => {
+    const grupos = groupByRepo([
+      pull({ repo: 'a/b', number: 13, isPullRequest: true }),
+      pull({ repo: 'a/b', number: 12, isPullRequest: false }),
+    ]);
+    expect(grupos).toHaveLength(1);
+    expect(grupos[0].repo).toBe('a/b');
+    expect(grupos[0].issues.map((i) => i.number)).toEqual([12]);
+    expect(grupos[0].pulls.map((i) => i.number)).toEqual([13]);
+  });
+
+  it('agrupa por repositório, em ordem alfabética', () => {
+    const grupos = groupByRepo([
+      pull({ repo: 'z/z', number: 1 }),
+      pull({ repo: 'a/a', number: 2 }),
+    ]);
+    expect(grupos.map((g) => g.repo)).toEqual(['a/a', 'z/z']);
+  });
+
+  it('mantém a ordem de prioridade dentro de cada seção', () => {
+    const grupos = groupByRepo([
+      pull({ repo: 'a/b', number: 1 }),
+      pull({ repo: 'a/b', number: 2, awaitingYou: true }),
+    ]);
+    expect(grupos[0].pulls.map((p) => p.number)).toEqual([2, 1]);
+  });
+
+  it('não cria seção vazia no lugar errado', () => {
+    const grupos = groupByRepo([pull({ repo: 'a/b', isPullRequest: false })]);
+    expect(grupos[0].pulls).toEqual([]);
+    expect(grupos[0].issues).toHaveLength(1);
+  });
+
+  it('devolve vazio para lista vazia', () => {
+    expect(groupByRepo([])).toEqual([]);
   });
 });

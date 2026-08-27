@@ -9,7 +9,12 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 // para publicar um app que acessa contas de terceiros em escala. Um app não
 // verificado atende até 100 contas, que é muito mais do que esta app comporta.
 
+// `email` acompanha o escopo da agenda para sabermos *qual* conta autorizou.
+// Sem isso não dá para distinguir "reconectei a mesma conta" de "adicionei
+// outra", e a segunda sobrescrevia a primeira.
 export const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
+export const OAUTH_SCOPES = `${CALENDAR_SCOPE} openid email`;
+const USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const STATE_MAX_AGE_MS = 10 * 60 * 1000;
@@ -91,7 +96,7 @@ export function authorizationUrl(client: GoogleClient, state: string, loginHint?
     client_id: client.clientId,
     redirect_uri: client.redirectUri,
     response_type: 'code',
-    scope: CALENDAR_SCOPE,
+    scope: OAUTH_SCOPES,
     // `offline` + `consent` são o que garante um refresh token: sem os dois, a
     // segunda autorização volta sem ele e a conexão morre em uma hora.
     access_type: 'offline',
@@ -141,6 +146,18 @@ export function describeTokenError(data: TokenResponse): string {
 export interface ExchangeResult {
   refreshToken: string;
   accessToken: string;
+}
+
+/** O e-mail da conta que autorizou. É a identidade da conexão: é por ele que
+ *  reconectar atualiza em vez de criar uma segunda agenda. */
+export async function accountEmail(accessToken: string): Promise<string> {
+  const response = await fetch(USERINFO_URL, {
+    headers: { authorization: `Bearer ${accessToken}` },
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!response.ok) return '';
+  const data = (await response.json()) as { email?: string };
+  return data.email ?? '';
 }
 
 export async function exchangeCode(client: GoogleClient, code: string): Promise<ExchangeResult> {

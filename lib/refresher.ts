@@ -9,7 +9,7 @@ import { getPomodoroState } from './pomodoro';
 import { warmBodyCache, pruneOldBodies } from './emailCache';
 import { listUsers } from './auth/users';
 import { enabledModules, listConnections } from './vault/connections';
-import { agendaDays, dashboardLayout } from './preferences';
+import { agendaDays, dashboardLayout, jiraWatchedKeys } from './preferences';
 import type { Connection } from './vault/connections';
 
 const EMAIL_LIMIT = 30;
@@ -62,7 +62,9 @@ export async function refreshAll(userId: string): Promise<DashboardState> {
   const jiraConnection = has('jira') ? (listConnections(userId, 'jira')[0] ?? null) : null;
   const pullsConnection = has('pulls') ? (listConnections(userId, 'pulls')[0] ?? null) : null;
 
-  const [email, agenda, pulls, jira, tasks, notifications] = await Promise.all([
+  const watched = jiraConnection ? jiraWatchedKeys(userId) : [];
+
+  const [email, agenda, pulls, jira, tasks, notifications, jiraWatched] = await Promise.all([
     has('email') ? mergeConnections(mailConnections, (c) => imap.listEnvelopes(c, EMAIL_LIMIT)) : OFF,
     has('agenda')
       ? mergeConnections(calendars, (c) => agendaSource.fetchAgenda(c, undefined, days))
@@ -71,6 +73,9 @@ export async function refreshAll(userId: string): Promise<DashboardState> {
     jiraConnection ? panel(() => jiraApi.fetchIssues(jiraConnection, JIRA_FILTER)) : OFF,
     has('tasks') ? panel(() => fetchTasks(userId)) : OFF,
     jiraConnection ? panel(() => getNotifications(userId, jiraConnection)) : OFF,
+    jiraConnection && watched.length > 0
+      ? panel(() => jiraApi.fetchByKeys(jiraConnection, watched))
+      : ({ data: [], error: null } as PanelResult<never[]>),
   ]);
 
   const mailboxes: MailboxRef[] = mailConnections.map((c) => ({ id: c.id, label: c.label }));
@@ -85,6 +90,7 @@ export async function refreshAll(userId: string): Promise<DashboardState> {
     agenda,
     pulls,
     jira,
+    jiraWatched,
     tasks,
     notifications,
     pomodoro: getPomodoroState(userId),

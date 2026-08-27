@@ -24,6 +24,7 @@ function pull(over: Partial<PullRequestItem>): PullRequestItem {
     draft: false,
     awaitingYou: false,
     mine: true,
+    isPullRequest: true,
     updatedAt: '2026-08-26T10:00:00Z',
     ...over,
   };
@@ -34,7 +35,9 @@ describe('PullsPanel', () => {
     render(<PullsPanel pulls={{ data: { items: [pull({})], errors: [] }, error: null }} />);
     const link = screen.getByRole('link', { name: 'Arrumar o build' });
     expect(link).toHaveAttribute('href', 'https://github.com/joao/daily-web/pull/3');
-    expect(screen.getByText('joao/daily-web#3')).toBeInTheDocument();
+    // O repositório virou cabeçalho do bloco; a linha só carrega o número.
+    expect(screen.getByRole('heading', { name: 'joao/daily-web' })).toBeInTheDocument();
+    expect(screen.getByText('#3')).toBeInTheDocument();
   });
 
   it('marca o PR que está esperando a sua revisão', () => {

@@ -9,6 +9,16 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Added
+- Jira issues you do not own can be watched by key. Add `ABC-123` under
+  **Acompanhando** and it is fetched alongside your own; the `×` next to it
+  stops watching. Keys are validated before reaching JQL, and the row leaves
+  the list immediately rather than waiting for the next Jira fetch.
+- Shift+click selects a range of messages, as in Gmail: click one, hold Shift
+  and click another, and everything between them takes the state of the
+  message you clicked.
+- Pull requests are grouped by repository, with issues and pull requests as
+  separate lists inside each. The `/repos/{repo}/issues` endpoint returns both
+  in one list, so a flat list mixed them.
 - Scrollbars are styled to match the app instead of falling back to the
   browser default, which the resizable grid made visible everywhere.
 - The dashboard is rearrangeable: hold Ctrl and drag a panel to move it, drag
@@ -25,6 +35,8 @@ Only `main` is maintained; there are no release branches.
   did not exist, so GitHub reported the project as "Other".
 
 ### Changed
+- **Restaurar disposição** moved from the dashboard to the settings screen,
+  where the rest of the per-user configuration lives.
 - Production now runs from `/srv/daily-web` instead of the development
   checkout, so a deploy cannot overwrite uncommitted work.
 - Documentation is in English. The interface stays in Portuguese.
@@ -39,6 +51,15 @@ Only `main` is maintained; there are no release branches.
   actions to v7.
 - `vite-node` is now a direct dev dependency. It used to arrive through
   Vitest 2, which no longer ships it, and `npm run users` depends on it.
+
+### Fixed
+- A second Google calendar can now be connected. The connection is identified
+  by the account that authorized it, so reconnecting the same one renews its
+  access while authorizing another adds a calendar. Previously any Google
+  connection was overwritten, so the second account erased the first.
+- Shift+click selected only the message clicked. The anchor was read inside
+  the state updater, which React runs after the anchor has already moved to
+  the item just clicked — making every range one item long.
 
 ## [0.2.0] - 2026-08-26
 

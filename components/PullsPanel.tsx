@@ -2,28 +2,61 @@
 
 import { useEffect, useState } from 'react';
 import type { PanelResult, PullRequestItem, PullsDigest } from '@/lib/types';
+import { groupByRepo, type RepoGroup } from '@/lib/integrations/githubApi';
 import { Section } from './ui/Section';
 import { EmptyState } from './ui/EmptyState';
 import { SkeletonRows } from './ui/Skeleton';
 
 // Os PRs vinham como linhas de texto de uma CLI, então a única coisa a fazer
 // era achar a URL no meio da frase. Agora chegam estruturados da API do
-// GitHub, e a linha pode dizer de quem é e o que está esperando você.
-function PullRow({ pull }: { pull: PullRequestItem }) {
+// GitHub, agrupados pelo repositório de onde vêm.
+function ItemRow({ item }: { item: PullRequestItem }) {
   return (
     <li className="pull-row">
-      <a className="pull-title" href={pull.url} target="_blank" rel="noreferrer">
-        {pull.title}
+      <span className="pull-number mono">#{item.number}</span>
+      <a className="pull-title" href={item.url} target="_blank" rel="noreferrer">
+        {item.title}
       </a>
-      <span className="pull-meta mono">
-        {pull.repo}#{pull.number}
-      </span>
       {/* O autor só importa quando não é você: num repo próprio é o que
           separa o seu PR do que o dependabot abriu. */}
-      {!pull.mine && pull.author && <span className="pull-meta">{pull.author}</span>}
-      {pull.draft && <span className="row-tag">rascunho</span>}
-      {pull.awaitingYou && <span className="row-tag row-tag-accent">revisar</span>}
+      {!item.mine && item.author && <span className="pull-meta">{item.author}</span>}
+      {item.draft && <span className="row-tag">rascunho</span>}
+      {item.awaitingYou && <span className="row-tag row-tag-accent">revisar</span>}
     </li>
+  );
+}
+
+function RepoBlock({ group }: { group: RepoGroup }) {
+  return (
+    <div className="pull-repo">
+      <h3 className="pull-repo-name">{group.repo}</h3>
+
+      {group.issues.length > 0 && (
+        <div className="pull-kind">
+          <h4 className="pull-kind-label eyebrow">
+            Issues <span className="section-count mono">{group.issues.length}</span>
+          </h4>
+          <ul>
+            {group.issues.map((item) => (
+              <ItemRow key={item.number} item={item} />
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {group.pulls.length > 0 && (
+        <div className="pull-kind">
+          <h4 className="pull-kind-label eyebrow">
+            Pull requests <span className="section-count mono">{group.pulls.length}</span>
+          </h4>
+          <ul>
+            {group.pulls.map((item) => (
+              <ItemRow key={item.number} item={item} />
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -84,13 +117,14 @@ export function PullsPanel({ pulls, className, onChanged, loading = false }: Pro
   };
 
   const items = pulls.data?.items ?? [];
+  const grupos = groupByRepo(items);
   // Um repositório renomeado falha sozinho; mostrar isso junto dos que deram
   // certo é mais útil do que substituir o painel inteiro por um erro.
   const repoErrors = pulls.data?.errors ?? [];
 
   return (
     <div className={className}>
-      <Section eyebrow="Pull requests" count={items.length > 0 ? String(items.length) : undefined}>
+      <Section eyebrow="GitHub" count={items.length > 0 ? String(items.length) : undefined}>
         {pulls.error && (
           <p role="alert" className="panel-error">
             {pulls.error}
@@ -105,16 +139,12 @@ export function PullsPanel({ pulls, className, onChanged, loading = false }: Pro
         {loading && items.length === 0 && <SkeletonRows count={4} />}
 
         {!loading && items.length === 0 && !pulls.error && (
-          <EmptyState message="Nada pendente nos repositórios acompanhados." />
+          <EmptyState message="Nada aberto nos repositórios acompanhados." />
         )}
 
-        {items.length > 0 && (
-          <ul>
-            {items.map((pull) => (
-              <PullRow key={`${pull.repo}#${pull.number}`} pull={pull} />
-            ))}
-          </ul>
-        )}
+        {grupos.map((group) => (
+          <RepoBlock key={group.repo} group={group} />
+        ))}
 
         <details className="pulls-repos">
           <summary>Repositórios acompanhados</summary>

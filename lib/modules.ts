@@ -170,6 +170,7 @@ export const MODULES: Record<ModuleId, ModuleSpec> = {
     ],
     fields: [
       { name: 'provider', label: 'Origem', type: 'text', hidden: true, defaultValue: 'ics' },
+      { name: 'account', label: 'Conta Google', type: 'text', hidden: true },
       { name: 'refreshToken', label: 'Token do Google', type: 'password', secret: true, hidden: true },
       { name: 'calendarIds', label: 'Agendas escolhidas', type: 'text', hidden: true },
       {

@@ -32,10 +32,67 @@ const FILTER_LABEL: Record<Filter, string> = {
 
 interface Props {
   jira: PanelResult<JiraItem[]>;
+  /** Issues acompanhadas por escolha, mesmo não sendo suas. */
+  watched: PanelResult<JiraItem[]>;
+  onChanged: () => void;
   loading?: boolean;
 }
 
-export function JiraPanel({ jira, loading = false }: Props) {
+export function JiraPanel({ jira, watched, onChanged, loading = false }: Props) {
+  const [novaChave, setNovaChave] = useState('');
+  const [watchError, setWatchError] = useState<string | null>(null);
+  const [salvando, setSalvando] = useState(false);
+  const [removendo, setRemovendo] = useState<Set<string>>(new Set());
+
+  // O servidor é a verdade; `removendo` só antecipa a saída da lista até a
+  // próxima resposta chegar sem a chave.
+  const acompanhadas = useMemo(
+    () => (watched.data ?? []).filter((i) => !removendo.has(i.key)),
+    [watched.data, removendo],
+  );
+
+  const acompanhar = async () => {
+    const chave = novaChave.trim().toUpperCase();
+    if (!chave || salvando) return;
+    setSalvando(true);
+    const res = await fetch('/api/jira/watch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: chave }),
+    });
+    setSalvando(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setWatchError(data.error ?? 'Falha ao acompanhar');
+      return;
+    }
+    setWatchError(null);
+    setNovaChave('');
+    onChanged();
+  };
+
+  const parar = async (chave: string) => {
+    // Sai da lista na hora. Esperar o `onChanged` significaria esperar o Jira
+    // responder de novo — segundos para uma decisão que é toda local.
+    setRemovendo((prev) => new Set(prev).add(chave));
+    const res = await fetch('/api/jira/watch', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: chave }),
+    });
+    if (!res.ok) {
+      setRemovendo((prev) => {
+        const next = new Set(prev);
+        next.delete(chave);
+        return next;
+      });
+      setWatchError('Falha ao remover do acompanhamento');
+      return;
+    }
+    setWatchError(null);
+    onChanged();
+  };
+
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('both');
   const [grouped, setGrouped] = useState(false);
@@ -90,6 +147,90 @@ export function JiraPanel({ jira, loading = false }: Props) {
       </FilterBar>
 
       <ActiveFilters filters={activeFilters} onRemove={clearFilter} onClearAll={clearAll} />
+
+      {/* Acompanhar uma issue que não é sua: o Jira do time vizinho que trava
+          o seu, ou o que você abriu para outra pessoa. */}
+      <div className="jira-watch">
+        <h3 className="jira-group-label eyebrow">
+          Acompanhando
+          {acompanhadas.length > 0 && (
+            <span className="section-count mono"> {acompanhadas.length}</span>
+          )}
+        </h3>
+
+        <div className="jira-watch-add">
+          <input
+            className="field"
+            aria-label="acompanhar issue do Jira"
+            placeholder="ABC-123"
+            value={novaChave}
+            onChange={(e) => setNovaChave(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void acompanhar();
+            }}
+          />
+          <button
+            type="button"
+            className="btn"
+            disabled={salvando || novaChave.trim().length === 0}
+            onClick={() => void acompanhar()}
+          >
+            {salvando ? 'Buscando…' : 'Acompanhar'}
+          </button>
+        </div>
+
+        {watchError && (
+          <p role="alert" className="panel-error">
+            {watchError}
+          </p>
+        )}
+        {watched.error && (
+          <p role="alert" className="panel-error">
+            {watched.error}
+          </p>
+        )}
+
+        {acompanhadas.length === 0 && !watchError && (
+          <p className="empty">Nenhuma issue acompanhada.</p>
+        )}
+
+        <ul>
+          {acompanhadas.map((issue) => (
+            <li key={issue.key} className="jira-row">
+              <span className="jira-kind mono">{issueMarker(issue)}</span>
+              <div className="jira-main">
+                <div className="jira-line">
+                  <a className="jira-key mono" href={issue.url} target="_blank" rel="noreferrer">
+                    {issue.key}
+                  </a>
+                  <span className="jira-summary">{issue.summary}</span>
+                </div>
+                <div className="jira-meta">
+                  <span className={`jira-status jira-status-${issue.statusCategory}`}>
+                    {normalizeStatus(issue.status)}
+                  </span>
+                  {stalenessLabel(issue) && (
+                    <span className="jira-stale">{stalenessLabel(issue)}</span>
+                  )}
+                  {issue.dueDate && dueLabel(issue.dueDate) && (
+                    <span className={isOverdue(issue.dueDate) ? 'jira-due is-overdue' : 'jira-due'}>
+                      {dueLabel(issue.dueDate)}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="icon-btn icon-btn-danger"
+                aria-label={`parar de acompanhar ${issue.key}`}
+                onClick={() => void parar(issue.key)}
+              >
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
 
       {jira.error && (
         <p role="alert" className="panel-error">

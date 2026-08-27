@@ -154,6 +154,19 @@ export async function fetchMentions(conn: Connection): Promise<JiraItem[]> {
   return raw.map((issue) => toJiraItem(issue, auth.baseUrl, 'assignee'));
 }
 
+/**
+ * Busca issues por chave, para a lista de acompanhamento. As chaves são
+ * validadas antes de chegar aqui (`isJiraKey`) porque entram numa JQL — um
+ * valor livre nesse ponto seria injeção de consulta.
+ */
+export async function fetchByKeys(conn: Connection, keys: string[]): Promise<JiraItem[]> {
+  if (keys.length === 0) return [];
+  const auth = jiraAuth(conn);
+  const lista = keys.map((k) => `"${k}"`).join(', ');
+  const raw = await search(auth, `key in (${lista}) ORDER BY updated DESC`);
+  return raw.map((issue) => toJiraItem(issue, auth.baseUrl, 'assignee'));
+}
+
 export async function testConnection(conn: Connection): Promise<void> {
   await request(jiraAuth(conn), '/rest/api/3/myself', undefined);
 }

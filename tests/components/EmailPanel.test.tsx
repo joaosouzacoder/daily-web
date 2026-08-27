@@ -244,3 +244,96 @@ describe('EmailPanel', () => {
     expect(vi.mocked(global.fetch).mock.calls.length).toBe(before);
   });
 });
+
+describe('seleção por intervalo com Shift', () => {
+  const cinco: EmailEnvelope[] = Array.from({ length: 5 }, (_, i) => ({
+    id: String(i + 1),
+    account: 'mail-1',
+    accountLabel: 'Trabalho',
+    from: 'Alguém',
+    subject: `Mensagem ${i + 1}`,
+    unread: false,
+    date: `2026-08-2${5 - i}T10:00:00Z`,
+    messageId: `<${i}@x>`,
+  }));
+
+  const caixa = (n: number) =>
+    screen.getByLabelText(`selecionar Mensagem ${n}`) as HTMLInputElement;
+
+  function montar() {
+    render(
+      <EmailPanel
+        onSeenChanged={() => {}}
+        onRemoved={() => {}}
+        mailboxes={MAILBOXES}
+        email={{ data: cinco, error: null }}
+        onChanged={() => {}}
+      />,
+    );
+  }
+
+  it('marca do último clicado até o alvo, como no Gmail', () => {
+    montar();
+    fireEvent.click(caixa(2));
+    fireEvent.click(caixa(4), { shiftKey: true });
+
+    expect(caixa(1).checked).toBe(false);
+    expect(caixa(2).checked).toBe(true);
+    expect(caixa(3).checked).toBe(true);
+    expect(caixa(4).checked).toBe(true);
+    expect(caixa(5).checked).toBe(false);
+  });
+
+  it('funciona de baixo para cima', () => {
+    montar();
+    fireEvent.click(caixa(4));
+    fireEvent.click(caixa(2), { shiftKey: true });
+
+    expect(caixa(2).checked).toBe(true);
+    expect(caixa(3).checked).toBe(true);
+    expect(caixa(4).checked).toBe(true);
+    expect(caixa(1).checked).toBe(false);
+  });
+
+  // O intervalo assume o estado do alvo: se o alvo ia ser desmarcado, a
+  // faixa toda é desmarcada.
+  it('desmarca a faixa quando o alvo já estava marcado', () => {
+    montar();
+    fireEvent.click(caixa(1));
+    fireEvent.click(caixa(4), { shiftKey: true });
+    expect(caixa(3).checked).toBe(true);
+
+    // A âncora agora é o 4, então a faixa desmarcada é 3–4; o 2, fora dela,
+    // continua marcado.
+    fireEvent.click(caixa(3), { shiftKey: true });
+    expect(caixa(3).checked).toBe(false);
+    expect(caixa(4).checked).toBe(false);
+    expect(caixa(2).checked).toBe(true);
+  });
+
+  it('sem âncora, o Shift marca só o item clicado', () => {
+    montar();
+    fireEvent.click(caixa(3), { shiftKey: true });
+    expect(caixa(3).checked).toBe(true);
+    expect(caixa(1).checked).toBe(false);
+    expect(caixa(5).checked).toBe(false);
+  });
+
+  it('a âncora anda, permitindo intervalos encadeados', () => {
+    montar();
+    fireEvent.click(caixa(1));
+    fireEvent.click(caixa(2), { shiftKey: true });
+    fireEvent.click(caixa(4), { shiftKey: true });
+    expect(caixa(3).checked).toBe(true);
+    expect(caixa(4).checked).toBe(true);
+  });
+
+  it('clique sem Shift continua alternando um só', () => {
+    montar();
+    fireEvent.click(caixa(2));
+    fireEvent.click(caixa(4));
+    expect(caixa(3).checked).toBe(false);
+    expect(caixa(2).checked).toBe(true);
+    expect(caixa(4).checked).toBe(true);
+  });
+});

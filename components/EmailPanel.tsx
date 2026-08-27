@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Label, Trash } from 'iconoir-react';
 import type { Account, EmailEnvelope, MailboxRef, PanelResult } from '@/lib/types';
 import type { ActiveFilter } from '@/lib/filters';
@@ -183,14 +183,42 @@ export function EmailPanel({
     setAccount('all');
   };
 
-  const toggleSelect = (m: EmailEnvelope) => {
+  // Âncora do intervalo: no Gmail, Shift+clique marca do último clicado até
+  // aqui. Sem guardar qual foi o último, não há de onde partir.
+  const ancora = useRef<string | null>(null);
+
+  const toggleSelect = (m: EmailEnvelope, shift: boolean) => {
+    const k = key(m);
+    const indice = visible.findIndex((x) => key(x) === k);
+    // A âncora é lida agora, e não dentro do updater: o React chama o updater
+    // depois, quando `ancora.current` já é o item recém-clicado — e aí o
+    // intervalo teria só um item.
+    const inicio =
+      ancora.current === null ? -1 : visible.findIndex((x) => key(x) === ancora.current);
+
     setSelected((prev) => {
       const next = new Set(prev);
-      const k = key(m);
+
+      if (shift && inicio !== -1 && indice !== -1) {
+        // O intervalo assume o estado do alvo, como no Gmail: marcar um não
+        // lido marca a faixa toda, desmarcar desmarca a faixa toda.
+        const marcar = !next.has(k);
+        const [de, ate] = inicio <= indice ? [inicio, indice] : [indice, inicio];
+        for (let i = de; i <= ate; i += 1) {
+          const atual = key(visible[i]);
+          if (marcar) next.add(atual);
+          else next.delete(atual);
+        }
+        return next;
+      }
+
       if (next.has(k)) next.delete(k);
       else next.add(k);
       return next;
     });
+
+    // A âncora anda mesmo com Shift, para intervalos encadeados funcionarem.
+    ancora.current = k;
   };
 
   useEffect(() => {
@@ -367,7 +395,10 @@ export function EmailPanel({
                   <input
                     type="checkbox"
                     checked={selected.has(key(m))}
-                    onChange={() => toggleSelect(m)}
+                    onChange={() => {}}
+                    // O checkbox nativo não conta se o Shift estava
+                    // pressionado no `change`; o clique, sim.
+                    onClick={(e) => toggleSelect(m, e.shiftKey)}
                     aria-label={`selecionar ${m.subject || '(sem assunto)'}`}
                   />
                   <button

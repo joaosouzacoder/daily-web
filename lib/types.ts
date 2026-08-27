@@ -33,6 +33,8 @@ export interface PullRequestItem {
   awaitingYou: boolean;
   /** Você abriu este PR. */
   mine: boolean;
+  /** Separa pull request de issue: o GitHub devolve os dois na mesma lista. */
+  isPullRequest: boolean;
   updatedAt: string;
 }
 
@@ -136,6 +138,8 @@ export interface DashboardState {
   agenda: PanelResult<AgendaItem[]>;
   pulls: PanelResult<PullsDigest>;
   jira: PanelResult<JiraItem[]>;
+  /** Issues que o usuário escolheu acompanhar, mesmo não sendo dele. */
+  jiraWatched: PanelResult<JiraItem[]>;
   tasks: PanelResult<TodoTask[]>;
   notifications: PanelResult<NotificationItem[]>;
   pomodoro: PomodoroState;

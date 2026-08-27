@@ -14,7 +14,7 @@ import { TasksPanel } from '@/components/TasksPanel';
 import { DashboardGrid } from '@/components/DashboardGrid';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { DEFAULT_AGENDA_DAYS } from '@/lib/agendaWindow';
-import { defaultLayout, isDefaultLayout, type PanelPlacement } from '@/lib/dashboardLayout';
+import { defaultLayout, type PanelPlacement } from '@/lib/dashboardLayout';
 import {
   markEmailsSeen,
   markNotificationRead,
@@ -56,20 +56,6 @@ export default function DashboardPage() {
     },
     [mutate, reload],
   );
-
-  const restoreLayout = useCallback(async () => {
-    const res = await fetch('/api/preferences', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ layout: null }),
-    });
-    if (!res.ok) {
-      setLayoutError('Falha ao restaurar a disposição');
-      return;
-    }
-    setLayoutError(null);
-    mutate((s) => ({ ...s, layout: defaultLayout() }));
-  }, [mutate]);
 
   const panels: { id: string; node: ReactNode }[] = [
     has('email') && {
@@ -113,7 +99,14 @@ export default function DashboardPage() {
     },
     has('jira') && {
       id: 'jira',
-      node: <JiraPanel jira={state?.jira ?? { data: [], error: null }} loading={booting} />,
+      node: (
+        <JiraPanel
+          jira={state?.jira ?? { data: [], error: null }}
+          watched={state?.jiraWatched ?? { data: [], error: null }}
+          onChanged={reload}
+          loading={booting}
+        />
+      ),
     },
     has('pulls') && {
       id: 'pulls',
@@ -142,13 +135,6 @@ export default function DashboardPage() {
               onChanged={reload}
               onMarkedRead={(id) => mutate((s) => markNotificationRead(s, id))}
             />
-          ) : null
-        }
-        extra={
-          !isDefaultLayout(layout) ? (
-            <button type="button" className="btn" onClick={() => void restoreLayout()}>
-              Restaurar disposição
-            </button>
           ) : null
         }
       />

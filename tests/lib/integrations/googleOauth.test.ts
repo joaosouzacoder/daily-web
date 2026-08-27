@@ -74,11 +74,15 @@ describe('authorizationUrl', () => {
     expect(url.searchParams.get('redirect_uri')).toBe(CLIENT.redirectUri);
   });
 
-  it('pede só leitura da agenda', () => {
-    const url = new URL(authorizationUrl(CLIENT, 'e'));
-    expect(url.searchParams.get('scope')).toBe(
-      'https://www.googleapis.com/auth/calendar.readonly',
-    );
+  // `email` acompanha o escopo da agenda para sabermos qual conta autorizou —
+  // sem isso a segunda conta Google sobrescrevia a primeira.
+  it('pede leitura da agenda e a identidade da conta', () => {
+    const escopo = new URL(authorizationUrl(CLIENT, 'e')).searchParams.get('scope') ?? '';
+    expect(escopo).toContain('https://www.googleapis.com/auth/calendar.readonly');
+    expect(escopo).toContain('email');
+    // Nada de escrita: o painel só lê a agenda.
+    expect(escopo).not.toContain('auth/calendar ');
+    expect(escopo).not.toContain('calendar.events');
   });
 
   it('passa o login_hint quando informado', () => {

@@ -2163,3 +2163,57 @@ textarea.mail-reply-input {
     transition: none;
   }
 }
+
+/* ---------- github: repositório, issues, pull requests ---------- */
+
+.pull-repo {
+  margin-bottom: var(--s5);
+}
+
+.pull-repo:last-child {
+  margin-bottom: 0;
+}
+
+.pull-repo-name {
+  font-size: var(--step-0);
+  font-weight: 500;
+  padding-bottom: var(--s2);
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: var(--s2);
+}
+
+/* Issues e pull requests recuados sob o repositório: o recuo é o que diz que
+   pertencem a ele, sem repetir o nome em cada linha. */
+.pull-kind {
+  margin: var(--s3) 0 var(--s3) var(--s4);
+}
+
+.pull-kind-label {
+  margin-bottom: var(--s1);
+}
+
+.pull-number {
+  flex: none;
+  color: var(--text-faint);
+  font-size: var(--step--1);
+}
+
+/* ---------- jira: acompanhando ---------- */
+
+.jira-watch {
+  padding-bottom: var(--s4);
+  margin-bottom: var(--s4);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.jira-watch-add {
+  display: flex;
+  gap: var(--s2);
+  margin: var(--s2) 0;
+}
+
+.jira-watch-add .field {
+  flex: 1;
+  min-width: 0;
+  max-width: 12rem;
+}

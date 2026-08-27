@@ -64,3 +64,31 @@ export function resetDashboardLayout(userId: string): void {
 export function deleteUserPreferences(userId: string): void {
   getDb().prepare('DELETE FROM preferences WHERE user_id = ?').run(userId);
 }
+
+export const JIRA_WATCHED = 'jiraWatchedKeys';
+
+/** Uma chave do Jira: letras, hífen, números. Vale validar aqui porque ela
+ *  entra numa JQL, e um valor livre ali seria injeção de consulta. */
+const JIRA_KEY_PATTERN = /^[A-Z][A-Z0-9_]*-\d+$/;
+
+export function isJiraKey(value: unknown): value is string {
+  return typeof value === 'string' && JIRA_KEY_PATTERN.test(value.toUpperCase());
+}
+
+/** Issues que a pessoa quer acompanhar mesmo não sendo dela — o Jira do time
+ *  vizinho que trava o seu, a issue que você abriu para outro alguém. */
+export function jiraWatchedKeys(userId: string): string[] {
+  const bruto = read(userId, JIRA_WATCHED);
+  if (!bruto) return [];
+  return bruto
+    .split(',')
+    .map((k) => k.trim().toUpperCase())
+    .filter(isJiraKey);
+}
+
+export function setJiraWatchedKeys(userId: string, keys: string[]): void {
+  // Sem duplicatas e sempre em caixa alta: o Jira não diferencia, e a lista
+  // não deve mostrar TT-1 e tt-1 como duas coisas.
+  const limpas = [...new Set(keys.map((k) => k.trim().toUpperCase()).filter(isJiraKey))];
+  setPreference(userId, JIRA_WATCHED, limpas.join(','));
+}

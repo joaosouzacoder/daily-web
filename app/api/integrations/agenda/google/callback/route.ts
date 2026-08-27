@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth/currentUser';
-import { exchangeCode, googleClient, verifyState } from '@/lib/integrations/google/oauth';
+import {
+  accountEmail,
+  exchangeCode,
+  googleClient,
+  verifyState,
+} from '@/lib/integrations/google/oauth';
 import { listConnections, saveConnection, setModuleEnabled } from '@/lib/vault/connections';
 import { dropCache } from '@/lib/refresher';
 
@@ -36,17 +41,22 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const { refreshToken } = await exchangeCode(googleClient(), code);
-    // Reconectar atualiza a conexão que já existe em vez de criar uma segunda:
-    // quem autoriza de novo está renovando o acesso, não somando uma agenda.
+    const { refreshToken, accessToken } = await exchangeCode(googleClient(), code);
+    const email = await accountEmail(accessToken);
+
+    // A conexão é identificada pela conta que autorizou. Reconectar a mesma
+    // renova o acesso; autorizar outra soma uma agenda. Antes qualquer
+    // conexão do Google era sobrescrita, então a segunda conta apagava a
+    // primeira e só uma agenda existia por vez.
     const existing = listConnections(user.id, 'agenda').find(
-      (c) => c.values.provider === 'google',
+      (c) => c.values.provider === 'google' && (c.values.account ?? '') === email,
     );
+
     saveConnection(
       user.id,
       'agenda',
-      existing?.label ?? 'Google Agenda',
-      { ...(existing?.values ?? {}), provider: 'google', refreshToken },
+      existing?.label ?? (email || 'Google Agenda'),
+      { ...(existing?.values ?? {}), provider: 'google', refreshToken, account: email },
       existing?.id,
     );
     // Autorizar no Google é intenção explícita de usar a agenda. Sem isto,
