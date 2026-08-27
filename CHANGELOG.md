@@ -21,9 +21,9 @@ Only `main` is maintained; there are no release branches.
   in one list, so a flat list mixed them.
 - Scrollbars are styled to match the app instead of falling back to the
   browser default, which the resizable grid made visible everywhere.
-- The dashboard is rearrangeable: hold Ctrl and drag a panel to move it, drag
-  its corner to resize. The arrangement is stored per user. A button pins the
-  same mode for touch screens.
+- The dashboard is rearrangeable: **Organizar** enters a mode where panels move
+  by dragging and resize by the corner, and **Concluir** leaves it. The
+  arrangement is stored per user.
 - The Jira panel now shows status, staleness and due date on each row.
   Six issues turned out to be past due, which the panel had no way of
   showing before.
@@ -35,6 +35,9 @@ Only `main` is maintained; there are no release branches.
   did not exist, so GitHub reported the project as "Other".
 
 ### Changed
+- Rearranging is entered only through the **Organizar** button. Holding Ctrl
+  used to enter it as well, which meant a modifier key silently changed what a
+  click did anywhere on the dashboard.
 - **Restaurar disposição** moved from the dashboard to the settings screen,
   where the rest of the per-user configuration lives.
 - Production now runs from `/srv/daily-web` instead of the development

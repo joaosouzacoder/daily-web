@@ -20,60 +20,6 @@ const NARROW_BREAKPOINT = 1023;
 
 const naoFazNada = () => {};
 
-/**
- * O react-draggable recusa começar um arrasto quando o Ctrl está pressionado:
- *
- *     if (!allowAnyClick && (e.button !== 0 || e.ctrlKey)) return false;
- *
- * A regra existe porque no macOS Ctrl+clique é o clique secundário, e o
- * react-grid-layout não expõe `allowAnyClick` para desligá-la. Como Ctrl+
- * arrastar é justamente a interação pedida, o mousedown é reemitido sem o
- * modificador — o modo de organizar já foi ligado pela tecla, então a
- * informação do Ctrl não é mais necessária a partir daqui.
- *
- * Só o mousedown precisa disso: o react-draggable checa o modificador uma vez,
- * no início, e depois escuta mousemove e mouseup no documento.
- */
-function useCtrlDragBridge(active: boolean) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const node = containerRef.current;
-    if (!node || !active) return;
-
-    let reemitindo = false;
-    const capture = (e: MouseEvent) => {
-      if (!e.ctrlKey || reemitindo || e.button !== 0) return;
-      const alvo = e.target;
-      if (!(alvo instanceof HTMLElement)) return;
-
-      e.stopPropagation();
-      e.preventDefault();
-      reemitindo = true;
-      alvo.dispatchEvent(
-        new MouseEvent('mousedown', {
-          bubbles: true,
-          cancelable: true,
-          view: window,
-          button: 0,
-          buttons: 1,
-          clientX: e.clientX,
-          clientY: e.clientY,
-          screenX: e.screenX,
-          screenY: e.screenY,
-          ctrlKey: false,
-        }),
-      );
-      reemitindo = false;
-    };
-
-    node.addEventListener('mousedown', capture, true);
-    return () => node.removeEventListener('mousedown', capture, true);
-  }, [active]);
-
-  return containerRef;
-}
-
 interface Props {
   layout: PanelPlacement[];
   /** Ids dos painéis a desenhar, na ordem em que o layout os posiciona. */
@@ -84,18 +30,14 @@ interface Props {
 export function DashboardGrid({ layout, panels, onLayoutChange }: Props) {
   // A v2 mede a largura por hook em vez do antigo WidthProvider.
   const { width, mounted, containerRef } = useContainerWidth();
-  const [ctrlHeld, setCtrlHeld] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [narrow, setNarrow] = useState(false);
-  // Em tela de toque não existe Ctrl. O botão deixa o modo preso até a pessoa
-  // desligar, e serve também para quem prefere não segurar tecla nenhuma.
+  // O botão é a única entrada do modo: deixa preso até a pessoa desligar, e
+  // funciona igual em tela de toque, onde não há tecla para segurar.
   const [pinned, setPinned] = useState(false);
-  // Soltar o Ctrl no meio de um arrasto desligaria a grade com o painel no
-  // ar. O modo só cai quando o arrasto termina.
-  const arranging = ctrlHeld || dragging || pinned;
-  // A ponte só fica ativa enquanto o Ctrl está de fato pressionado: fora
-  // disso, nenhum mousedown deve ser tocado.
-  const ctrlBridgeRef = useCtrlDragBridge(ctrlHeld);
+  // `dragging` mantém o modo de pé enquanto um arrasto está em andamento,
+  // para desligar o botão no meio não deixar o painel no ar.
+  const arranging = dragging || pinned;
 
   useEffect(() => {
     const media = window.matchMedia(`(max-width: ${NARROW_BREAKPOINT}px)`);
@@ -103,27 +45,6 @@ export function DashboardGrid({ layout, panels, onLayoutChange }: Props) {
     sync();
     media.addEventListener('change', sync);
     return () => media.removeEventListener('change', sync);
-  }, []);
-
-  useEffect(() => {
-    const down = (e: KeyboardEvent) => {
-      if (e.key === 'Control') setCtrlHeld(true);
-    };
-    const up = (e: KeyboardEvent) => {
-      if (e.key === 'Control') setCtrlHeld(false);
-    };
-    // Trocar de janela com a tecla pressionada deixaria o modo ligado para
-    // sempre: o keyup acontece fora e nunca chega aqui.
-    const clear = () => setCtrlHeld(false);
-
-    window.addEventListener('keydown', down);
-    window.addEventListener('keyup', up);
-    window.addEventListener('blur', clear);
-    return () => {
-      window.removeEventListener('keydown', down);
-      window.removeEventListener('keyup', up);
-      window.removeEventListener('blur', clear);
-    };
   }, []);
 
   // A lista de painéis é reconstruída a cada render da página, então comparar
@@ -175,8 +96,8 @@ export function DashboardGrid({ layout, panels, onLayoutChange }: Props) {
   const dragConfig = useMemo(
     () => ({
       enabled: arranging,
-      // Controles interativos nunca iniciam arrasto, mesmo com Ctrl: sem
-      // isto, redimensionar um textarea viraria mover o painel.
+      // Controles interativos nunca iniciam arrasto: sem isto, redimensionar
+      // um textarea viraria mover o painel.
       cancel: 'input, textarea, select, button, a',
     }),
     [arranging],
@@ -187,8 +108,8 @@ export function DashboardGrid({ layout, panels, onLayoutChange }: Props) {
   );
 
   if (narrow) {
-    // Numa tela estreita não há Ctrl nem espaço para grade. Os painéis caem
-    // numa coluna, na ordem em que estão dispostos.
+    // Numa tela estreita não há espaço para grade. Os painéis caem numa
+    // coluna, na ordem em que estão dispostos.
     const ordenados = [...visible].sort((a, b) => a.y - b.y || a.x - b.x);
     return (
       <div className="col">
@@ -199,12 +120,9 @@ export function DashboardGrid({ layout, panels, onLayoutChange }: Props) {
 
   return (
     <div ref={containerRef}>
-      <div ref={ctrlBridgeRef} className="grid-bridge">
       <div className="grid-bar">
         <p className={`grid-hint${arranging ? ' is-on' : ''}`} role="status">
-          {arranging
-            ? 'Arraste para mover, puxe o canto para redimensionar.'
-            : 'Segure Ctrl para reorganizar os painéis.'}
+          {arranging ? 'Arraste para mover, puxe o canto para redimensionar.' : ''}
         </p>
         <button
           type="button"
@@ -222,8 +140,8 @@ export function DashboardGrid({ layout, panels, onLayoutChange }: Props) {
         width={width}
         layout={visible}
         gridConfig={gridConfig}
-        // Sem Ctrl, o painel é conteúdo comum: clicar num e-mail, marcar uma
-        // tarefa e selecionar texto continuam funcionando como sempre.
+        // Fora do modo de organizar, o painel é conteúdo comum: clicar num
+        // e-mail, marcar uma tarefa e selecionar texto continuam funcionando.
         dragConfig={dragConfig}
         resizeConfig={resizeConfig}
         onLayoutChange={handleChange}
@@ -251,7 +169,6 @@ export function DashboardGrid({ layout, panels, onLayoutChange }: Props) {
         ))}
       </GridLayout>
       )}
-      </div>
     </div>
   );
 }

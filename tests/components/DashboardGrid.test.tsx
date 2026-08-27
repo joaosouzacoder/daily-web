@@ -53,43 +53,44 @@ describe('DashboardGrid', () => {
     ]);
   });
 
-  // Sem o Ctrl o painel é conteúdo comum: clicar num e-mail, marcar uma
-  // tarefa e selecionar texto precisam continuar funcionando.
+  // Fora do modo de organizar o painel é conteúdo comum: clicar num e-mail,
+  // marcar uma tarefa e selecionar texto precisam continuar funcionando.
   it('começa com arrastar e redimensionar desligados', () => {
     render(<DashboardGrid layout={defaultLayout()} panels={painéis} onLayoutChange={() => {}} />);
     expect((ultimasProps().dragConfig as { enabled: boolean }).enabled).toBe(false);
     expect((ultimasProps().resizeConfig as { enabled: boolean }).enabled).toBe(false);
   });
 
-  it('liga ao segurar Ctrl e desliga ao soltar', () => {
+  // Segurar Ctrl chegou a ligar o modo. Não liga mais: o botão é a única
+  // entrada, e uma tecla comum não pode mudar o que o clique faz.
+  it('não liga ao segurar Ctrl', () => {
     render(<DashboardGrid layout={defaultLayout()} panels={painéis} onLayoutChange={() => {}} />);
 
     fireEvent.keyDown(window, { key: 'Control' });
-    expect((ultimasProps().dragConfig as { enabled: boolean }).enabled).toBe(true);
-    expect((ultimasProps().resizeConfig as { enabled: boolean }).enabled).toBe(true);
-
-    fireEvent.keyUp(window, { key: 'Control' });
     expect((ultimasProps().dragConfig as { enabled: boolean }).enabled).toBe(false);
+    expect((ultimasProps().resizeConfig as { enabled: boolean }).enabled).toBe(false);
   });
 
-  // Trocar de janela com a tecla pressionada deixaria o modo ligado para
-  // sempre: o keyup acontece fora e nunca chega.
-  it('desliga quando a janela perde o foco', () => {
-    render(<DashboardGrid layout={defaultLayout()} panels={painéis} onLayoutChange={() => {}} />);
-    fireEvent.keyDown(window, { key: 'Control' });
-    fireEvent.blur(window);
-    expect((ultimasProps().dragConfig as { enabled: boolean }).enabled).toBe(false);
-  });
-
-  // Em tela de toque não existe Ctrl.
   it('o botão prende o modo até ser desligado', () => {
     render(<DashboardGrid layout={defaultLayout()} panels={painéis} onLayoutChange={() => {}} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Organizar' }));
     expect((ultimasProps().dragConfig as { enabled: boolean }).enabled).toBe(true);
+    expect((ultimasProps().resizeConfig as { enabled: boolean }).enabled).toBe(true);
 
     fireEvent.click(screen.getByRole('button', { name: 'Concluir' }));
     expect((ultimasProps().dragConfig as { enabled: boolean }).enabled).toBe(false);
+    expect((ultimasProps().resizeConfig as { enabled: boolean }).enabled).toBe(false);
+  });
+
+  // A dica ficava na tela o tempo todo dizendo para segurar Ctrl.
+  it('não anuncia o Ctrl fora do modo', () => {
+    render(<DashboardGrid layout={defaultLayout()} panels={painéis} onLayoutChange={() => {}} />);
+    expect(screen.queryByText(/Ctrl/i)).toBeNull();
+    expect(screen.getByRole('status')).toHaveTextContent('');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Organizar' }));
+    expect(screen.getByRole('status')).toHaveTextContent(/Arraste para mover/);
   });
 
   it('numa tela estreita empilha em coluna, sem grade', () => {

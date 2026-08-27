@@ -56,8 +56,8 @@ export function LayoutPanel() {
   return (
     <Section eyebrow="Disposição dos painéis">
       <p className="conn-intro">
-        No painel, segure <strong>Ctrl</strong> e arraste para mover; puxe o canto para
-        redimensionar. Em tela de toque, use o botão <strong>Organizar</strong>.
+        No painel, clique em <strong>Organizar</strong> para mover os painéis arrastando e
+        redimensioná-los pelo canto. Clique em <strong>Concluir</strong> quando terminar.
       </p>
 
       {erro && (

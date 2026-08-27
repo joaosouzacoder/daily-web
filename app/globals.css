@@ -1976,9 +1976,9 @@ textarea.mail-reply-input {
 
 /* ---------- grade arrastável ---------- */
 
-/* A grade só entra em modo de arrastar com o Ctrl pressionado. Fora disso o
+/* A grade só entra em modo de arrastar pelo botão "Organizar". Fora dele o
    painel é conteúdo comum: clicar num e-mail, marcar uma tarefa e selecionar
-   texto continuam funcionando, sem modo de edição para entrar e sair. */
+   texto continuam funcionando. */
 
 .grid-hint {
   margin-bottom: var(--s4);
@@ -1988,14 +1988,10 @@ textarea.mail-reply-input {
   transition: opacity var(--med) var(--ease);
 }
 
-/* A dica fica invisível até servir para alguma coisa, mas ocupa o espaço:
-   aparecer empurraria a grade inteira para baixo no meio do arrasto. */
-.grid-hint.is-on,
-.shell:hover .grid-hint {
-  opacity: 1;
-}
-
+/* A dica só existe dentro do modo, mas ocupa o espaço o tempo todo: aparecer
+   empurraria a grade inteira para baixo no meio do arrasto. */
 .grid-hint.is-on {
+  opacity: 1;
   color: var(--accent);
 }
 

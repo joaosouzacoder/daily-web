@@ -134,11 +134,10 @@ for private repositories; for public ones, no scope is needed.
 
 ## Rearranging the dashboard
 
-Hold **Ctrl** and drag a panel to move it; drag the bottom-right corner to
-resize it. Without Ctrl the panels are ordinary content, so clicking a message,
-ticking a task and selecting text keep working — there is no edit mode to enter
-and leave. On touch screens, where there is no Ctrl, the **Organizar** button
-pins the same mode until you finish.
+Click **Organizar** to move panels by dragging and resize them by the
+bottom-right corner; **Concluir** leaves the mode. Outside it the panels are
+ordinary content, so clicking a message, ticking a task and selecting text
+keep working.
 
 The arrangement is stored per user on the server, so it follows you between
 screens. **Restaurar disposição** appears once you have changed something.
