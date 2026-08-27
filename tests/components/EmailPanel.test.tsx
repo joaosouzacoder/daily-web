@@ -416,8 +416,10 @@ describe('conversas', () => {
   // Numa conversa de uma mensagem, expandir para clicar de novo seria um
   // passo a mais no caso mais comum da caixa.
   it('a conversa de uma mensagem abre direto no corpo', async () => {
-    vi.mocked(global.fetch).mockResolvedValue(
-      new Response(JSON.stringify({ text: 'corpo', quoted: '' })),
+    // Uma implementação, não um Response reaproveitado: o corpo de um Response
+    // só pode ser lido uma vez, e a abertura dispara mais de uma requisição.
+    vi.mocked(global.fetch).mockImplementation(
+      async () => new Response(JSON.stringify({ text: 'corpo', quoted: '' })),
     );
     montar();
     fireEvent.click(screen.getByText('Cobranças recorrentes').closest('button') as HTMLElement);
