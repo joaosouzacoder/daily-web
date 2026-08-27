@@ -43,6 +43,7 @@ Next.js 16 · React 19 · SQLite · no UI framework, CSS written by hand.
 | Jira | Atlassian API token | free |
 | Pull requests | GitHub personal access token | free |
 | Tasks | stored on this server (default) | — |
+| Quick notes | stored on this server | — |
 
 Each module is independent. A module with no connection does not render an
 empty panel — it does not render at all.

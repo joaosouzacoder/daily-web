@@ -9,6 +9,13 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Added
+- **Notas rápidas**, a new module: a notepad with tabs, kept on the server so
+  the notes follow you between machines. Tabs run down the left side and the
+  column scrolls on its own when there are many, so the panel stays inside its
+  cell on the grid. Text saves itself as you stop typing, on leaving the
+  field, on switching tabs, and on closing the page. Double-click a tab to
+  rename it. It needs no credential, so it is on from the first login; the
+  settings screen only offers the on/off switch.
 - The Jira hierarchy expands and collapses, with the same disclosure arrow the
   tasks use. Branches start closed, so the panel opens on the top of each tree
   and you descend where you care; an issue with nothing under it gets a spacer
@@ -77,6 +84,8 @@ Only `main` is maintained; there are no release branches.
   Vitest 2, which no longer ships it, and `npm run users` depends on it.
 
 ### Fixed
+- A module with no fields no longer offers a **Conectar** button that opens an
+  empty form.
 - An IMAP uid is per mailbox, so the same number means different messages in
   the inbox and in Sent. The mailbox now travels with the id through the body
   route, the body cache (whose primary key gained a `mailbox` column) and the

@@ -117,6 +117,16 @@ export interface TodoTask {
   subtasks: SubTask[];
 }
 
+/** Uma aba do bloco de notas. Vive no servidor, então acompanha o usuário
+ *  entre máquinas. */
+export interface Note {
+  id: string;
+  title: string;
+  body: string;
+  position: number;
+  updatedAt: string;
+}
+
 export type NotificationSource = 'jira_mention';
 
 export interface NotificationItem {

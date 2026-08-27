@@ -12,6 +12,7 @@ import { PullsPanel } from '@/components/PullsPanel';
 import { JiraPanel } from '@/components/JiraPanel';
 import { TasksPanel } from '@/components/TasksPanel';
 import { DashboardGrid } from '@/components/DashboardGrid';
+import { NotesPanel } from '@/components/NotesPanel';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { DEFAULT_AGENDA_DAYS } from '@/lib/agendaWindow';
 import { defaultLayout, type PanelPlacement } from '@/lib/dashboardLayout';
@@ -85,6 +86,12 @@ export default function DashboardPage() {
           loading={booting}
         />
       ),
+    },
+    has('notes') && {
+      id: 'notes',
+      // O painel busca e grava as próprias notas: passar por `state` faria o
+      // refresh de 60s sobrescrever o que está sendo digitado.
+      node: <NotesPanel />,
     },
     has('agenda') && {
       id: 'agenda',

@@ -233,6 +233,23 @@ function addMailboxToBodyCache(instance: Database.Database): void {
   `);
 }
 
+// Notas rápidas: uma linha por aba, do usuário. Ficam no servidor para
+// aparecerem em qualquer máquina onde ele entrar.
+function addNotes(instance: Database.Database): void {
+  instance.exec(`
+    CREATE TABLE IF NOT EXISTS notes (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      title TEXT NOT NULL DEFAULT '',
+      body TEXT NOT NULL DEFAULT '',
+      position INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_notes_user ON notes (user_id, position);
+  `);
+}
+
 const MIGRATIONS: ((instance: Database.Database) => void)[] = [
   addUserScope,
   addConnections,
@@ -240,6 +257,7 @@ const MIGRATIONS: ((instance: Database.Database) => void)[] = [
   addLocalTasks,
   addPreferences,
   addMailboxToBodyCache,
+  addNotes,
 ];
 
 function migrate(instance: Database.Database): void {

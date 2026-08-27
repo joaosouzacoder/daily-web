@@ -531,7 +531,9 @@ export function IntegrationsPanel() {
               // Ajuda e ação na mesma linha, com separação: soltas no fluxo
               // elas encostavam uma na outra e liam como uma frase só.
               <div className="conn-actions">
-                {(spec.multi || mod.connections.length === 0) && (
+                {/* Um módulo sem campo nenhum não tem o que conectar: o
+                    botão abriria um formulário vazio. */}
+                {spec.fields.length > 0 && (spec.multi || mod.connections.length === 0) && (
                   <button type="button" className="btn" onClick={() => startNew(mod.module)}>
                     {mod.connections.length === 0 ? 'Conectar' : 'Adicionar outra'}
                   </button>

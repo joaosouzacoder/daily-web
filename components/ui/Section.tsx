@@ -4,13 +4,16 @@ interface Props {
   eyebrow: string;
   count?: string;
   actions?: ReactNode;
+  /** Para o painel que precisa impor altura ao próprio conteúdo — sem uma
+   *  classe aqui, o conteúdo não tem ancestral com altura definida. */
+  className?: string;
   children: ReactNode;
 }
 
 // Seções são delimitadas por rótulo + linha fina, nunca por caixa.
-export function Section({ eyebrow, count, actions, children }: Props) {
+export function Section({ eyebrow, count, actions, className, children }: Props) {
   return (
-    <section>
+    <section className={className}>
       <header className="section-head">
         <div className="section-title">
           <h2 className="eyebrow">{eyebrow}</h2>

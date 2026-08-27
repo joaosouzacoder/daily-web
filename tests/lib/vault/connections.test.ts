@@ -120,6 +120,7 @@ describe('resumo para a tela', () => {
       'jira',
       'pulls',
       'tasks',
+      'notes',
     ]);
     expect(moduleStates(USER).every((m) => !m.configured)).toBe(true);
   });
@@ -129,9 +130,9 @@ describe('módulos ligados e desligados', () => {
   it('começa desligado para quem não configurou nada', async () => {
     const { isModuleEnabled, enabledModules } = await import('@/lib/vault/connections');
     expect(isModuleEnabled(USER, 'email')).toBe(false);
-    // Tarefas é a exceção: funciona sem credencial, então o primeiro login
-    // já tem um painel útil em vez de uma tela vazia.
-    expect(enabledModules(USER)).toEqual(['tasks']);
+    // Tarefas e notas são a exceção: funcionam sem credencial, então o
+    // primeiro login já tem painel útil em vez de tela vazia.
+    expect(enabledModules(USER)).toEqual(['tasks', 'notes']);
   });
 
   it('deixa desligar o módulo que vem ligado por padrão', async () => {
@@ -154,7 +155,7 @@ describe('módulos ligados e desligados', () => {
     setModuleEnabled(USER, 'agenda', false);
 
     expect(isModuleEnabled(USER, 'agenda')).toBe(false);
-    expect(enabledModules(USER)).toEqual(['tasks']);
+    expect(enabledModules(USER)).toEqual(['tasks', 'notes']);
   });
 
   it('não religa sozinho ao cadastrar a segunda conexão de um módulo desligado', async () => {

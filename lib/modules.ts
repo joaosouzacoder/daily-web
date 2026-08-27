@@ -3,9 +3,9 @@
 // configuração é gerada a partir daqui, então acrescentar um módulo não exige
 // mexer em formulário nenhum.
 
-export type ModuleId = 'email' | 'agenda' | 'jira' | 'pulls' | 'tasks';
+export type ModuleId = 'email' | 'agenda' | 'jira' | 'pulls' | 'tasks' | 'notes';
 
-export const MODULE_IDS: ModuleId[] = ['email', 'agenda', 'jira', 'pulls', 'tasks'];
+export const MODULE_IDS: ModuleId[] = ['email', 'agenda', 'jira', 'pulls', 'tasks', 'notes'];
 
 export type FieldType = 'text' | 'password' | 'url' | 'number' | 'select';
 
@@ -266,6 +266,19 @@ export const MODULES: Record<ModuleId, ModuleSpec> = {
         showWhen: { field: 'provider', equals: ['mstodo'] },
       },
     ],
+  },
+  notes: {
+    id: 'notes',
+    label: 'Notas rápidas',
+    summary: 'Bloco de notas com abas, guardado no servidor.',
+    multi: false,
+    alwaysAvailable: true,
+    instructions: [
+      'Não pede credencial nenhuma: as notas ficam no banco da própria app.',
+      'Como ficam no servidor, você as vê em qualquer máquina onde entrar.',
+    ],
+    // Sem campo nenhum: o que existe para configurar é ligar e desligar.
+    fields: [],
   },
 };
 

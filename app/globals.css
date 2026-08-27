@@ -2321,3 +2321,126 @@ textarea.mail-reply-input {
   min-width: 0;
   max-width: 12rem;
 }
+
+/* ---------- notas rápidas ---------- */
+
+/* A coluna de abas só rola se tiver altura definida, e altura definida só
+   existe se toda a cadeia até a célula da grade tiver. Sem estas duas regras
+   a coluna cresce com o número de notas e empurra o painel para fora. */
+.grid-panel-body:has(> .notes-section) {
+  display: flex;
+  flex-direction: column;
+}
+
+.notes-section {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Abas na vertical à esquerda, editor à direita. A altura vem da grade, e as
+   duas colunas rolam por dentro — o painel em si nunca cresce. */
+.notes {
+  display: grid;
+  grid-template-columns: minmax(120px, 26%) 1fr;
+  gap: var(--s4);
+  min-height: 0;
+  flex: 1;
+}
+
+/* Fora da grade — na coluna única das telas estreitas — não há altura vinda
+   de cima, então o teto é da própria coluna. */
+@media (max-width: 1023px) {
+  .notes-tabs {
+    max-height: 40vh;
+  }
+}
+
+/* É a coluna de abas que rola quando há muitas notas, não o painel. */
+.notes-tabs {
+  overflow-y: auto;
+  min-height: 0;
+  max-height: 100%;
+  border-right: 1px solid var(--hairline);
+  padding-right: var(--s2);
+}
+
+.notes-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  border-radius: 6px;
+}
+
+.notes-tab:hover {
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+}
+
+/* A aba ativa é marcada por uma barra na borda interna, do lado do editor:
+   é para lá que ela aponta. */
+.notes-tab.is-active {
+  background: color-mix(in srgb, var(--surface) 75%, transparent);
+  box-shadow: inset -2px 0 0 var(--accent);
+}
+
+.notes-tab-name {
+  flex: 1;
+  min-width: 0;
+  padding: var(--s2) var(--s3);
+  background: none;
+  border: 0;
+  color: var(--text-muted);
+  font-size: var(--step--1);
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notes-tab.is-active .notes-tab-name {
+  color: var(--text);
+}
+
+.notes-tab-input {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--step--1);
+  padding: var(--s1) var(--s2);
+}
+
+/* O botão de apagar só aparece na aba sob o cursor ou na ativa: uma coluna de
+   lixeiras é ruído, e um alvo permanente convida ao clique errado. */
+.notes-tab-remove {
+  opacity: 0;
+  flex: none;
+  transition: opacity var(--fast) var(--ease);
+}
+
+.notes-tab:hover .notes-tab-remove,
+.notes-tab.is-active .notes-tab-remove,
+.notes-tab-remove:focus-visible {
+  opacity: 1;
+}
+
+.notes-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  min-height: 0;
+}
+
+.notes-text {
+  flex: 1;
+  min-height: 120px;
+  resize: none;
+  line-height: 1.65;
+  font-size: var(--step--1);
+}
+
+.notes-status {
+  font-size: 0.6875rem;
+  color: var(--text-faint);
+  text-align: right;
+}
