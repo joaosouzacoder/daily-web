@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { setSeen, applyTag, deleteEmail } from '@/lib/integrations/imap';
+import { setSeen, applyTag, deleteEmails } from '@/lib/integrations/imap';
 import { isValidEmailId, isValidFolder } from '@/lib/api/validation';
 import { requireUser } from '@/lib/api/context';
-import { findConnection } from '@/lib/vault/connections';
+import { findConnection, type Connection } from '@/lib/vault/connections';
 import { patchCachedState } from '@/lib/refresher';
 import { markEmailsSeen, removeEmails } from '@/lib/statePatches';
 
@@ -37,44 +37,51 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'pasta obrigatória' }, { status: 400 });
   }
 
-  const settled = await Promise.allSettled(
-    targets.map(async (target): Promise<BatchTargetResult> => {
-      const account = String(target.account);
-      const id = String(target.id);
+  const results: BatchTargetResult[] = [];
+  // Os alvos válidos vão juntos por conta. O IMAP opera sobre um conjunto de
+  // mensagens num comando só; mandar uma por vez abria uma conexão por
+  // mensagem e o servidor recusava o lote com "too many simultaneous
+  // connections" — foi assim que 24 de 27 exclusões falharam.
+  const porConta = new Map<string, { connection: Connection; ids: string[] }>();
 
-      if (!isValidEmailId(target.id)) {
-        return { account, id, ok: false, error: 'id inválido' };
-      }
-      // A conexão é buscada pelo dono da sessão, então um id de outra pessoa
-      // simplesmente não existe aqui.
-      const connection =
-        typeof target.account === 'string' ? findConnection(auth.value.id, target.account) : null;
-      if (!connection || connection.module !== 'email') {
-        return { account, id, ok: false, error: 'conta não encontrada' };
-      }
+  for (const target of targets) {
+    const account = String(target.account);
+    const id = String(target.id);
 
-      try {
-        if (action === 'read') await setSeen(connection, id, true);
-        else if (action === 'unread') await setSeen(connection, id, false);
-        else if (action === 'delete') await deleteEmail(connection, id);
-        else if (action === 'move') await applyTag(connection, id, folder as string);
-        return { account, id, ok: true };
-      } catch (err) {
-        return { account, id, ok: false, error: err instanceof Error ? err.message : String(err) };
-      }
-    }),
-  );
+    if (!isValidEmailId(target.id)) {
+      results.push({ account, id, ok: false, error: 'id inválido' });
+      continue;
+    }
+    // A conexão é buscada pelo dono da sessão, então um id de outra pessoa
+    // simplesmente não existe aqui.
+    const connection =
+      typeof target.account === 'string' ? findConnection(auth.value.id, target.account) : null;
+    if (!connection || connection.module !== 'email') {
+      results.push({ account, id, ok: false, error: 'conta não encontrada' });
+      continue;
+    }
 
-  const results: BatchTargetResult[] = settled.map((r) =>
-    r.status === 'fulfilled'
-      ? r.value
-      : {
-          account: 'unknown',
-          id: 'unknown',
-          ok: false,
-          error: r.reason instanceof Error ? r.reason.message : String(r.reason),
-        },
-  );
+    const grupo = porConta.get(account) ?? { connection, ids: [] };
+    grupo.ids.push(id);
+    porConta.set(account, grupo);
+  }
+
+  // Uma conta por vez: em paralelo, cada conta abriria a sua conexão ao mesmo
+  // tempo e o problema voltaria em escala menor.
+  for (const [account, { connection, ids }] of porConta) {
+    try {
+      if (action === 'read') await setSeen(connection, ids, true);
+      else if (action === 'unread') await setSeen(connection, ids, false);
+      else if (action === 'delete') await deleteEmails(connection, ids);
+      else if (action === 'move') await applyTag(connection, ids, folder as string);
+      for (const id of ids) results.push({ account, id, ok: true });
+    } catch (err) {
+      // O comando vale para o conjunto inteiro: se ele falhou, nenhuma
+      // mensagem daquela conta foi tocada.
+      const error = err instanceof Error ? err.message : String(err);
+      for (const id of ids) results.push({ account, id, ok: false, error });
+    }
+  }
 
   // Só os alvos que deram certo entram na correção: um e-mail que falhou
   // precisa continuar na tela, do jeito que está.

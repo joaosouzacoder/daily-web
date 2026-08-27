@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const seen = Boolean(body.seen);
-    await setSeen(guard.value.connection, body.id, seen);
+    await setSeen(guard.value.connection, [body.id], seen);
     // Sem corrigir o cache, o painel recarrega e volta a mostrar o e-mail
     // como não lido até o próximo ciclo do refresher.
     patchCachedState(guard.value.user.id, (state) =>

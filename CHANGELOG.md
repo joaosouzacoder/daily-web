@@ -56,6 +56,14 @@ Only `main` is maintained; there are no release branches.
   Vitest 2, which no longer ships it, and `npm run users` depends on it.
 
 ### Fixed
+- Acting on several messages at once no longer fails. Each target opened its
+  own IMAP connection, so a batch of 27 deletions asked for 27 simultaneous
+  connections and the server refused 24 of them with "Too many simultaneous
+  connections". Targets are now grouped per account and sent as a single IMAP
+  command over one connection — which is what the protocol is for, and much
+  faster besides. Message ids are checked to be digits before they are joined
+  into a sequence set, where `-` and `:` would otherwise form a range and
+  reach messages nobody selected.
 - A second Google calendar can now be connected. The connection is identified
   by the account that authorized it, so reconnecting the same one renews its
   access while authorizing another adds a calendar. Previously any Google

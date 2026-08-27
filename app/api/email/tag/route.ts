@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
   if (!guard.ok) return guard.response;
 
   try {
-    await applyTag(guard.value.connection, body.id, body.tag);
+    await applyTag(guard.value.connection, [body.id], body.tag);
     // Etiquetar é uma cópia: a mensagem continua na caixa, então nada sai da
     // lista. Só o "lido" muda, porque o servidor marca ao copiar.
     patchCachedState(guard.value.user.id, (state) =>

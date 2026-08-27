@@ -64,6 +64,29 @@ function addressLabel(from: { name?: string; address?: string } | undefined): st
   return from.name?.trim() ? from.name.trim() : (from.address ?? '');
 }
 
+const UID_PATTERN = /^[0-9]+$/;
+
+/** Quantos uids cabem num comando. O conjunto de sequência viaja numa única
+ *  linha de protocolo, e servidores recusam linhas muito longas. */
+const UIDS_PER_COMMAND = 200;
+
+/**
+ * Um uid vira parte de um conjunto de sequência IMAP ("2599,2600,2601"). Nessa
+ * gramática `-` e `:` formam intervalo, então um valor fora de dígitos ali
+ * atingiria mensagens que ninguém escolheu. Só dígitos entram.
+ */
+export function sequenceSets(uids: string[]): string[] {
+  if (uids.length === 0) throw new Error('nenhuma mensagem informada');
+  const invalido = uids.find((uid) => !UID_PATTERN.test(uid));
+  if (invalido !== undefined) throw new Error('id de mensagem inválido');
+
+  const blocos: string[] = [];
+  for (let i = 0; i < uids.length; i += UIDS_PER_COMMAND) {
+    blocos.push(uids.slice(i, i + UIDS_PER_COMMAND).join(','));
+  }
+  return blocos;
+}
+
 export async function listEnvelopes(conn: Connection, limit: number): Promise<EmailEnvelope[]> {
   return withClient(conn, async (client) => {
     const lock = await client.getMailboxLock('INBOX');
@@ -113,12 +136,19 @@ export async function fetchBody(conn: Connection, uid: string): Promise<string> 
   });
 }
 
-export async function setSeen(conn: Connection, uid: string, seen: boolean): Promise<void> {
+// As operações de caixa recebem a lista inteira de uids e abrem uma conexão
+// só. Uma conexão por mensagem faz o servidor recusar o lote inteiro com
+// "too many simultaneous connections" — o IMAP opera sobre um conjunto de
+// mensagens num comando, e é assim que ele quer ser usado.
+export async function setSeen(conn: Connection, uids: string[], seen: boolean): Promise<void> {
+  const blocos = sequenceSets(uids);
   await withClient(conn, async (client) => {
     const lock = await client.getMailboxLock('INBOX');
     try {
-      if (seen) await client.messageFlagsAdd(uid, ['\\Seen'], { uid: true });
-      else await client.messageFlagsRemove(uid, ['\\Seen'], { uid: true });
+      for (const bloco of blocos) {
+        if (seen) await client.messageFlagsAdd(bloco, ['\\Seen'], { uid: true });
+        else await client.messageFlagsRemove(bloco, ['\\Seen'], { uid: true });
+      }
     } finally {
       lock.release();
     }
@@ -147,13 +177,14 @@ export function findSpecialUse(list: ListResponse[], use: string): string | null
   return list.find((box) => box.specialUse === use)?.path ?? null;
 }
 
-export async function deleteEmail(conn: Connection, uid: string): Promise<void> {
+export async function deleteEmails(conn: Connection, uids: string[]): Promise<void> {
+  const blocos = sequenceSets(uids);
   await withClient(conn, async (client) => {
     const trash = findSpecialUse(await client.list(), '\\Trash');
     if (!trash) throw new Error('a conta não expõe uma pasta de lixeira');
     const lock = await client.getMailboxLock('INBOX');
     try {
-      await client.messageMove(uid, trash, { uid: true });
+      for (const bloco of blocos) await client.messageMove(bloco, trash, { uid: true });
     } finally {
       lock.release();
     }
@@ -164,11 +195,12 @@ export async function deleteEmail(conn: Connection, uid: string): Promise<void> 
 // a mensagem para lá: ela continua na caixa de entrada e ganha mais um rótulo,
 // que é exatamente a semântica de label. Em outros provedores o efeito é uma
 // cópia na pasta escolhida, que é o mais próximo que o IMAP oferece.
-export async function applyTag(conn: Connection, uid: string, folder: string): Promise<void> {
+export async function applyTag(conn: Connection, uids: string[], folder: string): Promise<void> {
+  const blocos = sequenceSets(uids);
   await withClient(conn, async (client) => {
     const lock = await client.getMailboxLock('INBOX');
     try {
-      await client.messageCopy(uid, folder, { uid: true });
+      for (const bloco of blocos) await client.messageCopy(bloco, folder, { uid: true });
     } finally {
       lock.release();
     }
@@ -231,7 +263,7 @@ export async function sendReply(conn: Connection, uid: string, body: string): Pr
   } finally {
     transport.close();
   }
-  await setSeen(conn, uid, true);
+  await setSeen(conn, [uid], true);
 }
 
 /** Abre a conexão e fecha, só para dizer se a credencial funciona. */

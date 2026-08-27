@@ -7,7 +7,7 @@ import path from 'node:path';
 vi.mock('@/lib/integrations/imap', () => ({
   setSeen: vi.fn(),
   applyTag: vi.fn(),
-  deleteEmail: vi.fn(),
+  deleteEmails: vi.fn(),
   listFolders: vi.fn(),
   sendReply: vi.fn(),
   fetchBody: vi.fn(),
@@ -16,7 +16,7 @@ vi.mock('@/lib/integrations/imap', () => ({
 const currentUser = vi.fn();
 vi.mock('@/lib/auth/currentUser', () => ({ getCurrentUser: () => currentUser() }));
 
-import { setSeen, applyTag, deleteEmail, listFolders, sendReply } from '@/lib/integrations/imap';
+import { setSeen, applyTag, deleteEmails, listFolders, sendReply } from '@/lib/integrations/imap';
 import { POST as markRoute } from '@/app/api/email/mark/route';
 import { POST as batchRoute } from '@/app/api/email/batch/route';
 import { GET as foldersRoute } from '@/app/api/email/folders/route';
@@ -65,7 +65,7 @@ describe('POST /api/email/mark', () => {
     const res = await markRoute(req({ account: mailId, id: '42', seen: true }));
     expect(res.status).toBe(200);
     expect(vi.mocked(setSeen).mock.calls[0][0].id).toBe(mailId);
-    expect(vi.mocked(setSeen).mock.calls[0][1]).toBe('42');
+    expect(vi.mocked(setSeen).mock.calls[0][1]).toEqual(['42']);
   });
 
   it('rejeita id fora do formato sem tocar no IMAP', async () => {
@@ -156,15 +156,16 @@ describe('POST /api/email/batch', () => {
     );
     const data = await res.json();
     expect(data.results.every((r: { ok: boolean }) => r.ok)).toBe(true);
-    expect(setSeen).toHaveBeenCalledTimes(2);
+    // Uma chamada com os dois ids, não uma por id: cada chamada abre a sua
+    // conexão IMAP, e o servidor recusa o lote inteiro por excesso delas.
+    expect(setSeen).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(setSeen).mock.calls[0][1]).toEqual(['1', '2']);
   });
 
-  // Cada alvo falha por conta própria: um e-mail que já foi apagado não pode
-  // cancelar a ação sobre os outros nove.
-  it('reporta falha por alvo sem derrubar os demais', async () => {
-    vi.mocked(deleteEmail)
-      .mockResolvedValueOnce(undefined)
-      .mockRejectedValueOnce(new Error('sumiu'));
+  // O comando vale para o conjunto: se ele falhou, nenhuma mensagem daquela
+  // conta foi tocada, e dizer que metade deu certo seria mentira.
+  it('reporta a falha do comando em todos os alvos da conta', async () => {
+    vi.mocked(deleteEmails).mockRejectedValueOnce(new Error('sumiu'));
 
     const res = await batchRoute(
       req({
@@ -176,8 +177,33 @@ describe('POST /api/email/batch', () => {
       }),
     );
     const data = await res.json();
-    expect(data.results[0].ok).toBe(true);
-    expect(data.results[1]).toMatchObject({ ok: false, error: 'sumiu' });
+    expect(data.results).toHaveLength(2);
+    expect(data.results.every((r: { ok: boolean }) => !r.ok)).toBe(true);
+    expect(data.results[0]).toMatchObject({ id: '1', error: 'sumiu' });
+    expect(data.results[1]).toMatchObject({ id: '2', error: 'sumiu' });
+  });
+
+  // Um id fora do formato não pode arrastar o lote inteiro: ele é recusado
+  // sozinho e o resto segue.
+  it('separa o alvo inválido sem cancelar os válidos', async () => {
+    const res = await batchRoute(
+      req({
+        action: 'delete',
+        targets: [
+          { account: mailId, id: '1' },
+          { account: mailId, id: '../x' },
+          { account: mailId, id: '2' },
+        ],
+      }),
+    );
+    const data = await res.json();
+    const porId = Object.fromEntries(
+      data.results.map((r: { id: string; ok: boolean }) => [r.id, r.ok]),
+    );
+    expect(porId['../x']).toBe(false);
+    expect(porId['1']).toBe(true);
+    expect(porId['2']).toBe(true);
+    expect(vi.mocked(deleteEmails).mock.calls[0][1]).toEqual(['1', '2']);
   });
 
   it('marca como falha o alvo que aponta para a caixa de outro usuário', async () => {
