@@ -20,6 +20,7 @@ const items: EmailEnvelope[] = [
     unread: true,
     date: '2026-08-25T10:00:00Z',
     messageId: '<a@x>',
+    references: [],
   },
   {
     id: '2',
@@ -30,6 +31,7 @@ const items: EmailEnvelope[] = [
     unread: false,
     date: '2026-08-24T10:00:00Z',
     messageId: '<b@x>',
+    references: [],
   },
 ];
 
@@ -166,9 +168,9 @@ describe('EmailPanel', () => {
     const calls: string[] = [];
     vi.mocked(global.fetch).mockImplementation(async (input, init) => {
       const url = String(input);
-      if (url.includes('/api/email/tag')) {
+      if (url.includes('/api/email/batch')) {
         calls.push(String((init as RequestInit).body));
-        return new Response(JSON.stringify({ ok: true }));
+        return new Response(JSON.stringify({ results: [{ account: 'mail-1', id: '1', ok: true }] }));
       }
       return new Response(JSON.stringify({ folders: ['Financeiro', 'Recibos'] }));
     });
@@ -183,7 +185,13 @@ describe('EmailPanel', () => {
     fireEvent.click(option);
 
     await waitFor(() => expect(calls).toHaveLength(1));
-    expect(JSON.parse(calls[0])).toEqual({ account: 'mail-1', id: '1', tag: 'Recibos' });
+    // Etiquetar vai pelo lote: uma conversa pode ter várias mensagens, e é
+    // uma conexão IMAP só para todas elas.
+    expect(JSON.parse(calls[0])).toEqual({
+      targets: [{ account: 'mail-1', id: '1' }],
+      action: 'move',
+      folder: 'Recibos',
+    });
     // O menu fecha e o corpo do e-mail nunca é carregado.
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
     expect(screen.queryByLabelText('corpo do e-mail')).toBeNull();
@@ -255,6 +263,7 @@ describe('seleção por intervalo com Shift', () => {
     unread: false,
     date: `2026-08-2${5 - i}T10:00:00Z`,
     messageId: `<${i}@x>`,
+    references: [],
   }));
 
   const caixa = (n: number) =>
@@ -335,5 +344,120 @@ describe('seleção por intervalo com Shift', () => {
     expect(caixa(3).checked).toBe(false);
     expect(caixa(2).checked).toBe(true);
     expect(caixa(4).checked).toBe(true);
+  });
+});
+
+describe('conversas', () => {
+  const fio: EmailEnvelope[] = [
+    {
+      id: '10', account: 'mail-1', accountLabel: 'Work', from: 'você',
+      subject: 'teste assunto', unread: false, date: '2026-08-27T12:11:00Z',
+      messageId: '<a@x>', references: [],
+    },
+    {
+      id: '11', account: 'mail-1', accountLabel: 'Work', from: 'Luan',
+      subject: 'Re: teste assunto', unread: true, date: '2026-08-27T14:55:00Z',
+      messageId: '<b@x>', references: ['<a@x>'],
+    },
+    {
+      id: '12', account: 'mail-1', accountLabel: 'Work', from: 'Luan',
+      subject: 'Re: teste assunto', unread: true, date: '2026-08-27T15:02:00Z',
+      messageId: '<c@x>', references: ['<a@x>', '<b@x>'],
+    },
+    {
+      id: '20', account: 'mail-1', accountLabel: 'Work', from: 'Nubank',
+      subject: 'Cobranças recorrentes', unread: true, date: '2026-08-27T13:00:00Z',
+      messageId: '<n@x>', references: [],
+    },
+  ];
+
+  function montar(onChanged = () => {}) {
+    render(
+      <EmailPanel
+        onSeenChanged={() => {}}
+        onRemoved={() => {}}
+        mailboxes={MAILBOXES}
+        email={{ data: fio, error: null }}
+        onChanged={onChanged}
+      />,
+    );
+  }
+
+  it('mostra uma linha por conversa, com o assunto sem "Re:"', () => {
+    montar();
+    expect(screen.getByText('teste assunto')).toBeInTheDocument();
+    expect(screen.queryByText('Re: teste assunto')).toBeNull();
+    expect(screen.getByText('Cobranças recorrentes')).toBeInTheDocument();
+  });
+
+  it('mostra quem participou e quantas mensagens são', () => {
+    montar();
+    expect(screen.getByText('você, Luan')).toBeInTheDocument();
+    expect(screen.getByLabelText('3 mensagens')).toHaveTextContent('3');
+  });
+
+  it('não põe contagem na conversa de uma mensagem só', () => {
+    montar();
+    expect(screen.queryByLabelText('1 mensagens')).toBeNull();
+  });
+
+  it('abre a conversa e lista as mensagens em ordem', () => {
+    montar();
+    fireEvent.click(screen.getByText('teste assunto').closest('button') as HTMLElement);
+
+    const linhas = screen
+      .getAllByRole('button')
+      .filter((b) => b.className.includes('thread-row'));
+    expect(linhas).toHaveLength(3);
+    expect(linhas[0]).toHaveTextContent('você');
+    expect(linhas[2]).toHaveTextContent('Luan');
+  });
+
+  // Numa conversa de uma mensagem, expandir para clicar de novo seria um
+  // passo a mais no caso mais comum da caixa.
+  it('a conversa de uma mensagem abre direto no corpo', async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      new Response(JSON.stringify({ text: 'corpo', quoted: '' })),
+    );
+    montar();
+    fireEvent.click(screen.getByText('Cobranças recorrentes').closest('button') as HTMLElement);
+    expect(await screen.findByLabelText('corpo do e-mail')).toBeInTheDocument();
+  });
+
+  it('marcar a conversa marca todas as mensagens dela', () => {
+    montar();
+    fireEvent.click(screen.getByLabelText('selecionar teste assunto'));
+    expect(screen.getByText('3 selecionados')).toBeInTheDocument();
+  });
+
+  it('a conversa aparece como não lida quando qualquer mensagem está', () => {
+    montar();
+    const linha = screen.getByText('teste assunto').closest('.row');
+    expect(linha?.className).toContain('row-unread');
+  });
+
+  it('excluir a conversa avisa quantas mensagens vão junto', () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    montar();
+    fireEvent.click(screen.getByLabelText('excluir teste assunto'));
+    expect(confirm).toHaveBeenCalledWith('Excluir esta conversa (3 mensagens)?');
+    confirm.mockRestore();
+  });
+
+  it('excluir uma conversa de uma mensagem pergunta no singular', () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    montar();
+    fireEvent.click(screen.getByLabelText('excluir Cobranças recorrentes'));
+    expect(confirm).toHaveBeenCalledWith('Excluir este e-mail?');
+    confirm.mockRestore();
+  });
+
+  // A busca filtra mensagens; a conversa se remonta com o que sobrou, em vez
+  // de trazer o fio inteiro de volta.
+  it('a busca não ressuscita as mensagens que ela filtrou', () => {
+    montar();
+    fireEvent.change(screen.getByLabelText('buscar e-mails'), { target: { value: 'Nubank' } });
+    expect(screen.getByText('Cobranças recorrentes')).toBeInTheDocument();
+    expect(screen.queryByText('teste assunto')).toBeNull();
   });
 });

@@ -9,6 +9,17 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Added
+- The inbox groups a conversation into one row. The subject loses its stack of
+  "Re:"/"Fwd:" prefixes, the row shows who took part and how many messages
+  there are, and opening it lists them in the order they happened. A
+  conversation of one message opens straight into the body, as before.
+  Messages are linked by their References/In-Reply-To headers, and — within a
+  single account, where it cannot cross-match — by normalized subject, which
+  rescues the threads whose headers a client dropped.
+- The quoted history inside a message body folds behind a "···" button, so a
+  reply to a reply shows what the person actually wrote. The attribution line
+  is recognized in Portuguese, English, Spanish, French and German, since one
+  thread commonly passes through clients in different languages.
 - Jira issues you do not own can be watched by key. Add `ABC-123` under
   **Acompanhando** and it is fetched alongside your own; the `×` next to it
   stops watching. Keys are validated before reaching JQL, and the row leaves

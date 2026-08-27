@@ -64,6 +64,29 @@ function addressLabel(from: { name?: string; address?: string } | undefined): st
   return from.name?.trim() ? from.name.trim() : (from.address ?? '');
 }
 
+/**
+ * O que a conversa precisa: os Message-Ids que esta mensagem responde. Vem do
+ * header References (o fio inteiro) mais o In-Reply-To (o degrau anterior),
+ * que nem sempre aparece no References.
+ *
+ * O header chega como o bloco cru pedido no FETCH ("References: <a> <b>\r\n"),
+ * podendo estar dobrado em várias linhas — daí a normalização do espaço.
+ */
+export function parseReferences(raw: Buffer | undefined, inReplyTo?: string): string[] {
+  const texto = raw ? raw.toString('utf8') : '';
+  const semRotulo = texto.replace(/^\s*references\s*:/i, '');
+  const encontrados = semRotulo.match(/<[^<>\s]+>/g) ?? [];
+
+  const todos = inReplyTo ? [...encontrados, inReplyTo] : encontrados;
+  const vistos = new Set<string>();
+  return todos.filter((id) => {
+    const chave = id.trim().toLowerCase();
+    if (!chave || vistos.has(chave)) return false;
+    vistos.add(chave);
+    return true;
+  });
+}
+
 const UID_PATTERN = /^[0-9]+$/;
 
 /** Quantos uids cabem num comando. O conjunto de sequência viaja numa única
@@ -100,6 +123,9 @@ export async function listEnvelopes(conn: Connection, limit: number): Promise<Em
         uid: true,
         flags: true,
         envelope: true,
+        // O ENVELOPE traz o In-Reply-To, mas não o References — e é o
+        // References que carrega o fio inteiro, não só o degrau anterior.
+        headers: ['references'],
       })) {
         envelopes.push({
           id: String(message.uid),
@@ -110,6 +136,7 @@ export async function listEnvelopes(conn: Connection, limit: number): Promise<Em
           unread: !message.flags?.has('\\Seen'),
           date: (message.envelope?.date ?? new Date()).toISOString(),
           messageId: message.envelope?.messageId ?? '',
+          references: parseReferences(message.headers, message.envelope?.inReplyTo),
         });
       }
       return envelopes;

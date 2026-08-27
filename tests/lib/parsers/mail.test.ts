@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readable, sortFolders } from '@/lib/parsers/mail';
+import { readable, sortFolders, splitQuoted } from '@/lib/parsers/mail';
 
 describe('readable', () => {
   it('devolve texto puro sem alteração além de colapsar linhas em branco', () => {
@@ -54,5 +54,96 @@ describe('sortFolders', () => {
 
   it('ordena o resto alfabeticamente, sem diferenciar maiúsculas', () => {
     expect(sortFolders(['zeta', 'Alfa', 'beta'])).toEqual(['Alfa', 'beta', 'zeta']);
+  });
+});
+
+describe('splitQuoted', () => {
+  // O caso real que motivou isto.
+  it('separa a resposta da atribuição em português', () => {
+    const { text, quoted } = splitQuoted(
+      [
+        'resposta à resposta',
+        '',
+        'Em qui., 27 de ago. de 2026 às 12:11, <joao.souza@exemplo.com>',
+        'escreveu:',
+        '',
+        '> Teste',
+        '>',
+      ].join('\n'),
+    );
+    expect(text).toBe('resposta à resposta');
+    expect(quoted).toContain('> Teste');
+    expect(quoted).toContain('Em qui., 27 de ago.');
+  });
+
+  it('separa a atribuição em inglês', () => {
+    const { text, quoted } = splitQuoted(
+      ['thanks, will do', '', 'On Thu, Aug 27, 2026 at 12:11 PM <a@b.com> wrote:', '> hi'].join(
+        '\n',
+      ),
+    );
+    expect(text).toBe('thanks, will do');
+    expect(quoted).toContain('> hi');
+  });
+
+  it('separa no marcador de mensagem original', () => {
+    const { text, quoted } = splitQuoted(
+      ['segue abaixo', '', '-----Mensagem original-----', 'De: alguém'].join('\n'),
+    );
+    expect(text).toBe('segue abaixo');
+    expect(quoted).toContain('Mensagem original');
+  });
+
+  it('separa o bloco citado sem atribuição nenhuma', () => {
+    const { text, quoted } = splitQuoted(['ok, combinado', '', '> pergunta anterior'].join('\n'));
+    expect(text).toBe('ok, combinado');
+    expect(quoted).toBe('> pergunta anterior');
+  });
+
+  // Um `>` no meio do texto é citação de uma frase, não o começo do histórico:
+  // cortar ali comeria o que a pessoa escreveu depois.
+  it('não corta na citação que fica no meio da mensagem', () => {
+    const corpo = ['você disse:', '> não dá', '', 'mas dá sim, veja o anexo'].join('\n');
+    const { text, quoted } = splitQuoted(corpo);
+    expect(text).toBe(corpo);
+    expect(quoted).toBe('');
+  });
+
+  it('devolve o corpo inteiro quando não há histórico', () => {
+    const { text, quoted } = splitQuoted('mensagem simples, sem resposta a nada');
+    expect(text).toBe('mensagem simples, sem resposta a nada');
+    expect(quoted).toBe('');
+  });
+
+  it('aguenta corpo vazio', () => {
+    expect(splitQuoted('')).toEqual({ text: '', quoted: '' });
+  });
+
+  // A mensagem pode ser só o encaminhamento, sem uma palavra escrita em cima.
+  it('aceita resposta vazia com histórico', () => {
+    const { text, quoted } = splitQuoted('> só o histórico');
+    expect(text).toBe('');
+    expect(quoted).toBe('> só o histórico');
+  });
+
+  it('não confunde uma linha que só menciona "escreveu"', () => {
+    const corpo = 'o cliente escreveu: preciso do relatório até sexta';
+    expect(splitQuoted(corpo).quoted).toBe('');
+  });
+
+  it('corta na primeira atribuição, não na última', () => {
+    const { quoted } = splitQuoted(
+      [
+        'terceira resposta',
+        '',
+        'Em qui., 27 de ago. de 2026 às 15:00, <b@x> escreveu:',
+        '> segunda resposta',
+        '>',
+        '> Em qui., 27 de ago. de 2026 às 12:11, <a@x> escreveu:',
+        '> > primeira',
+      ].join('\n'),
+    );
+    expect(quoted).toContain('segunda resposta');
+    expect(quoted).toContain('primeira');
   });
 });

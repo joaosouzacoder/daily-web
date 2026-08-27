@@ -636,6 +636,73 @@ input[type='checkbox']:checked {
   white-space: nowrap;
 }
 
+/* ---------- conversa ---------- */
+
+/* Quantas mensagens o fio tem. Fica ao lado do tempo, no lugar onde o olho
+   já procura o número da linha. */
+.row-count {
+  flex: none;
+  font-size: 0.6875rem;
+  color: var(--text-faint);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 0 6px;
+  line-height: 1.6;
+}
+
+.row-unread .row-count {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+}
+
+/* As mensagens do fio ficam recuadas sob a conversa, ligadas por uma linha:
+   o recuo é o que diz que elas pertencem àquela conversa e não à lista. */
+.thread-messages {
+  margin-left: calc(var(--s5) + var(--s2));
+  border-left: 1px solid var(--hairline);
+}
+
+.thread-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+  width: 100%;
+  padding: var(--s2) var(--s3);
+  background: none;
+  border: 0;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font-size: var(--step--1);
+}
+
+.thread-row:hover {
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+}
+
+.thread-from {
+  flex: 1;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thread-row.row-unread .thread-from {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.thread-time {
+  flex: none;
+  color: var(--text-faint);
+}
+
+.thread-message.is-open > .thread-row {
+  color: var(--text);
+}
+
 /* ---------- e-mail aberto (inline) ---------- */
 
 .mail-item.is-open {
@@ -676,6 +743,32 @@ input[type='checkbox']:checked {
   max-height: 340px;
   overflow-y: auto;
   padding-right: var(--s3);
+}
+
+.mail-quoted-toggle {
+  align-self: flex-start;
+  padding: 0 var(--s3);
+  line-height: 1.2;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: var(--step--1);
+  letter-spacing: 0.1em;
+}
+
+.mail-quoted-toggle:hover {
+  color: var(--text-muted);
+  border-color: var(--hairline-strong);
+}
+
+/* O histórico é o que já foi lido: fica mais apagado que a resposta e recuado
+   atrás de uma barra, como a citação que é. */
+.mail-quoted {
+  color: var(--text-faint);
+  border-left: 2px solid var(--hairline);
+  padding-left: var(--s3);
 }
 
 .mail-tags {

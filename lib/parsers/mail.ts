@@ -79,6 +79,62 @@ export function readable(raw: string): string {
   return collapseBlankLines(decodeEntities(withoutTags));
 }
 
+/**
+ * A linha de atribuição que abre o trecho citado. Cada cliente escreve a sua
+ * ("Em qui., 27 de ago. de 2026 às 12:11, <x> escreveu:", "On Thu, Aug 27,
+ * 2026 at 12:11 <x> wrote:"), e o que elas têm em comum é terminar com
+ * escreveu/wrote/escribió seguido de dois-pontos.
+ */
+const ATTRIBUTION_RE = /^\s*(?:em|on|el|le|am)\b[\s\S]{0,300}?\b(?:escreveu|wrote|escribió|a écrit|schrieb)\s*:\s*$/i;
+
+/** O separador que Outlook e afins colocam no lugar da atribuição. */
+const SEPARATOR_RE =
+  /^\s*(?:-{2,}\s*(?:mensagem original|original message|forwarded message|mensagem encaminhada)\s*-{2,}|_{5,}|-{5,})\s*$/i;
+
+export interface SplitBody {
+  /** O que a pessoa escreveu agora. */
+  text: string;
+  /** O histórico citado abaixo, vazio quando não há. */
+  quoted: string;
+}
+
+/**
+ * Separa a resposta do histórico citado. O corte acontece na primeira linha de
+ * atribuição ou separador, ou no começo de um bloco de citação (`>`) que vai
+ * até o fim — antes disso um `>` solto pode ser só alguém citando uma frase no
+ * meio do texto, e cortar ali comeria o que a pessoa escreveu.
+ */
+export function splitQuoted(body: string): SplitBody {
+  const linhas = body.split('\n');
+
+  for (let i = 0; i < linhas.length; i += 1) {
+    // A atribuição costuma vir quebrada pelo cliente ("...às 12:11, <x>\n
+    // escreveu:"), então a janela cresce até três linhas antes de desistir.
+    const atribuicao = [1, 2, 3].some((tamanho) =>
+      ATTRIBUTION_RE.test(linhas.slice(i, i + tamanho).join(' ')),
+    );
+    if (!atribuicao && !SEPARATOR_RE.test(linhas[i])) continue;
+    return {
+      text: linhas.slice(0, i).join('\n').trimEnd(),
+      quoted: linhas.slice(i).join('\n').trim(),
+    };
+  }
+
+  // Sem atribuição: procura o começo do bloco citado que fecha a mensagem.
+  let inicio = -1;
+  for (let i = linhas.length - 1; i >= 0; i -= 1) {
+    const linha = linhas[i].trim();
+    if (linha.startsWith('>')) inicio = i;
+    else if (linha !== '') break;
+  }
+  if (inicio === -1) return { text: body.trimEnd(), quoted: '' };
+
+  return {
+    text: linhas.slice(0, inicio).join('\n').trimEnd(),
+    quoted: linhas.slice(inicio).join('\n').trim(),
+  };
+}
+
 const FOLDER_ALIASES = ['inbox', 'sent', 'drafts', 'trash', 'spam', 'all'];
 
 export function sortFolders(names: string[]): string[] {

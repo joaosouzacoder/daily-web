@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { fetchBody } from '@/lib/integrations/imap';
 import { getCachedBody, putCachedBody } from '@/lib/emailCache';
+import { splitQuoted } from '@/lib/parsers/mail';
 import { isValidEmailId } from '@/lib/api/validation';
 import { requireConnection, upstreamError } from '@/lib/api/context';
 
@@ -19,15 +20,17 @@ export async function GET(
 
   // O corpo quase sempre já foi baixado pelo refresher: responde do banco
   // e só vai ao IMAP quando é um e-mail que o aquecimento ainda não pegou.
+  // O cache guarda o corpo inteiro; a separação é feita na leitura, para uma
+  // melhora no corte valer também para o que já está gravado.
   const cached = getCachedBody(user.id, account, id);
   if (cached !== null) {
-    return NextResponse.json({ text: cached, cached: true });
+    return NextResponse.json({ ...splitQuoted(cached), cached: true });
   }
 
   try {
-    const text = await fetchBody(connection, id);
-    putCachedBody(user.id, account, id, text);
-    return NextResponse.json({ text, cached: false });
+    const body = await fetchBody(connection, id);
+    putCachedBody(user.id, account, id, body);
+    return NextResponse.json({ ...splitQuoted(body), cached: false });
   } catch (err) {
     return upstreamError(err);
   }

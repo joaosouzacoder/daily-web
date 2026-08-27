@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Label, Trash } from 'iconoir-react';
-import type { Account, EmailEnvelope, MailboxRef, PanelResult } from '@/lib/types';
+import type { Account, EmailEnvelope, EmailThread, MailboxRef, PanelResult } from '@/lib/types';
 import type { ActiveFilter } from '@/lib/filters';
 import { matchesQuery, relativeTime } from '@/lib/filters';
+import { groupIntoThreads } from '@/lib/parsers/threads';
 import { Section } from './ui/Section';
 import { FilterBar } from './ui/FilterBar';
 import { SearchInput } from './ui/SearchInput';
@@ -76,6 +77,8 @@ export function EmailPanel({
 }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openKey, setOpenKey] = useState<string | null>(null);
+  // Conversas abertas na lista. Uma de uma mensagem não expande: abre direto.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [tagMenuKey, setTagMenuKey] = useState<string | null>(null);
   const [appliedTags, setAppliedTags] = useState<Record<string, string[]>>({});
   const [batchError, setBatchError] = useState<string | null>(null);
@@ -107,43 +110,47 @@ export function EmailPanel({
     return () => window.removeEventListener('keydown', onKey);
   }, [tagMenuKey]);
 
-  const applyTag = async (m: EmailEnvelope, tag: string) => {
+  // Etiquetar e excluir valem para a conversa inteira, como no Gmail — e vão
+  // pelo lote, que é uma conexão IMAP só para todas as mensagens dela.
+  const applyTagToThread = async (thread: EmailThread, tag: string) => {
+    const alvos = thread.messages.map((m) => ({ account: m.account, id: m.id }));
     // Copiar para a pasta marca como lida no servidor; a tela acompanha.
-    onSeenChanged([{ account: m.account, id: m.id }], true);
-    const res = await fetch('/api/email/tag', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ account: m.account, id: m.id, tag }),
-    });
-    const data = await res.json().catch(() => ({}));
+    onSeenChanged(alvos, true);
     setTagMenuKey(null);
-    if (!res.ok) {
-      setBatchError(data.error ?? 'Falha ao aplicar etiqueta');
+
+    const failed = (await postBatch(alvos, 'move', tag)).filter((r) => !r.ok);
+    if (failed.length > 0) {
+      setBatchError(failed[0].error ?? 'Falha ao aplicar etiqueta');
       onChanged();
       return;
     }
     setBatchError(null);
     setAppliedTags((prev) => {
-      const current = prev[key(m)] ?? [];
-      if (current.includes(tag)) return prev;
-      return { ...prev, [key(m)]: [...current, tag] };
+      const atuais = prev[thread.id] ?? [];
+      if (atuais.includes(tag)) return prev;
+      return { ...prev, [thread.id]: [...atuais, tag] };
     });
     onChanged();
   };
 
-  const removeEmail = async (m: EmailEnvelope) => {
-    if (!window.confirm('Excluir este e-mail?')) return;
-    const alvo = [{ account: m.account, id: m.id }];
+  const removeThread = async (thread: EmailThread) => {
+    const quantas = thread.messages.length;
+    const pergunta =
+      quantas === 1 ? 'Excluir este e-mail?' : `Excluir esta conversa (${quantas} mensagens)?`;
+    if (!window.confirm(pergunta)) return;
+
+    const alvos = thread.messages.map((m) => ({ account: m.account, id: m.id }));
+    const chaves = new Set(thread.messages.map(key));
 
     // Some da lista agora. Esperar a ida ao IMAP deixaria a linha parada por
     // um segundo depois do clique, como se nada tivesse acontecido.
     setBatchError(null);
-    setOpenKey((prev) => (prev === key(m) ? null : prev));
-    onRemoved(alvo);
+    setOpenKey((prev) => (prev !== null && chaves.has(prev) ? null : prev));
+    onRemoved(alvos);
 
-    const [result] = await postBatch(alvo, 'delete');
-    if (result && !result.ok) {
-      setBatchError(result.error ?? 'Falha ao excluir');
+    const failed = (await postBatch(alvos, 'delete')).filter((r) => !r.ok);
+    if (failed.length > 0) {
+      setBatchError(failed[0].error ?? 'Falha ao excluir');
       // Recarrega para o e-mail voltar: ele não foi apagado de verdade.
       onChanged();
     }
@@ -162,6 +169,17 @@ export function EmailPanel({
       sort === 'recent' ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date),
     );
   }, [all, query, onlyUnread, account, sort]);
+
+  // As conversas são montadas depois dos filtros: buscar por "Luan" precisa
+  // trazer o que casa, não o fio inteiro em volta.
+  const threads = useMemo(() => {
+    const agrupadas = groupIntoThreads(visible);
+    return agrupadas.sort((a, b) =>
+      sort === 'recent'
+        ? b.lastDate.localeCompare(a.lastDate)
+        : a.lastDate.localeCompare(b.lastDate),
+    );
+  }, [visible, sort]);
 
   const activeFilters: ActiveFilter[] = [
     ...(query.trim() ? [{ id: 'query', label: `Busca: ${query.trim()}` }] : []),
@@ -187,38 +205,41 @@ export function EmailPanel({
   // aqui. Sem guardar qual foi o último, não há de onde partir.
   const ancora = useRef<string | null>(null);
 
-  const toggleSelect = (m: EmailEnvelope, shift: boolean) => {
-    const k = key(m);
-    const indice = visible.findIndex((x) => key(x) === k);
+  // Marcar uma conversa marca as mensagens dela: a seleção continua sendo de
+  // mensagens, que é o que as ações do lote recebem.
+  const threadKeys = (t: EmailThread) => t.messages.map(key);
+
+  const toggleSelect = (thread: EmailThread, shift: boolean) => {
+    const indice = threads.findIndex((t) => t.id === thread.id);
     // A âncora é lida agora, e não dentro do updater: o React chama o updater
     // depois, quando `ancora.current` já é o item recém-clicado — e aí o
     // intervalo teria só um item.
-    const inicio =
-      ancora.current === null ? -1 : visible.findIndex((x) => key(x) === ancora.current);
+    const inicio = ancora.current === null ? -1 : threads.findIndex((t) => t.id === ancora.current);
 
     setSelected((prev) => {
       const next = new Set(prev);
+      const marcar = !threadKeys(thread).every((k) => next.has(k));
+      const aplicar = (t: EmailThread) => {
+        for (const k of threadKeys(t)) {
+          if (marcar) next.add(k);
+          else next.delete(k);
+        }
+      };
 
       if (shift && inicio !== -1 && indice !== -1) {
         // O intervalo assume o estado do alvo, como no Gmail: marcar um não
-        // lido marca a faixa toda, desmarcar desmarca a faixa toda.
-        const marcar = !next.has(k);
+        // marcado marca a faixa toda, desmarcar desmarca a faixa toda.
         const [de, ate] = inicio <= indice ? [inicio, indice] : [indice, inicio];
-        for (let i = de; i <= ate; i += 1) {
-          const atual = key(visible[i]);
-          if (marcar) next.add(atual);
-          else next.delete(atual);
-        }
+        for (let i = de; i <= ate; i += 1) aplicar(threads[i]);
         return next;
       }
 
-      if (next.has(k)) next.delete(k);
-      else next.add(k);
+      aplicar(thread);
       return next;
     });
 
     // A âncora anda mesmo com Shift, para intervalos encadeados funcionarem.
-    ancora.current = k;
+    ancora.current = thread.id;
   };
 
   useEffect(() => {
@@ -385,65 +406,90 @@ export function EmailPanel({
         <EmptyState message="Nenhum e-mail com esses filtros." />
       )}
 
-      {visible.length > 0 && (
+      {threads.length > 0 && (
         <ul>
-          {visible.map((m) => {
-            const isOpen = key(m) === openKey;
+          {threads.map((thread) => {
+            // Uma conversa de uma mensagem abre direto no corpo: expandir para
+            // clicar de novo seria um passo a mais para o caso mais comum.
+            const sozinha = thread.messages.length === 1 ? thread.messages[0] : null;
+            const isOpen = sozinha ? key(sozinha) === openKey : expanded.has(thread.id);
+            const marcada = threadKeys(thread).every((k) => selected.has(k));
+            const titulo = thread.subject || '(sem assunto)';
             return (
-              <li key={key(m)} className={`mail-item${isOpen ? ' is-open' : ''}`}>
-                <div className={`row${m.unread ? ' row-unread' : ''}`}>
+              <li key={thread.id} className={`mail-item${isOpen ? ' is-open' : ''}`}>
+                <div className={`row${thread.unreadCount > 0 ? ' row-unread' : ''}`}>
                   <input
                     type="checkbox"
-                    checked={selected.has(key(m))}
+                    checked={marcada}
                     onChange={() => {}}
                     // O checkbox nativo não conta se o Shift estava
                     // pressionado no `change`; o clique, sim.
-                    onClick={(e) => toggleSelect(m, e.shiftKey)}
-                    aria-label={`selecionar ${m.subject || '(sem assunto)'}`}
+                    onClick={(e) => toggleSelect(thread, e.shiftKey)}
+                    aria-label={`selecionar ${titulo}`}
                   />
                   <button
                     type="button"
                     className="row-main"
                     aria-expanded={isOpen}
                     onClick={() => {
-                      setOpenKey(isOpen ? null : key(m));
-                      if (!isOpen) void loadTagFolders(m.account);
+                      if (sozinha) {
+                        setOpenKey(isOpen ? null : key(sozinha));
+                        if (!isOpen) void loadTagFolders(sozinha.account);
+                        return;
+                      }
+                      setExpanded((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(thread.id)) next.delete(thread.id);
+                        else next.add(thread.id);
+                        return next;
+                      });
+                      void loadTagFolders(thread.messages[0].account);
                     }}
                   >
-                    <span className="row-title">{m.subject || '(sem assunto)'}</span>
-                    <span className="row-meta">{m.from}</span>
+                    <span className="row-title">{titulo}</span>
+                    <span className="row-meta">{thread.participants.join(', ')}</span>
                   </button>
-                  <span className="row-time mono">{relativeTime(m.date)}</span>
-                  {mailboxes.length > 1 && <span className="row-tag">{m.accountLabel}</span>}
+                  {thread.messages.length > 1 && (
+                    <span
+                      className="row-count mono"
+                      aria-label={`${thread.messages.length} mensagens`}
+                    >
+                      {thread.messages.length}
+                    </span>
+                  )}
+                  <span className="row-time mono">{relativeTime(thread.lastDate)}</span>
+                  {mailboxes.length > 1 && (
+                    <span className="row-tag">{thread.messages[0].accountLabel}</span>
+                  )}
                   <div className="row-actions">
                     <div className="row-tagger">
                       <button
                         type="button"
-                        className={`icon-btn${(appliedTags[key(m)] ?? []).length > 0 ? ' is-tagged' : ''}`}
-                        aria-label={`etiquetar ${m.subject || '(sem assunto)'}`}
-                        aria-expanded={tagMenuKey === key(m)}
+                        className={`icon-btn${(appliedTags[thread.id] ?? []).length > 0 ? ' is-tagged' : ''}`}
+                        aria-label={`etiquetar ${titulo}`}
+                        aria-expanded={tagMenuKey === thread.id}
                         onClick={() => {
-                          const next = tagMenuKey === key(m) ? null : key(m);
+                          const next = tagMenuKey === thread.id ? null : thread.id;
                           setTagMenuKey(next);
-                          if (next) void loadTagFolders(m.account);
+                          if (next) void loadTagFolders(thread.messages[0].account);
                         }}
                       >
                         <Label width={16} height={16} />
                       </button>
-                      {tagMenuKey === key(m) && (
+                      {tagMenuKey === thread.id && (
                         <>
                           <div className="tag-scrim" onClick={() => setTagMenuKey(null)} />
                           <div className="tag-menu" role="menu" aria-label="etiquetas">
-                            {(tagFolders[m.account] ?? []).length === 0 ? (
+                            {(tagFolders[thread.messages[0].account] ?? []).length === 0 ? (
                               <p className="empty">Carregando etiquetas…</p>
                             ) : (
-                              (tagFolders[m.account] ?? []).map((f) => (
+                              (tagFolders[thread.messages[0].account] ?? []).map((f) => (
                                 <button
                                   key={f}
                                   type="button"
                                   role="menuitem"
                                   className="tag-menu-item"
-                                  onClick={() => void applyTag(m, f)}
+                                  onClick={() => void applyTagToThread(thread, f)}
                                 >
                                   {f}
                                 </button>
@@ -456,21 +502,54 @@ export function EmailPanel({
                     <button
                       type="button"
                       className="icon-btn icon-btn-danger"
-                      aria-label={`excluir ${m.subject || '(sem assunto)'}`}
-                      onClick={() => void removeEmail(m)}
+                      aria-label={`excluir ${titulo}`}
+                      onClick={() => void removeThread(thread)}
                     >
                       <Trash width={16} height={16} />
                     </button>
                   </div>
                 </div>
-                {isOpen && (
+
+                {sozinha && isOpen && (
                   <EmailDetail
-                    email={m}
+                    email={sozinha}
                     onClose={() => setOpenKey(null)}
                     onChanged={onChanged}
                     onSeenChanged={onSeenChanged}
-                    appliedTags={appliedTags[key(m)] ?? []}
+                    appliedTags={appliedTags[thread.id] ?? []}
                   />
+                )}
+
+                {/* A conversa aberta mostra as mensagens na ordem em que
+                    aconteceram; clicar numa delas abre o corpo. */}
+                {!sozinha && isOpen && (
+                  <ul className="thread-messages">
+                    {thread.messages.map((m) => {
+                      const aberta = key(m) === openKey;
+                      return (
+                        <li key={key(m)} className={`thread-message${aberta ? ' is-open' : ''}`}>
+                          <button
+                            type="button"
+                            className={`thread-row${m.unread ? ' row-unread' : ''}`}
+                            aria-expanded={aberta}
+                            onClick={() => setOpenKey(aberta ? null : key(m))}
+                          >
+                            <span className="thread-from">{m.from}</span>
+                            <span className="thread-time mono">{relativeTime(m.date)}</span>
+                          </button>
+                          {aberta && (
+                            <EmailDetail
+                              email={m}
+                              onClose={() => setOpenKey(null)}
+                              onChanged={onChanged}
+                              onSeenChanged={onSeenChanged}
+                              appliedTags={appliedTags[thread.id] ?? []}
+                            />
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
                 )}
               </li>
             );
@@ -495,6 +574,8 @@ function EmailDetail({
   appliedTags: string[];
 }) {
   const [body, setBody] = useState<string | null>(null);
+  const [quoted, setQuoted] = useState('');
+  const [showQuoted, setShowQuoted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reply, setReply] = useState('');
   const [drafting, setDrafting] = useState(false);
@@ -562,6 +643,8 @@ function EmailDetail({
       .then((data) => {
         if (cancelled) return;
         setBody(data.text ?? data.error ?? '');
+        setQuoted(data.quoted ?? '');
+        setShowQuoted(false);
         // Só marca como lido depois que o corpo carregou — evita marcar
         // um e-mail que o usuário nem chegou a ver por causa de erro.
         if (email.unread) {
@@ -584,6 +667,23 @@ function EmailDetail({
   return (
     <div className="mail-detail" aria-label="corpo do e-mail">
       <div className="mail-body">{body ?? 'Carregando…'}</div>
+
+      {/* O histórico citado fica dobrado: numa resposta de resposta ele é a
+          maior parte do texto, e é justamente a parte que já foi lida. */}
+      {quoted && (
+        <>
+          <button
+            type="button"
+            className="mail-quoted-toggle"
+            aria-expanded={showQuoted}
+            aria-label={showQuoted ? 'esconder histórico' : 'mostrar histórico'}
+            onClick={() => setShowQuoted((v) => !v)}
+          >
+            ···
+          </button>
+          {showQuoted && <div className="mail-body mail-quoted">{quoted}</div>}
+        </>
+      )}
 
       {appliedTags.length > 0 && (
         <div className="mail-tags">

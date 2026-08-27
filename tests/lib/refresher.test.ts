@@ -30,6 +30,7 @@ function envelope(over: Partial<Record<string, unknown>> = {}) {
     unread: true,
     date: '2026-08-26T10:00:00Z',
     messageId: '<a@b>',
+    references: [],
     ...over,
   };
 }

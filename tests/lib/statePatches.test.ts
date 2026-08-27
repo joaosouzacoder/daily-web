@@ -21,6 +21,7 @@ function envelope(over: Partial<EmailEnvelope>): EmailEnvelope {
     unread: true,
     date: '2026-08-26T10:00:00Z',
     messageId: '<a@b>',
+    references: [],
     ...over,
   };
 }

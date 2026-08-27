@@ -12,6 +12,24 @@ export interface EmailEnvelope {
   unread: boolean;
   date: string;
   messageId: string;
+  /** Message-Ids que esta mensagem responde, do mais antigo ao mais recente:
+   *  o header References acrescido do In-Reply-To. É o que liga a conversa. */
+  references: string[];
+}
+
+/** Uma conversa: as mensagens que se referenciam entre si, da mais antiga
+ *  para a mais recente. */
+export interface EmailThread {
+  /** Chave estável da conversa — a mensagem raiz identifica o conjunto. */
+  id: string;
+  /** Assunto sem os prefixos de resposta e encaminhamento. */
+  subject: string;
+  messages: EmailEnvelope[];
+  /** Quem escreveu, na ordem em que apareceu, sem repetir. */
+  participants: string[];
+  unreadCount: number;
+  /** Data da mensagem mais recente: é por ela que a conversa se ordena. */
+  lastDate: string;
 }
 
 export interface AgendaItem {

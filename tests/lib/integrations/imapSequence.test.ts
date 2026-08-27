@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sequenceSets } from '@/lib/integrations/imap';
+import { parseReferences, sequenceSets } from '@/lib/integrations/imap';
 
 describe('sequenceSets', () => {
   it('junta os uids num conjunto só', () => {
@@ -38,5 +38,48 @@ describe('sequenceSets', () => {
 
   it('não quebra o que cabe num bloco', () => {
     expect(sequenceSets(Array.from({ length: 200 }, (_, i) => String(i + 1)))).toHaveLength(1);
+  });
+});
+
+describe('parseReferences', () => {
+  const buf = (s: string) => Buffer.from(s, 'utf8');
+
+  it('lê os ids do header References', () => {
+    expect(parseReferences(buf('References: <a@x> <b@x>\r\n'))).toEqual(['<a@x>', '<b@x>']);
+  });
+
+  // Header longo chega dobrado em várias linhas, com a continuação indentada.
+  it('lê o header dobrado em várias linhas', () => {
+    expect(parseReferences(buf('References: <a@x>\r\n <b@x>\r\n\t<c@x>\r\n'))).toEqual([
+      '<a@x>',
+      '<b@x>',
+      '<c@x>',
+    ]);
+  });
+
+  // Nem todo cliente repete o In-Reply-To dentro do References.
+  it('acrescenta o In-Reply-To', () => {
+    expect(parseReferences(buf('References: <a@x>\r\n'), '<b@x>')).toEqual(['<a@x>', '<b@x>']);
+  });
+
+  it('não repete o id que já estava no References', () => {
+    expect(parseReferences(buf('References: <a@x> <b@x>\r\n'), '<b@x>')).toEqual([
+      '<a@x>',
+      '<b@x>',
+    ]);
+  });
+
+  it('funciona só com o In-Reply-To, sem References', () => {
+    expect(parseReferences(undefined, '<b@x>')).toEqual(['<b@x>']);
+  });
+
+  it('devolve vazio quando não há vínculo nenhum', () => {
+    expect(parseReferences(undefined)).toEqual([]);
+    expect(parseReferences(buf(''))).toEqual([]);
+    expect(parseReferences(buf('References: \r\n'))).toEqual([]);
+  });
+
+  it('ignora lixo que não é Message-Id', () => {
+    expect(parseReferences(buf('References: nao-e-id <b@x> outro\r\n'))).toEqual(['<b@x>']);
   });
 });

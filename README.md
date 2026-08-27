@@ -102,6 +102,10 @@ that tells you right away whether it worked.
 
 ## Where to get each credential
 
+The inbox groups messages into conversations: one row per thread, with the
+count and who took part, expanding to the messages in order. Inside a message,
+the quoted history folds behind a button.
+
 **Email** — needs an app password, not your account password:
 
 - Gmail: turn on two-step verification, then generate one at
