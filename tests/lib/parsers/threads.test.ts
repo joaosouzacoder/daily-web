@@ -13,6 +13,7 @@ function mail(over: Partial<EmailEnvelope>): EmailEnvelope {
     date: '2026-08-27T12:00:00Z',
     messageId: '<1@x>',
     references: [],
+    mailbox: 'inbox',
     ...over,
   };
 }
@@ -184,5 +185,38 @@ describe('groupIntoThreads', () => {
     ];
     const saida = groupIntoThreads(entrada).flatMap((t) => t.messages);
     expect(saida.map((m) => m.id).sort()).toEqual(['1', '2', '3', '4', '5']);
+  });
+});
+
+describe('conversa com os dois lados', () => {
+  // O caso relatado: a resposta do outro estava na entrada, a original que
+  // você mandou estava nos enviados, e a conversa só mostrava um lado.
+  it('junta o que você enviou com a resposta que chegou', () => {
+    const threads = groupIntoThreads([
+      mail({ id: '10', from: 'você', messageId: '<a@x>', subject: 'teste assunto', mailbox: 'sent' }),
+      mail({ id: '11', from: 'Luan', messageId: '<b@x>', references: ['<a@x>'], subject: 'Re: teste assunto' }),
+    ]);
+
+    expect(threads).toHaveLength(1);
+    expect(threads[0].messages.map((m) => m.mailbox)).toEqual(['sent', 'inbox']);
+    expect(threads[0].participants).toEqual(['você', 'Luan']);
+  });
+
+  // O que você mandou já foi lido por você.
+  it('a enviada não conta como não lida', () => {
+    const threads = groupIntoThreads([
+      mail({ id: '10', messageId: '<a@x>', mailbox: 'sent', unread: false }),
+      mail({ id: '11', messageId: '<b@x>', references: ['<a@x>'], unread: true }),
+    ]);
+    expect(threads[0].unreadCount).toBe(1);
+  });
+
+  // Sem referência, o assunto liga — e as duas caixas são da mesma conta.
+  it('junta pelo assunto entre entrada e enviados da mesma conta', () => {
+    const threads = groupIntoThreads([
+      mail({ id: '10', messageId: '<a@x>', subject: 'Proposta', mailbox: 'sent' }),
+      mail({ id: '11', messageId: '<b@x>', subject: 'Re: Proposta' }),
+    ]);
+    expect(threads).toHaveLength(1);
   });
 });

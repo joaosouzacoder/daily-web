@@ -1,7 +1,7 @@
 import { getDb } from './db';
 import { fetchBody } from './integrations/imap';
 import type { Connection } from './vault/connections';
-import type { Account, EmailEnvelope } from './types';
+import type { Account, EmailEnvelope, MailboxKind } from './types';
 
 // Buscar o corpo no IMAP na hora do clique custa segundos. O refresher vai
 // guardando os corpos conforme os e-mails chegam, então abrir é instantâneo.
@@ -11,10 +11,13 @@ export function getCachedBody(
   userId: string,
   account: Account,
   messageId: string,
+  mailbox: MailboxKind = 'inbox',
 ): string | null {
   const row = getDb()
-    .prepare('SELECT body FROM email_bodies WHERE user_id = ? AND account = ? AND message_id = ?')
-    .get(userId, account, messageId) as { body: string } | undefined;
+    .prepare(
+      'SELECT body FROM email_bodies WHERE user_id = ? AND account = ? AND mailbox = ? AND message_id = ?',
+    )
+    .get(userId, account, mailbox, messageId) as { body: string } | undefined;
   return row?.body ?? null;
 }
 
@@ -23,15 +26,16 @@ export function putCachedBody(
   account: Account,
   messageId: string,
   body: string,
+  mailbox: MailboxKind = 'inbox',
 ): void {
   getDb()
     .prepare(
-      `INSERT INTO email_bodies (user_id, account, message_id, body, cached_at)
-       VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT (user_id, account, message_id)
+      `INSERT INTO email_bodies (user_id, account, mailbox, message_id, body, cached_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT (user_id, account, mailbox, message_id)
        DO UPDATE SET body = excluded.body, cached_at = excluded.cached_at`,
     )
-    .run(userId, account, messageId, body, new Date().toISOString());
+    .run(userId, account, mailbox, messageId, body, new Date().toISOString());
 }
 
 export function pruneOldBodies(now: Date = new Date()): number {
@@ -43,10 +47,17 @@ export function pruneOldBodies(now: Date = new Date()): number {
   return result.changes;
 }
 
-export function isCached(userId: string, account: Account, messageId: string): boolean {
+export function isCached(
+  userId: string,
+  account: Account,
+  messageId: string,
+  mailbox: MailboxKind = 'inbox',
+): boolean {
   const row = getDb()
-    .prepare('SELECT 1 AS present FROM email_bodies WHERE user_id = ? AND account = ? AND message_id = ?')
-    .get(userId, account, messageId) as { present: number } | undefined;
+    .prepare(
+      'SELECT 1 AS present FROM email_bodies WHERE user_id = ? AND account = ? AND mailbox = ? AND message_id = ?',
+    )
+    .get(userId, account, mailbox, messageId) as { present: number } | undefined;
   return row !== undefined;
 }
 
@@ -60,12 +71,12 @@ export async function warmBodyCache(
   const byId = new Map(connections.map((conn) => [conn.id, conn]));
   let fetched = 0;
   for (const envelope of envelopes) {
-    if (isCached(userId, envelope.account, envelope.id)) continue;
+    if (isCached(userId, envelope.account, envelope.id, envelope.mailbox)) continue;
     const conn = byId.get(envelope.account);
     if (!conn) continue;
     try {
-      const body = await fetchBody(conn, envelope.id);
-      putCachedBody(userId, envelope.account, envelope.id, body);
+      const body = await fetchBody(conn, envelope.id, envelope.mailbox);
+      putCachedBody(userId, envelope.account, envelope.id, body, envelope.mailbox);
       fetched += 1;
     } catch {
       // Um e-mail que falhou não pode interromper o aquecimento dos outros;

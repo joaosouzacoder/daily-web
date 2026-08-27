@@ -1,11 +1,11 @@
-import { ImapFlow, type ListResponse } from 'imapflow';
+import { ImapFlow, type FetchMessageObject, type ListResponse } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import nodemailer from 'nodemailer';
 import { applyMailPreset } from '@/lib/modules';
 import { readable, sortFolders } from '@/lib/parsers/mail';
 import { describeMailError } from './mailErrors';
 import type { Connection } from '@/lib/vault/connections';
-import type { EmailEnvelope } from '@/lib/types';
+import type { EmailEnvelope, MailboxKind } from '@/lib/types';
 
 export interface MailConfig {
   imapHost: string;
@@ -110,45 +110,95 @@ export function sequenceSets(uids: string[]): string[] {
   return blocos;
 }
 
+/** O caminho real da pasta, que muda por provedor e idioma ("[Gmail]/E-mails
+ *  enviados"): é achado pela flag de uso especial, não pelo nome. */
+async function mailboxPath(client: ImapFlow, mailbox: MailboxKind): Promise<string | null> {
+  if (mailbox === 'inbox') return 'INBOX';
+  return findSpecialUse(await client.list(), '\\Sent');
+}
+
+function toEnvelope(
+  message: FetchMessageObject,
+  conn: Connection,
+  mailbox: MailboxKind,
+): EmailEnvelope {
+  return {
+    id: String(message.uid),
+    account: conn.id,
+    accountLabel: conn.label,
+    from: addressLabel(message.envelope?.from?.[0]),
+    subject: message.envelope?.subject ?? '',
+    // O que você mandou nunca é novidade para você.
+    unread: mailbox === 'sent' ? false : !message.flags?.has('\\Seen'),
+    date: (message.envelope?.date ?? new Date()).toISOString(),
+    messageId: message.envelope?.messageId ?? '',
+    references: parseReferences(message.headers, message.envelope?.inReplyTo),
+    mailbox,
+  };
+}
+
+async function listFrom(
+  client: ImapFlow,
+  conn: Connection,
+  mailbox: MailboxKind,
+  limit: number,
+): Promise<EmailEnvelope[]> {
+  const path = await mailboxPath(client, mailbox);
+  if (!path) return [];
+
+  const lock = await client.getMailboxLock(path);
+  try {
+    const total = typeof client.mailbox === 'object' ? client.mailbox.exists : 0;
+    if (total === 0) return [];
+
+    const first = Math.max(total - limit + 1, 1);
+    const envelopes: EmailEnvelope[] = [];
+    for await (const message of client.fetch(`${first}:*`, {
+      uid: true,
+      flags: true,
+      envelope: true,
+      // O ENVELOPE traz o In-Reply-To, mas não o References — e é o
+      // References que carrega o fio inteiro, não só o degrau anterior.
+      headers: ['references'],
+    })) {
+      envelopes.push(toEnvelope(message, conn, mailbox));
+    }
+    return envelopes;
+  } finally {
+    lock.release();
+  }
+}
+
+/**
+ * A entrada e os enviados, numa conexão só. Sem os enviados, uma conversa
+ * mostra só o lado de quem escreveu para você — as suas próprias respostas
+ * ficam de fora e o fio parece um monólogo.
+ *
+ * Os enviados entram para compor conversa, não para virar linha na caixa: a
+ * lista só mostra fios que têm ao menos uma mensagem recebida.
+ */
 export async function listEnvelopes(conn: Connection, limit: number): Promise<EmailEnvelope[]> {
   return withClient(conn, async (client) => {
-    const lock = await client.getMailboxLock('INBOX');
-    try {
-      const total = typeof client.mailbox === 'object' ? client.mailbox.exists : 0;
-      if (total === 0) return [];
-
-      const first = Math.max(total - limit + 1, 1);
-      const envelopes: EmailEnvelope[] = [];
-      for await (const message of client.fetch(`${first}:*`, {
-        uid: true,
-        flags: true,
-        envelope: true,
-        // O ENVELOPE traz o In-Reply-To, mas não o References — e é o
-        // References que carrega o fio inteiro, não só o degrau anterior.
-        headers: ['references'],
-      })) {
-        envelopes.push({
-          id: String(message.uid),
-          account: conn.id,
-          accountLabel: conn.label,
-          from: addressLabel(message.envelope?.from?.[0]),
-          subject: message.envelope?.subject ?? '',
-          unread: !message.flags?.has('\\Seen'),
-          date: (message.envelope?.date ?? new Date()).toISOString(),
-          messageId: message.envelope?.messageId ?? '',
-          references: parseReferences(message.headers, message.envelope?.inReplyTo),
-        });
-      }
-      return envelopes;
-    } finally {
-      lock.release();
-    }
+    const inbox = await listFrom(client, conn, 'inbox', limit);
+    // Uma pasta de enviados que não existe ou não abre não pode derrubar a
+    // caixa de entrada: sem ela a conversa fica incompleta, sem a entrada não
+    // há painel nenhum.
+    const sent = await listFrom(client, conn, 'sent', limit).catch(() => []);
+    return [...inbox, ...sent];
   });
 }
 
-export async function fetchBody(conn: Connection, uid: string): Promise<string> {
+/** O uid é por caixa: buscar um uid de enviados dentro da INBOX devolveria
+ *  outra mensagem, não um erro. Por isso a caixa vem junto. */
+export async function fetchBody(
+  conn: Connection,
+  uid: string,
+  mailbox: MailboxKind = 'inbox',
+): Promise<string> {
   return withClient(conn, async (client) => {
-    const lock = await client.getMailboxLock('INBOX');
+    const path = await mailboxPath(client, mailbox);
+    if (!path) return '';
+    const lock = await client.getMailboxLock(path);
     try {
       const message = await client.fetchOne(uid, { source: true }, { uid: true });
       if (!message || !message.source) return '';

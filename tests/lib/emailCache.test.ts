@@ -29,6 +29,7 @@ function envelope(over: Partial<EmailEnvelope>): EmailEnvelope {
     date: '2026-08-25T10:00:00Z',
     messageId: '<a@b>',
     references: [],
+    mailbox: 'inbox' as const,
     ...over,
   };
 }
@@ -83,7 +84,8 @@ describe('cache de corpos de e-mail', () => {
 
     expect(fetched).toBe(1);
     expect(fetchBody).toHaveBeenCalledTimes(1);
-    expect(fetchBody).toHaveBeenCalledWith(CONNECTION, '2');
+    // A caixa vai junto: o mesmo uid existe na entrada e nos enviados.
+    expect(fetchBody).toHaveBeenCalledWith(CONNECTION, '2', 'inbox');
   });
 
   it('um e-mail que falha não interrompe o aquecimento dos outros', async () => {
@@ -136,5 +138,32 @@ describe('cache de corpos de e-mail', () => {
     expect(removed).toBe(1);
     expect(getCachedBody('u-1', 'work', 'antigo')).toBeNull();
     expect(getCachedBody('u-1', 'work', 'novo')).toBe('recente');
+  });
+});
+
+describe('caixa na chave do cache', () => {
+  // O uid do IMAP é por caixa: sem isto, o corpo de uma enviada seria
+  // devolvido no lugar do de uma recebida com o mesmo número.
+  it('o mesmo uid em caixas diferentes guarda corpos diferentes', async () => {
+    const { getCachedBody, putCachedBody } = await import('@/lib/emailCache');
+
+    putCachedBody('u-1', 'mail-1', '42', 'corpo da recebida', 'inbox');
+    putCachedBody('u-1', 'mail-1', '42', 'corpo da enviada', 'sent');
+
+    expect(getCachedBody('u-1', 'mail-1', '42', 'inbox')).toBe('corpo da recebida');
+    expect(getCachedBody('u-1', 'mail-1', '42', 'sent')).toBe('corpo da enviada');
+  });
+
+  it('a entrada é o padrão de quem não informa a caixa', async () => {
+    const { getCachedBody, putCachedBody } = await import('@/lib/emailCache');
+    putCachedBody('u-1', 'mail-1', '7', 'corpo');
+    expect(getCachedBody('u-1', 'mail-1', '7')).toBe('corpo');
+    expect(getCachedBody('u-1', 'mail-1', '7', 'sent')).toBeNull();
+  });
+
+  it('não confunde caixas de contas diferentes', async () => {
+    const { getCachedBody, putCachedBody } = await import('@/lib/emailCache');
+    putCachedBody('u-1', 'mail-1', '9', 'da conta 1', 'sent');
+    expect(getCachedBody('u-1', 'mail-2', '9', 'sent')).toBeNull();
   });
 });

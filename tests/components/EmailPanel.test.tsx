@@ -21,6 +21,7 @@ const items: EmailEnvelope[] = [
     date: '2026-08-25T10:00:00Z',
     messageId: '<a@x>',
     references: [],
+    mailbox: 'inbox' as const,
   },
   {
     id: '2',
@@ -32,6 +33,7 @@ const items: EmailEnvelope[] = [
     date: '2026-08-24T10:00:00Z',
     messageId: '<b@x>',
     references: [],
+    mailbox: 'inbox' as const,
   },
 ];
 
@@ -264,6 +266,7 @@ describe('seleção por intervalo com Shift', () => {
     date: `2026-08-2${5 - i}T10:00:00Z`,
     messageId: `<${i}@x>`,
     references: [],
+    mailbox: 'inbox' as const,
   }));
 
   const caixa = (n: number) =>
@@ -349,25 +352,26 @@ describe('seleção por intervalo com Shift', () => {
 
 describe('conversas', () => {
   const fio: EmailEnvelope[] = [
+    // A que você mandou vive na pasta de enviados, não na entrada.
     {
       id: '10', account: 'mail-1', accountLabel: 'Work', from: 'você',
       subject: 'teste assunto', unread: false, date: '2026-08-27T12:11:00Z',
-      messageId: '<a@x>', references: [],
+      messageId: '<a@x>', references: [], mailbox: 'sent',
     },
     {
       id: '11', account: 'mail-1', accountLabel: 'Work', from: 'Luan',
       subject: 'Re: teste assunto', unread: true, date: '2026-08-27T14:55:00Z',
-      messageId: '<b@x>', references: ['<a@x>'],
+      messageId: '<b@x>', references: ['<a@x>'], mailbox: 'inbox',
     },
     {
       id: '12', account: 'mail-1', accountLabel: 'Work', from: 'Luan',
       subject: 'Re: teste assunto', unread: true, date: '2026-08-27T15:02:00Z',
-      messageId: '<c@x>', references: ['<a@x>', '<b@x>'],
+      messageId: '<c@x>', references: ['<a@x>', '<b@x>'], mailbox: 'inbox',
     },
     {
       id: '20', account: 'mail-1', accountLabel: 'Work', from: 'Nubank',
       subject: 'Cobranças recorrentes', unread: true, date: '2026-08-27T13:00:00Z',
-      messageId: '<n@x>', references: [],
+      messageId: '<n@x>', references: [], mailbox: 'inbox',
     },
   ];
 
@@ -393,7 +397,7 @@ describe('conversas', () => {
   it('mostra quem participou e quantas mensagens são', () => {
     montar();
     expect(screen.getByText('você, Luan')).toBeInTheDocument();
-    expect(screen.getByLabelText('3 mensagens')).toHaveTextContent('3');
+    expect(screen.getByLabelText('3 mensagens, 1 enviadas por você')).toHaveTextContent('3');
   });
 
   it('não põe contagem na conversa de uma mensagem só', () => {
@@ -429,7 +433,8 @@ describe('conversas', () => {
   it('marcar a conversa marca todas as mensagens dela', () => {
     montar();
     fireEvent.click(screen.getByLabelText('selecionar teste assunto'));
-    expect(screen.getByText('3 selecionados')).toBeInTheDocument();
+    // Duas: a enviada não entra nas ações, que falam com a caixa de entrada.
+    expect(screen.getByText('2 selecionados')).toBeInTheDocument();
   });
 
   it('a conversa aparece como não lida quando qualquer mensagem está', () => {
@@ -442,7 +447,8 @@ describe('conversas', () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     montar();
     fireEvent.click(screen.getByLabelText('excluir teste assunto'));
-    expect(confirm).toHaveBeenCalledWith('Excluir esta conversa (3 mensagens)?');
+    // Duas recebidas; a enviada não é lixo da caixa de entrada.
+    expect(confirm).toHaveBeenCalledWith('Excluir esta conversa (2 mensagens recebidas)?');
     confirm.mockRestore();
   });
 
@@ -463,3 +469,102 @@ describe('conversas', () => {
     expect(screen.queryByText('teste assunto')).toBeNull();
   });
 });
+
+describe('mensagens enviadas na conversa', () => {
+  const enviadaSozinha: EmailEnvelope[] = [
+    {
+      id: '30', account: 'mail-1', accountLabel: 'Work', from: 'você',
+      subject: 'Proposta', unread: false, date: '2026-08-27T09:00:00Z',
+      messageId: '<p@x>', references: [], mailbox: 'sent',
+    },
+  ];
+
+  function montarCom(data: EmailEnvelope[]) {
+    render(
+      <EmailPanel
+        onSeenChanged={() => {}}
+        onRemoved={() => {}}
+        mailboxes={MAILBOXES}
+        email={{ data, error: null }}
+        onChanged={() => {}}
+      />,
+    );
+  }
+
+  // Era o que estava faltando: o fio mostrava só o lado de quem escreveu
+  // para você, e a sua própria mensagem não aparecia.
+  it('a mensagem que você mandou aparece dentro da conversa', () => {
+    montarCom(fioComEnviada);
+    fireEvent.click(screen.getByText('Proposta').closest('button') as HTMLElement);
+
+    const linhas = screen.getAllByRole('button').filter((b) => b.className.includes('thread-row'));
+    expect(linhas).toHaveLength(2);
+    expect(linhas[0]).toHaveTextContent('você');
+    expect(linhas[0]).toHaveTextContent('enviada');
+    expect(linhas[1]).toHaveTextContent('Cliente');
+  });
+
+  // A caixa de entrada é a caixa de entrada: um e-mail que você mandou e
+  // ninguém respondeu não vira linha nela.
+  it('não mostra a conversa que só tem mensagem enviada', () => {
+    montarCom(enviadaSozinha);
+    expect(screen.queryByText('Proposta')).toBeNull();
+  });
+
+  it('a enviada não entra na seleção nem nas ações', () => {
+    montarCom(fioComEnviada);
+    fireEvent.click(screen.getByLabelText('selecionar Proposta'));
+    expect(screen.getByText('1 selecionados')).toBeInTheDocument();
+  });
+
+  // O uid é por caixa: buscar o corpo de uma enviada dentro da entrada traria
+  // outra mensagem.
+  it('pede o corpo dizendo de qual caixa a mensagem é', async () => {
+    const urls: string[] = [];
+    vi.mocked(global.fetch).mockImplementation(async (input) => {
+      urls.push(String(input));
+      return new Response(JSON.stringify({ text: 'corpo', quoted: '' }));
+    });
+    montarCom(fioComEnviada);
+    fireEvent.click(screen.getByText('Proposta').closest('button') as HTMLElement);
+
+    const enviada = screen
+      .getAllByRole('button')
+      .filter((b) => b.className.includes('thread-row'))[0];
+    fireEvent.click(enviada);
+
+    await waitFor(() => expect(urls.some((u) => u.includes('/body?box=sent'))).toBe(true));
+  });
+
+  // Responder ao próprio e-mail enviado não faz sentido, e a rota de resposta
+  // busca a mensagem na entrada.
+  it('não oferece responder numa mensagem enviada', async () => {
+    vi.mocked(global.fetch).mockImplementation(
+      async () => new Response(JSON.stringify({ text: 'corpo', quoted: '' })),
+    );
+    montarCom(fioComEnviada);
+    fireEvent.click(screen.getByText('Proposta').closest('button') as HTMLElement);
+
+    const linhas = screen.getAllByRole('button').filter((b) => b.className.includes('thread-row'));
+    fireEvent.click(linhas[0]);
+    await screen.findByLabelText('corpo do e-mail');
+    expect(screen.queryByLabelText('resposta')).toBeNull();
+
+    fireEvent.click(linhas[1]);
+    await screen.findByLabelText('corpo do e-mail');
+    expect(screen.getByLabelText('resposta')).toBeInTheDocument();
+  });
+});
+
+const fioComEnviada: EmailEnvelope[] = [
+  {
+    id: '30', account: 'mail-1', accountLabel: 'Work', from: 'você',
+    subject: 'Proposta', unread: false, date: '2026-08-27T09:00:00Z',
+    messageId: '<p@x>', references: [], mailbox: 'sent',
+  },
+  {
+    id: '31', account: 'mail-1', accountLabel: 'Work', from: 'Cliente',
+    subject: 'Re: Proposta', unread: true, date: '2026-08-27T10:00:00Z',
+    messageId: '<q@x>', references: ['<p@x>'], mailbox: 'inbox',
+  },
+];

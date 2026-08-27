@@ -13,6 +13,12 @@ Only `main` is maintained; there are no release branches.
   tasks use. Branches start closed, so the panel opens on the top of each tree
   and you descend where you care; an issue with nothing under it gets a spacer
   instead of an arrow, not a control that does nothing.
+- A conversation includes the messages you sent. The Sent folder is read
+  alongside the inbox and merged into the thread, so a reply-to-a-reply reads
+  as a dialogue instead of a monologue. Sent messages take part in
+  conversations but never become inbox rows of their own, and they stay out of
+  select/tag/delete: those act on the inbox, and deleting a conversation
+  should not destroy your own copy of what you wrote.
 - The inbox groups a conversation into one row. The subject loses its stack of
   "Re:"/"Fwd:" prefixes, the row shows who took part and how many messages
   there are, and opening it lists them in the order they happened. A
@@ -71,6 +77,11 @@ Only `main` is maintained; there are no release branches.
   Vitest 2, which no longer ships it, and `npm run users` depends on it.
 
 ### Fixed
+- An IMAP uid is per mailbox, so the same number means different messages in
+  the inbox and in Sent. The mailbox now travels with the id through the body
+  route, the body cache (whose primary key gained a `mailbox` column) and the
+  state patches — without it, opening a sent message would have returned an
+  unrelated inbox message's body.
 - Acting on several messages at once no longer fails. Each target opened its
   own IMAP connection, so a batch of 27 deletions asked for 27 simultaneous
   connections and the server refused 24 of them with "Too many simultaneous

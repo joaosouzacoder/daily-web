@@ -10,8 +10,14 @@ export interface EmailTarget {
   id: string;
 }
 
+// O id sozinho não identifica: o mesmo uid existe na entrada e nos enviados.
+// Os alvos das ações são sempre da entrada, então é ali que eles casam.
 function sameEmail(envelope: EmailEnvelope, target: EmailTarget): boolean {
-  return envelope.account === target.account && envelope.id === target.id;
+  return (
+    envelope.account === target.account &&
+    envelope.id === target.id &&
+    envelope.mailbox === 'inbox'
+  );
 }
 
 function mapEmails(

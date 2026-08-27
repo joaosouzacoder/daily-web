@@ -15,7 +15,14 @@ export interface EmailEnvelope {
   /** Message-Ids que esta mensagem responde, do mais antigo ao mais recente:
    *  o header References acrescido do In-Reply-To. É o que liga a conversa. */
   references: string[];
+  /** De qual caixa a mensagem veio. O uid do IMAP é por caixa: o mesmo número
+   *  aponta para mensagens diferentes na entrada e nos enviados, então nenhuma
+   *  operação pode usar o id sem saber de onde ele é. */
+  mailbox: MailboxKind;
 }
+
+/** As duas caixas que a conversa precisa: o que chegou e o que você mandou. */
+export type MailboxKind = 'inbox' | 'sent';
 
 /** Uma conversa: as mensagens que se referenciam entre si, da mais antiga
  *  para a mais recente. */

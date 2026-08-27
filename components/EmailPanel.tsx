@@ -113,7 +113,7 @@ export function EmailPanel({
   // Etiquetar e excluir valem para a conversa inteira, como no Gmail — e vão
   // pelo lote, que é uma conexão IMAP só para todas as mensagens dela.
   const applyTagToThread = async (thread: EmailThread, tag: string) => {
-    const alvos = thread.messages.map((m) => ({ account: m.account, id: m.id }));
+    const alvos = recebidas(thread).map((m) => ({ account: m.account, id: m.id }));
     // Copiar para a pasta marca como lida no servidor; a tela acompanha.
     onSeenChanged(alvos, true);
     setTagMenuKey(null);
@@ -134,13 +134,17 @@ export function EmailPanel({
   };
 
   const removeThread = async (thread: EmailThread) => {
-    const quantas = thread.messages.length;
+    // A pergunta conta o que será apagado de verdade. Os enviados ficam: a
+    // sua cópia do que escreveu não é lixo da caixa de entrada.
+    const alvo = recebidas(thread);
     const pergunta =
-      quantas === 1 ? 'Excluir este e-mail?' : `Excluir esta conversa (${quantas} mensagens)?`;
+      alvo.length === 1
+        ? 'Excluir este e-mail?'
+        : `Excluir esta conversa (${alvo.length} mensagens recebidas)?`;
     if (!window.confirm(pergunta)) return;
 
-    const alvos = thread.messages.map((m) => ({ account: m.account, id: m.id }));
-    const chaves = new Set(thread.messages.map(key));
+    const alvos = alvo.map((m) => ({ account: m.account, id: m.id }));
+    const chaves = new Set(alvo.map(key));
 
     // Some da lista agora. Esperar a ida ao IMAP deixaria a linha parada por
     // um segundo depois do clique, como se nada tivesse acontecido.
@@ -173,7 +177,11 @@ export function EmailPanel({
   // As conversas são montadas depois dos filtros: buscar por "Luan" precisa
   // trazer o que casa, não o fio inteiro em volta.
   const threads = useMemo(() => {
-    const agrupadas = groupIntoThreads(visible);
+    // Os enviados entram para compor conversa, não para virar linha na caixa:
+    // um e-mail que você mandou e ninguém respondeu não é da caixa de entrada.
+    const agrupadas = groupIntoThreads(visible).filter((t) =>
+      t.messages.some((m) => m.mailbox === 'inbox'),
+    );
     return agrupadas.sort((a, b) =>
       sort === 'recent'
         ? b.lastDate.localeCompare(a.lastDate)
@@ -207,7 +215,12 @@ export function EmailPanel({
 
   // Marcar uma conversa marca as mensagens dela: a seleção continua sendo de
   // mensagens, que é o que as ações do lote recebem.
-  const threadKeys = (t: EmailThread) => t.messages.map(key);
+  //
+  // Só as recebidas. As ações do lote falam com a INBOX, e o uid dos enviados
+  // aponta para outra mensagem lá dentro — além de que apagar a conversa não
+  // deve apagar a sua própria cópia do que você escreveu.
+  const recebidas = (t: EmailThread) => t.messages.filter((m) => m.mailbox === 'inbox');
+  const threadKeys = (t: EmailThread) => recebidas(t).map(key);
 
   const toggleSelect = (thread: EmailThread, shift: boolean) => {
     const indice = threads.findIndex((t) => t.id === thread.id);
@@ -412,6 +425,7 @@ export function EmailPanel({
             // Uma conversa de uma mensagem abre direto no corpo: expandir para
             // clicar de novo seria um passo a mais para o caso mais comum.
             const sozinha = thread.messages.length === 1 ? thread.messages[0] : null;
+            const enviadas = thread.messages.length - recebidas(thread).length;
             const isOpen = sozinha ? key(sozinha) === openKey : expanded.has(thread.id);
             const marcada = threadKeys(thread).every((k) => selected.has(k));
             const titulo = thread.subject || '(sem assunto)';
@@ -452,7 +466,11 @@ export function EmailPanel({
                   {thread.messages.length > 1 && (
                     <span
                       className="row-count mono"
-                      aria-label={`${thread.messages.length} mensagens`}
+                      aria-label={
+                        enviadas > 0
+                          ? `${thread.messages.length} mensagens, ${enviadas} enviadas por você`
+                          : `${thread.messages.length} mensagens`
+                      }
                     >
                       {thread.messages.length}
                     </span>
@@ -530,11 +548,14 @@ export function EmailPanel({
                         <li key={key(m)} className={`thread-message${aberta ? ' is-open' : ''}`}>
                           <button
                             type="button"
-                            className={`thread-row${m.unread ? ' row-unread' : ''}`}
+                            className={`thread-row${m.unread ? ' row-unread' : ''}${m.mailbox === 'sent' ? ' is-sent' : ''}`}
                             aria-expanded={aberta}
                             onClick={() => setOpenKey(aberta ? null : key(m))}
                           >
                             <span className="thread-from">{m.from}</span>
+                            {m.mailbox === 'sent' && (
+                              <span className="thread-sent">enviada</span>
+                            )}
                             <span className="thread-time mono">{relativeTime(m.date)}</span>
                           </button>
                           {aberta && (
@@ -638,7 +659,8 @@ function EmailDetail({
 
   useEffect(() => {
     let cancelled = false;
-    void fetch(`/api/email/${email.account}/${email.id}/body`)
+    // A caixa vai junto: o mesmo uid existe na entrada e nos enviados.
+    void fetch(`/api/email/${email.account}/${email.id}/body?box=${email.mailbox}`)
       .then((r) => r.json())
       .then((data) => {
         if (cancelled) return;
@@ -701,6 +723,10 @@ function EmailDetail({
         </p>
       )}
 
+      {/* Não se responde ao próprio e-mail enviado. E, no plano prático, as
+          rotas de resposta buscam a mensagem na entrada: o uid de uma enviada
+          apontaria para outra coisa lá dentro. */}
+      {email.mailbox === 'inbox' && (
       <div className="mail-reply">
         <textarea
           className="field mail-reply-input"
@@ -728,6 +754,7 @@ function EmailDetail({
           {sent && <span className="mail-reply-sent">Resposta enviada.</span>}
         </div>
       </div>
+      )}
 
     </div>
   );

@@ -694,6 +694,21 @@ input[type='checkbox']:checked {
   font-weight: 500;
 }
 
+/* A sua própria mensagem no meio do fio: mesma linha, marca discreta. Sem
+   isto, "você" e o remetente ficam indistinguíveis na lista da conversa. */
+.thread-sent {
+  flex: none;
+  font-size: 0.6875rem;
+  color: var(--text-faint);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  padding: 0 5px;
+}
+
+.thread-row.is-sent .thread-from {
+  color: var(--text-faint);
+}
+
 .thread-time {
   flex: none;
   color: var(--text-faint);

@@ -212,12 +212,34 @@ function addPreferences(instance: Database.Database): void {
 
 // Migrações numeradas, aplicadas em ordem a partir do `user_version` do banco.
 // Cada uma roda no máximo uma vez, em transação.
+// O uid do IMAP é por caixa: o mesmo número aponta para mensagens diferentes
+// na entrada e nos enviados. Sem a caixa na chave, o corpo de uma serviria a
+// outra. O que já está gravado veio todo da entrada.
+function addMailboxToBodyCache(instance: Database.Database): void {
+  instance.exec(`
+    CREATE TABLE email_bodies_new (
+      user_id TEXT NOT NULL,
+      account TEXT NOT NULL,
+      mailbox TEXT NOT NULL,
+      message_id TEXT NOT NULL,
+      body TEXT NOT NULL,
+      cached_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, account, mailbox, message_id)
+    );
+    INSERT INTO email_bodies_new (user_id, account, mailbox, message_id, body, cached_at)
+      SELECT user_id, account, 'inbox', message_id, body, cached_at FROM email_bodies;
+    DROP TABLE email_bodies;
+    ALTER TABLE email_bodies_new RENAME TO email_bodies;
+  `);
+}
+
 const MIGRATIONS: ((instance: Database.Database) => void)[] = [
   addUserScope,
   addConnections,
   dropLegacyEmailCache,
   addLocalTasks,
   addPreferences,
+  addMailboxToBodyCache,
 ];
 
 function migrate(instance: Database.Database): void {
