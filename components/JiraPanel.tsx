@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { NavArrowRight } from 'iconoir-react';
 import type { JiraItem, PanelResult } from '@/lib/types';
 import type { ActiveFilter } from '@/lib/filters';
 import { matchesQuery } from '@/lib/filters';
@@ -43,6 +44,18 @@ export function JiraPanel({ jira, watched, onChanged, loading = false }: Props) 
   const [watchError, setWatchError] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [removendo, setRemovendo] = useState<Set<string>>(new Set());
+  // Ramos abertos da hierarquia, pela chave da issue. Começam fechados, como
+  // as subtarefas: a lista abre mostrando o topo, e você desce onde quer.
+  const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
+
+  const alternarRamo = (chave: string) => {
+    setExpandidos((prev) => {
+      const next = new Set(prev);
+      if (next.has(chave)) next.delete(chave);
+      else next.add(chave);
+      return next;
+    });
+  };
 
   // O servidor é a verdade; `removendo` só antecipa a saída da lista até a
   // próxima resposta chegar sem a chave.
@@ -272,7 +285,14 @@ export function JiraPanel({ jira, watched, onChanged, loading = false }: Props) 
             </h3>
             <ul>
               {group.roots.map((node) => (
-                <JiraBranch key={node.issue.key} node={node} showRole={filter === 'both'} depth={0} />
+                <JiraBranch
+                  key={node.issue.key}
+                  node={node}
+                  showRole={filter === 'both'}
+                  depth={0}
+                  expandidos={expandidos}
+                  onAlternar={alternarRamo}
+                />
               ))}
             </ul>
           </div>
@@ -285,17 +305,40 @@ function JiraBranch({
   node,
   showRole,
   depth,
+  expandidos,
+  onAlternar,
 }: {
   node: JiraNode;
   showRole: boolean;
   depth: number;
+  expandidos: Set<string>;
+  onAlternar: (chave: string) => void;
 }) {
+  const temFilhos = node.children.length > 0;
+  const aberto = expandidos.has(node.issue.key);
+
   return (
     <>
-      <JiraRow issue={node.issue} showRole={showRole} depth={depth} />
-      {node.children.map((child) => (
-        <JiraBranch key={child.issue.key} node={child} showRole={showRole} depth={depth + 1} />
-      ))}
+      <JiraRow
+        issue={node.issue}
+        showRole={showRole}
+        depth={depth}
+        filhos={node.children.length}
+        aberto={aberto}
+        onAlternar={() => onAlternar(node.issue.key)}
+      />
+      {temFilhos &&
+        aberto &&
+        node.children.map((child) => (
+          <JiraBranch
+            key={child.issue.key}
+            node={child}
+            showRole={showRole}
+            depth={depth + 1}
+            expandidos={expandidos}
+            onAlternar={onAlternar}
+          />
+        ))}
     </>
   );
 }
@@ -304,10 +347,17 @@ function JiraRow({
   issue,
   showRole,
   depth,
+  filhos = 0,
+  aberto = false,
+  onAlternar,
 }: {
   issue: JiraItem;
   showRole: boolean;
   depth: number;
+  /** Quantas issues estão logo abaixo desta. Zero fora da hierarquia. */
+  filhos?: number;
+  aberto?: boolean;
+  onAlternar?: () => void;
 }) {
   const parado = stalenessLabel(issue);
   const prazo = issue.dueDate ? dueLabel(issue.dueDate) : null;
@@ -323,6 +373,22 @@ function JiraRow({
       style={{ paddingLeft: depth > 0 ? `calc(${depth} * var(--s4))` : undefined }}
     >
       {depth > 0 && <span className="jira-branch" aria-hidden="true" />}
+      {/* A seta só existe onde há o que revelar. Numa issue sem filha ela
+          seria um controle que não faz nada — o espaçador mantém o
+          alinhamento da coluna. */}
+      {filhos > 0 && onAlternar ? (
+        <button
+          type="button"
+          className="subtask-caret"
+          aria-label={`${aberto ? 'recolher' : 'expandir'} ${filhos === 1 ? 'a issue' : `as ${filhos} issues`} sob ${issue.key}`}
+          aria-expanded={aberto}
+          onClick={onAlternar}
+        >
+          <NavArrowRight width={14} height={14} />
+        </button>
+      ) : (
+        <span className="subtask-caret is-empty" aria-hidden="true" />
+      )}
       <span className="jira-kind mono">{issueMarker(issue)}</span>
       <div className="jira-main">
         <div className="jira-line">

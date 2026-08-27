@@ -121,6 +121,9 @@ describe('JiraPanel', () => {
         }}
       />,
     );
+    // O ramo começa fechado; a seta é que revela a filha.
+    fireEvent.click(screen.getByLabelText(/expandir a issue sob TT-1/));
+
     const rows = screen.getAllByRole('listitem');
     // A mãe vem primeiro e a filha logo abaixo, recuada.
     expect(rows[0].textContent).toContain('TT-1');
@@ -298,5 +301,98 @@ describe('acompanhamento otimista', () => {
 
     fireEvent.click(screen.getByLabelText('parar de acompanhar PDS-1075'));
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
+  });
+});
+
+describe('hierarquia expansível', () => {
+  const arvore: JiraItem[] = [
+    issue({ key: 'TT-100', summary: 'Iniciativa', project: 'TT', parent: null }),
+    issue({ key: 'TT-101', summary: 'Épico', project: 'TT', parent: { key: 'TT-100', summary: 'Iniciativa' } }),
+    issue({ key: 'TT-102', summary: 'História', project: 'TT', parent: { key: 'TT-101', summary: 'Épico' } }),
+    issue({ key: 'TT-200', summary: 'Solta', project: 'TT', parent: null }),
+  ];
+
+  function montar() {
+    render(
+      <JiraPanel
+        jira={{ data: arvore, error: null }}
+        watched={{ data: [], error: null }}
+        onChanged={() => {}}
+      />,
+    );
+  }
+
+  it('começa fechada, mostrando só o topo', () => {
+    montar();
+    expect(screen.getByText('TT-100')).toBeInTheDocument();
+    expect(screen.getByText('TT-200')).toBeInTheDocument();
+    expect(screen.queryByText('TT-101')).toBeNull();
+    expect(screen.queryByText('TT-102')).toBeNull();
+  });
+
+  it('a seta abre um nível de cada vez', () => {
+    montar();
+    fireEvent.click(screen.getByLabelText(/expandir a issue sob TT-100/));
+    expect(screen.getByText('TT-101')).toBeInTheDocument();
+    // O neto continua escondido: abrir a iniciativa não abre o épico.
+    expect(screen.queryByText('TT-102')).toBeNull();
+
+    fireEvent.click(screen.getByLabelText(/expandir a issue sob TT-101/));
+    expect(screen.getByText('TT-102')).toBeInTheDocument();
+  });
+
+  it('a seta fecha de volta', () => {
+    montar();
+    const seta = () => screen.getByLabelText(/(expandir|recolher) a issue sob TT-100/);
+    fireEvent.click(seta());
+    expect(screen.getByText('TT-101')).toBeInTheDocument();
+
+    fireEvent.click(seta());
+    expect(screen.queryByText('TT-101')).toBeNull();
+  });
+
+  it('anuncia o estado para quem usa leitor de tela', () => {
+    montar();
+    const seta = screen.getByLabelText(/expandir a issue sob TT-100/);
+    expect(seta).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(seta);
+    expect(screen.getByLabelText(/recolher a issue sob TT-100/)).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+  });
+
+  // Uma seta que não revela nada é um controle que engana.
+  it('a issue sem filha não ganha seta', () => {
+    montar();
+    expect(screen.queryByLabelText(/sob TT-200/)).toBeNull();
+  });
+
+  it('diz quantas issues estão sob a que tem mais de uma', () => {
+    render(
+      <JiraPanel
+        jira={{
+          data: [
+            issue({ key: 'TT-100', summary: 'Épico', project: 'TT', parent: null }),
+            issue({ key: 'TT-101', project: 'TT', parent: { key: 'TT-100', summary: 'Épico' } }),
+            issue({ key: 'TT-102', project: 'TT', parent: { key: 'TT-100', summary: 'Épico' } }),
+          ],
+          error: null,
+        }}
+        watched={{ data: [], error: null }}
+        onChanged={() => {}}
+      />,
+    );
+    expect(screen.getByLabelText('expandir as 2 issues sob TT-100')).toBeInTheDocument();
+  });
+
+  // Fora da hierarquia não há pai nem filho para revelar.
+  it('a lista por situação não mostra setas', () => {
+    montar();
+    // O chip diz a visão atual; clicar troca para a lista simples.
+    fireEvent.click(screen.getByRole('button', { name: 'Hierarquia' }));
+    expect(screen.queryByLabelText(/expandir/)).toBeNull();
+    // E ali todas as issues aparecem, porque não há o que colapsar.
+    expect(screen.getByText('TT-102')).toBeInTheDocument();
   });
 });

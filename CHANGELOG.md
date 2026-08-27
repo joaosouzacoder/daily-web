@@ -9,6 +9,10 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Added
+- The Jira hierarchy expands and collapses, with the same disclosure arrow the
+  tasks use. Branches start closed, so the panel opens on the top of each tree
+  and you descend where you care; an issue with nothing under it gets a spacer
+  instead of an arrow, not a control that does nothing.
 - The inbox groups a conversation into one row. The subject loses its stack of
   "Re:"/"Fwd:" prefixes, the row shows who took part and how many messages
   there are, and opening it lists them in the order they happened. A
