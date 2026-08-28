@@ -93,6 +93,13 @@ Only `main` is maintained; there are no release branches.
   Vitest 2, which no longer ships it, and `npm run users` depends on it.
 
 ### Fixed
+- Email tags now survive a reload, and tags applied in Gmail itself show up in
+  the daily. The panel only ever kept tags in component state, filled in when
+  you clicked — so a refresh emptied it and a tag created anywhere else never
+  arrived. The envelope now carries the labels the server reports
+  (`X-GM-LABELS`), and the row reads from those; the click stays optimistic
+  until the next refresh confirms it. Accounts without the Gmail extension
+  report no labels and behave as before.
 - Saving the layout no longer fails for a tab opened before the deploy. The
   previous client saved on every drag and sent no window size, and the new
   route rejected that with "tamanho de tela inválido" — in the middle of the

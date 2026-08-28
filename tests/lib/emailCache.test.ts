@@ -29,6 +29,7 @@ function envelope(over: Partial<EmailEnvelope>): EmailEnvelope {
     date: '2026-08-25T10:00:00Z',
     messageId: '<a@b>',
     references: [],
+    labels: [],
     mailbox: 'inbox' as const,
     ...over,
   };

@@ -31,6 +31,7 @@ function envelope(over: Partial<Record<string, unknown>> = {}) {
     date: '2026-08-26T10:00:00Z',
     messageId: '<a@b>',
     references: [],
+    labels: [],
     mailbox: 'inbox' as const,
     ...over,
   };

@@ -117,6 +117,16 @@ async function mailboxPath(client: ImapFlow, mailbox: MailboxKind): Promise<stri
   return findSpecialUse(await client.list(), '\\Sent');
 }
 
+/**
+ * As etiquetas que o usuário criou. Vêm misturadas com os rótulos de sistema
+ * (`\Inbox`, `\Important`, `\Starred`), que não são etiquetas e não têm o que
+ * fazer na lista; aqui a contrabarra inicial é o que separa uns dos outros.
+ */
+export function userLabels(labels: Set<string> | undefined): string[] {
+  if (!labels) return [];
+  return [...labels].filter((label) => !label.startsWith('\\')).sort();
+}
+
 function toEnvelope(
   message: FetchMessageObject,
   conn: Connection,
@@ -133,6 +143,7 @@ function toEnvelope(
     date: (message.envelope?.date ?? new Date()).toISOString(),
     messageId: message.envelope?.messageId ?? '',
     references: parseReferences(message.headers, message.envelope?.inReplyTo),
+    labels: userLabels(message.labels),
     mailbox,
   };
 }
@@ -157,6 +168,10 @@ async function listFrom(
       uid: true,
       flags: true,
       envelope: true,
+      // Sem pedir, a etiqueta não vem — e sem ela a lista só saberia das
+      // etiquetas aplicadas na própria sessão. Servidor que não as reporta
+      // devolve a mensagem sem `labels`, que vira lista vazia.
+      labels: true,
       // O ENVELOPE traz o In-Reply-To, mas não o References — e é o
       // References que carrega o fio inteiro, não só o degrau anterior.
       headers: ['references'],

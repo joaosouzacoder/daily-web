@@ -13,6 +13,7 @@ function mail(over: Partial<EmailEnvelope>): EmailEnvelope {
     date: '2026-08-27T12:00:00Z',
     messageId: '<1@x>',
     references: [],
+    labels: [],
     mailbox: 'inbox',
     ...over,
   };

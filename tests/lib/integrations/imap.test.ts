@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ListResponse } from 'imapflow';
-import { findSpecialUse, mailConfig, usableFolders } from '@/lib/integrations/imap';
+import { findSpecialUse, mailConfig, usableFolders, userLabels } from '@/lib/integrations/imap';
 import type { Connection } from '@/lib/vault/connections';
 
 function box(path: string, specialUse?: string, flags: string[] = []): ListResponse {
@@ -60,5 +60,24 @@ describe('usableFolders', () => {
   it('ignora contêiner que não dá para selecionar', () => {
     const list = [box('INBOX'), box('[Gmail]', undefined, ['\\Noselect'])];
     expect(usableFolders(list)).toEqual(['INBOX']);
+  });
+});
+
+describe('userLabels', () => {
+  // As etiquetas nunca eram lidas do servidor: só existiam no estado da tela,
+  // então sumiam no reload e as criadas fora do daily jamais apareciam.
+  it('devolve as etiquetas do usuário em ordem estável', () => {
+    expect(userLabels(new Set(['Financeiro', 'Clientes']))).toEqual(['Clientes', 'Financeiro']);
+  });
+
+  it('descarta os rótulos de sistema, que não são etiquetas', () => {
+    const bruto = new Set(['\\Inbox', '\\Important', '\\Starred', 'Clientes']);
+    expect(userLabels(bruto)).toEqual(['Clientes']);
+  });
+
+  // Servidor sem X-GM-EXT-1: o imapflow descarta a opção e a mensagem chega
+  // sem `labels`. Isso não é erro, é uma conta que não tem etiquetas.
+  it('devolve lista vazia quando o servidor não reporta etiquetas', () => {
+    expect(userLabels(undefined)).toEqual([]);
   });
 });

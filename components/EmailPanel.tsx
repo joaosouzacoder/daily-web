@@ -41,6 +41,18 @@ function key(m: EmailEnvelope): string {
   return `${m.account}:${m.id}`;
 }
 
+/**
+ * As etiquetas da conversa: as que o servidor reporta em cada mensagem, mais
+ * as que acabaram de ser aplicadas nesta tela. A aplicação é otimista e o
+ * servidor só confirma no refresh seguinte — sem a união, a etiqueta recém
+ * escolhida sumiria da linha até lá.
+ */
+function threadTags(thread: EmailThread, optimistic: string[]): string[] {
+  const todas = new Set(optimistic);
+  for (const m of thread.messages) for (const label of m.labels) todas.add(label);
+  return [...todas].sort();
+}
+
 async function postJson(url: string, body: unknown) {
   await fetch(url, {
     method: 'POST',
@@ -429,6 +441,7 @@ export function EmailPanel({
             const isOpen = sozinha ? key(sozinha) === openKey : expanded.has(thread.id);
             const marcada = threadKeys(thread).every((k) => selected.has(k));
             const titulo = thread.subject || '(sem assunto)';
+            const tags = threadTags(thread, appliedTags[thread.id] ?? []);
             return (
               <li key={thread.id} className={`mail-item${isOpen ? ' is-open' : ''}`}>
                 <div className={`row${thread.unreadCount > 0 ? ' row-unread' : ''}`}>
@@ -483,7 +496,7 @@ export function EmailPanel({
                     <div className="row-tagger">
                       <button
                         type="button"
-                        className={`icon-btn${(appliedTags[thread.id] ?? []).length > 0 ? ' is-tagged' : ''}`}
+                        className={`icon-btn${tags.length > 0 ? ' is-tagged' : ''}`}
                         aria-label={`etiquetar ${titulo}`}
                         aria-expanded={tagMenuKey === thread.id}
                         onClick={() => {
@@ -534,7 +547,7 @@ export function EmailPanel({
                     onClose={() => setOpenKey(null)}
                     onChanged={onChanged}
                     onSeenChanged={onSeenChanged}
-                    appliedTags={appliedTags[thread.id] ?? []}
+                    appliedTags={tags}
                   />
                 )}
 
@@ -564,7 +577,7 @@ export function EmailPanel({
                               onClose={() => setOpenKey(null)}
                               onChanged={onChanged}
                               onSeenChanged={onSeenChanged}
-                              appliedTags={appliedTags[thread.id] ?? []}
+                              appliedTags={tags}
                             />
                           )}
                         </li>

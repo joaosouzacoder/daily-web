@@ -15,6 +15,10 @@ export interface EmailEnvelope {
   /** Message-Ids que esta mensagem responde, do mais antigo ao mais recente:
    *  o header References acrescido do In-Reply-To. É o que liga a conversa. */
   references: string[];
+  /** Etiquetas aplicadas à mensagem, como o servidor as reporta. Fica vazio
+   *  para as contas cujo servidor não reporta etiqueta nenhuma — a lista trata
+   *  isso como "sem etiqueta", não como erro. */
+  labels: string[];
   /** De qual caixa a mensagem veio. O uid do IMAP é por caixa: o mesmo número
    *  aponta para mensagens diferentes na entrada e nos enviados, então nenhuma
    *  operação pode usar o id sem saber de onde ele é. */
