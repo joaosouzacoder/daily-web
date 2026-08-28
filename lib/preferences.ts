@@ -1,13 +1,20 @@
 import { getDb } from './db';
 import { DEFAULT_AGENDA_DAYS, isAgendaRange } from './agendaWindow';
-import { defaultLayout, parseLayout, serializeLayout } from './dashboardLayout';
-import type { PanelPlacement } from './dashboardLayout';
+import {
+  defaultLayout,
+  parseLayout,
+  parseSizedLayouts,
+  serializeLayout,
+  serializeSizedLayouts,
+} from './dashboardLayout';
+import type { PanelPlacement, SizedLayout } from './dashboardLayout';
 
 // Preferências de visualização por usuário. São escolhas de como olhar, não
 // de credencial: por isso não passam pelo cofre e não são cifradas.
 
 export const AGENDA_DAYS = 'agendaDays';
 export const DASHBOARD_LAYOUT = 'dashboardLayout';
+export const DASHBOARD_LAYOUTS = 'dashboardLayouts';
 
 function read(userId: string, key: string): string | null {
   const row = getDb()
@@ -55,10 +62,33 @@ export function setDashboardLayout(userId: string, layout: PanelPlacement[]): vo
   setPreference(userId, DASHBOARD_LAYOUT, serializeLayout(layout));
 }
 
+/**
+ * As disposições gravadas por tamanho de tela.
+ *
+ * Enquanto não houver nenhuma, a disposição única que a pessoa já tinha
+ * continua valendo: ela foi feita antes de existir tamanho de tela, e
+ * descartá-la em silêncio seria apagar o trabalho de alguém. A primeira
+ * gravação por tamanho toma o lugar dela.
+ */
+export function dashboardLayouts(userId: string): SizedLayout[] {
+  const bruto = read(userId, DASHBOARD_LAYOUTS);
+  if (!bruto) return [];
+  try {
+    return parseSizedLayouts(JSON.parse(bruto));
+  } catch {
+    return [];
+  }
+}
+
+export function setDashboardLayouts(userId: string, entries: SizedLayout[]): void {
+  setPreference(userId, DASHBOARD_LAYOUTS, serializeSizedLayouts(entries));
+}
+
 export function resetDashboardLayout(userId: string): void {
-  getDb()
-    .prepare('DELETE FROM preferences WHERE user_id = ? AND key = ?')
-    .run(userId, DASHBOARD_LAYOUT);
+  const db = getDb();
+  for (const key of [DASHBOARD_LAYOUT, DASHBOARD_LAYOUTS]) {
+    db.prepare('DELETE FROM preferences WHERE user_id = ? AND key = ?').run(userId, key);
+  }
 }
 
 export function deleteUserPreferences(userId: string): void {

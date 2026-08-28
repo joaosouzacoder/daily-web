@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUser } from '@/lib/api/context';
 import { isAgendaRange } from '@/lib/agendaWindow';
-import { parseLayout } from '@/lib/dashboardLayout';
-import { setAgendaDays, setDashboardLayout, resetDashboardLayout } from '@/lib/preferences';
+import { parseLayout, putSizedLayout } from '@/lib/dashboardLayout';
+import {
+  dashboardLayouts,
+  setAgendaDays,
+  setDashboardLayouts,
+  resetDashboardLayout,
+} from '@/lib/preferences';
 import { dropCache, patchCachedState, refreshAll } from '@/lib/refresher';
 
 /**
@@ -13,6 +18,27 @@ import { dropCache, patchCachedState, refreshAll } from '@/lib/refresher';
  * tela — e por isso corrige o cache em vez de disparar uma volta às
  * integrações a cada painel arrastado.
  */
+/** Um tamanho de janela plausível. Zero, negativo ou absurdo não vem de tela
+ *  nenhuma e estragaria a conta de distância que escolhe a disposição. */
+const MAX_DIMENSAO = 20_000;
+
+function isTamanhoDeTela(
+  value: { width?: unknown; height?: unknown } | undefined,
+): value is { width: number; height: number } {
+  if (!value) return false;
+  const { width, height } = value;
+  return (
+    typeof width === 'number' &&
+    typeof height === 'number' &&
+    Number.isFinite(width) &&
+    Number.isFinite(height) &&
+    width > 0 &&
+    height > 0 &&
+    width <= MAX_DIMENSAO &&
+    height <= MAX_DIMENSAO
+  );
+}
+
 export async function PATCH(request: NextRequest) {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
@@ -27,17 +53,32 @@ export async function PATCH(request: NextRequest) {
     if (body.layout === null) {
       resetDashboardLayout(userId);
     } else if (Array.isArray(body.layout)) {
+      // O tamanho da janela vem do cliente porque só ele sabe: o servidor
+      // nunca vê a tela de quem pediu.
+      const viewport = body.viewport as { width?: unknown; height?: unknown } | undefined;
+      if (!isTamanhoDeTela(viewport)) {
+        return NextResponse.json({ error: 'tamanho de tela inválido' }, { status: 400 });
+      }
       // parseLayout prende o que vier fora dos limites: um w de 999 ou um id
       // desconhecido não pode virar estado gravado.
-      setDashboardLayout(userId, parseLayout(body.layout));
+      setDashboardLayouts(
+        userId,
+        putSizedLayout(
+          dashboardLayouts(userId),
+          viewport.width,
+          viewport.height,
+          parseLayout(body.layout),
+        ),
+      );
     } else {
       return NextResponse.json({ error: 'layout inválido' }, { status: 400 });
     }
 
     const { dashboardLayout } = await import('@/lib/preferences');
     const layout = dashboardLayout(userId);
-    patchCachedState(userId, (state) => ({ ...state, layout }));
-    return NextResponse.json({ layout });
+    const layouts = dashboardLayouts(userId);
+    patchCachedState(userId, (state) => ({ ...state, layout, layouts }));
+    return NextResponse.json({ layout, layouts });
   }
 
   if ('agendaDays' in body) {

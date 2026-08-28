@@ -144,8 +144,11 @@ bottom-right corner; **Concluir** leaves the mode. Outside it the panels are
 ordinary content, so clicking a message, ticking a task and selecting text
 keep working.
 
-The arrangement is stored per user on the server, so it follows you between
-screens. **Restaurar disposição** appears once you have changed something.
+**Salvar para esta tela** stores the arrangement together with the exact
+window size it was made at; **Descartar** throws the changes away. Opening the
+dashboard picks the saved arrangement whose window size is closest to the
+current one, so a resized window keeps your layout and a different monitor gets
+its own. **Restaurar disposição**, in the settings screen, clears them all.
 
 Panels have a fixed height on the grid and scroll internally, which is what
 makes resizing mean anything. Below 1024px the grid gives way to a single

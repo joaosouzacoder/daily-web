@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { useDashboardState } from '@/lib/hooks/usePolling';
@@ -15,7 +15,12 @@ import { DashboardGrid } from '@/components/DashboardGrid';
 import { NotesPanel } from '@/components/NotesPanel';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { DEFAULT_AGENDA_DAYS } from '@/lib/agendaWindow';
-import { defaultLayout, type PanelPlacement } from '@/lib/dashboardLayout';
+import {
+  defaultLayout,
+  nearestLayout,
+  type PanelPlacement,
+  type SizedLayout,
+} from '@/lib/dashboardLayout';
 import {
   markEmailsSeen,
   markNotificationRead,
@@ -35,17 +40,33 @@ export default function DashboardPage() {
   const modules = state?.modules ?? [];
   const has = (id: string) => modules.includes(id);
   const nothingOn = state !== null && modules.length === 0;
-  const layout = (state?.layout as PanelPlacement[] | undefined) ?? defaultLayout();
+  const layouts = (state?.layouts as SizedLayout[] | undefined) ?? [];
+  const legado = (state?.layout as PanelPlacement[] | undefined) ?? defaultLayout();
 
-  // A grade reposiciona o que já está na tela, sem buscar nada de fora — por
-  // isso a mudança é aplicada na hora e gravada em segundo plano.
+  // A escolha da disposição é do cliente: só ele sabe o tamanho da janela.
+  // Enquanto não houver gravação por tamanho, vale a disposição única antiga.
+  const [janela, setJanela] = useState<{ width: number; height: number } | null>(null);
+  useEffect(() => {
+    const medir = () => setJanela({ width: window.innerWidth, height: window.innerHeight });
+    medir();
+    window.addEventListener('resize', medir);
+    return () => window.removeEventListener('resize', medir);
+  }, []);
+
+  const layout = useMemo(() => {
+    if (!janela) return legado;
+    return nearestLayout(layouts, janela.width, janela.height)?.layout ?? legado;
+  }, [layouts, legado, janela]);
+
+  // A disposição é gravada para o tamanho de janela de agora, e só quando a
+  // pessoa pede: arrastar não grava nada.
   const saveLayout = useCallback(
     async (next: PanelPlacement[]) => {
-      mutate((s) => ({ ...s, layout: next }));
+      const viewport = { width: window.innerWidth, height: window.innerHeight };
       const res = await fetch('/api/preferences', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ layout: next }),
+        body: JSON.stringify({ layout: next, viewport }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -54,6 +75,8 @@ export default function DashboardPage() {
         return;
       }
       setLayoutError(null);
+      const { layouts: gravados } = (await res.json()) as { layouts: SizedLayout[] };
+      mutate((s) => ({ ...s, layouts: gravados }));
     },
     [mutate, reload],
   );
@@ -164,7 +187,7 @@ export default function DashboardPage() {
           </Link>
         </div>
       ) : (
-        <DashboardGrid layout={layout} panels={panels} onLayoutChange={saveLayout} />
+        <DashboardGrid layout={layout} panels={panels} onSave={saveLayout} />
       )}
     </main>
   );

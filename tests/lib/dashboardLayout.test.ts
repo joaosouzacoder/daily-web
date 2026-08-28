@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   GRID_COLUMNS,
+  MAX_SIZED_LAYOUTS,
   MIN_PANEL_HEIGHT,
   MIN_PANEL_WIDTH,
+  nearestLayout,
+  parseSizedLayouts,
+  putSizedLayout,
+  serializeSizedLayouts,
+  type SizedLayout,
   defaultLayout,
   isDefaultLayout,
   layoutFor,
@@ -111,5 +117,135 @@ describe('isDefaultLayout', () => {
     const mexido = defaultLayout();
     mexido[0] = { ...mexido[0], x: 5 };
     expect(isDefaultLayout(mexido)).toBe(false);
+  });
+});
+
+describe('disposições por tamanho de tela', () => {
+  const disp = (i: string) => [{ i, x: 0, y: 0, w: 6, h: 8 }];
+
+  describe('nearestLayout', () => {
+    it('devolve nada quando não há disposição gravada', () => {
+      expect(nearestLayout([], 1920, 1080)).toBeNull();
+    });
+
+    it('acha o tamanho exato', () => {
+      const entries: SizedLayout[] = [
+        { width: 1920, height: 1080, layout: disp('email') },
+        { width: 1512, height: 945, layout: disp('jira') },
+      ];
+      expect(nearestLayout(entries, 1512, 945)?.layout[0].i).toBe('jira');
+    });
+
+    // O caso que faz a diferença: abrir o DevTools ou a barra de favoritos
+    // muda a altura e não pode devolver a pessoa ao layout padrão.
+    it('escolhe o mais próximo quando nada bate exato', () => {
+      const entries: SizedLayout[] = [
+        { width: 1920, height: 1080, layout: disp('email') },
+        { width: 1512, height: 945, layout: disp('jira') },
+      ];
+      expect(nearestLayout(entries, 1920, 1040)?.layout[0].i).toBe('email');
+      expect(nearestLayout(entries, 1500, 900)?.layout[0].i).toBe('jira');
+    });
+
+    it('leva largura e altura em conta, não só a largura', () => {
+      const entries: SizedLayout[] = [
+        { width: 1600, height: 400, layout: disp('email') },
+        { width: 1500, height: 1000, layout: disp('jira') },
+      ];
+      expect(nearestLayout(entries, 1590, 990)?.layout[0].i).toBe('jira');
+    });
+
+    // Sem gravação para tela pequena, a de tela grande ainda é melhor palpite
+    // que o padrão: a grade tem doze colunas em qualquer tamanho.
+    it('usa a única gravada mesmo numa tela bem diferente', () => {
+      const entries: SizedLayout[] = [{ width: 3440, height: 1440, layout: disp('email') }];
+      expect(nearestLayout(entries, 1280, 800)?.layout[0].i).toBe('email');
+    });
+
+    it('empate fica com a gravada mais recentemente', () => {
+      const entries: SizedLayout[] = [
+        { width: 1000, height: 1000, layout: disp('email') },
+        { width: 1000, height: 1000, layout: disp('jira') },
+      ];
+      expect(nearestLayout(entries, 900, 900)?.layout[0].i).toBe('email');
+    });
+  });
+
+  describe('putSizedLayout', () => {
+    it('grava o primeiro tamanho', () => {
+      const depois = putSizedLayout([], 1920, 1080, disp('email'));
+      expect(depois).toHaveLength(1);
+      expect(depois[0]).toMatchObject({ width: 1920, height: 1080 });
+    });
+
+    it('salvar de novo no mesmo tamanho substitui em vez de acumular', () => {
+      const antes = putSizedLayout([], 1920, 1080, disp('email'));
+      const depois = putSizedLayout(antes, 1920, 1080, disp('jira'));
+
+      expect(depois).toHaveLength(1);
+      expect(depois[0].layout[0].i).toBe('jira');
+    });
+
+    it('um tamanho novo convive com os anteriores', () => {
+      const antes = putSizedLayout([], 1920, 1080, disp('email'));
+      const depois = putSizedLayout(antes, 1512, 945, disp('jira'));
+      expect(depois.map((e) => e.width)).toEqual([1512, 1920]);
+    });
+
+    it('arredonda o tamanho, que pode vir fracionado do navegador', () => {
+      const depois = putSizedLayout([], 1919.6, 1079.2, disp('email'));
+      expect(depois[0]).toMatchObject({ width: 1920, height: 1079 });
+    });
+
+    // A preferência não pode crescer sem fim.
+    it('descarta o mais antigo ao passar do teto', () => {
+      let entries: SizedLayout[] = [];
+      for (let i = 0; i < MAX_SIZED_LAYOUTS + 5; i += 1) {
+        entries = putSizedLayout(entries, 1000 + i, 800, disp('email'));
+      }
+      expect(entries).toHaveLength(MAX_SIZED_LAYOUTS);
+      // O mais recente fica; o primeiro gravado saiu.
+      expect(entries[0].width).toBe(1000 + MAX_SIZED_LAYOUTS + 4);
+      expect(entries.some((e) => e.width === 1000)).toBe(false);
+    });
+  });
+
+  describe('parseSizedLayouts', () => {
+    it('aceita o que foi serializado', () => {
+      const entries = putSizedLayout([], 1920, 1080, disp('email'));
+      expect(parseSizedLayouts(JSON.parse(serializeSizedLayouts(entries)))).toHaveLength(1);
+    });
+
+    it('descarta entrada sem tamanho utilizável', () => {
+      expect(
+        parseSizedLayouts([
+          { width: 0, height: 100, layout: [] },
+          { width: -5, height: 100, layout: [] },
+          { width: 'grande', height: 100, layout: [] },
+          { width: 1920, height: 1080, layout: [] },
+        ]),
+      ).toHaveLength(1);
+    });
+
+    it('descarta o que não é lista', () => {
+      expect(parseSizedLayouts(null)).toEqual([]);
+      expect(parseSizedLayouts('nada')).toEqual([]);
+      expect(parseSizedLayouts({ width: 1 })).toEqual([]);
+    });
+
+    it('não guarda o mesmo tamanho duas vezes', () => {
+      const saida = parseSizedLayouts([
+        { width: 1920, height: 1080, layout: [] },
+        { width: 1920, height: 1080, layout: [] },
+      ]);
+      expect(saida).toHaveLength(1);
+    });
+
+    // O painel que não existia quando a pessoa gravou entra na posição padrão
+    // em vez de sumir — é o mesmo cuidado do parseLayout.
+    it('completa a disposição com os painéis que faltam', () => {
+      const saida = parseSizedLayouts([{ width: 1920, height: 1080, layout: disp('email') }]);
+      expect(saida[0].layout.map((p) => p.i).sort()).toEqual(defaultLayout().map((p) => p.i).sort());
+    });
   });
 });

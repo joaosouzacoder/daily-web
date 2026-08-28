@@ -9,7 +9,7 @@ import { getPomodoroState } from './pomodoro';
 import { warmBodyCache, pruneOldBodies } from './emailCache';
 import { listUsers } from './auth/users';
 import { enabledModules, listConnections } from './vault/connections';
-import { agendaDays, dashboardLayout, jiraWatchedKeys } from './preferences';
+import { agendaDays, dashboardLayout, dashboardLayouts, jiraWatchedKeys } from './preferences';
 import type { Connection } from './vault/connections';
 
 const EMAIL_LIMIT = 30;
@@ -86,6 +86,7 @@ export async function refreshAll(userId: string): Promise<DashboardState> {
     mailboxes,
     agendaDays: days,
     layout: dashboardLayout(userId),
+    layouts: dashboardLayouts(userId),
     email,
     agenda,
     pulls,

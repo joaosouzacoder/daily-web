@@ -24,10 +24,11 @@ interface Props {
   layout: PanelPlacement[];
   /** Ids dos painéis a desenhar, na ordem em que o layout os posiciona. */
   panels: { id: string; node: ReactNode }[];
-  onLayoutChange: (layout: PanelPlacement[]) => void;
+  /** Grava a disposição para o tamanho de janela de agora. */
+  onSave: (layout: PanelPlacement[]) => Promise<void> | void;
 }
 
-export function DashboardGrid({ layout, panels, onLayoutChange }: Props) {
+export function DashboardGrid({ layout, panels, onSave }: Props) {
   // A v2 mede a largura por hook em vez do antigo WidthProvider.
   const { width, mounted, containerRef } = useContainerWidth();
   const [dragging, setDragging] = useState(false);
@@ -35,9 +36,23 @@ export function DashboardGrid({ layout, panels, onLayoutChange }: Props) {
   // O botão é a única entrada do modo: deixa preso até a pessoa desligar, e
   // funciona igual em tela de toque, onde não há tecla para segurar.
   const [pinned, setPinned] = useState(false);
+  // O que está sendo arrastado, ainda não gravado. Enquanto existe, é ele que
+  // a grade desenha — arrastar deixou de gravar sozinho.
+  const [rascunho, setRascunho] = useState<PanelPlacement[] | null>(null);
+  const [salvando, setSalvando] = useState(false);
   // `dragging` mantém o modo de pé enquanto um arrasto está em andamento,
   // para desligar o botão no meio não deixar o painel no ar.
   const arranging = dragging || pinned;
+
+  // O tamanho da janela aparece no aviso para a gravação não ser cega: você
+  // vê para qual tela está guardando antes de clicar.
+  const [janela, setJanela] = useState({ largura: 0, altura: 0 });
+  useEffect(() => {
+    const medir = () => setJanela({ largura: window.innerWidth, altura: window.innerHeight });
+    medir();
+    window.addEventListener('resize', medir);
+    return () => window.removeEventListener('resize', medir);
+  }, []);
 
   useEffect(() => {
     const media = window.matchMedia(`(max-width: ${NARROW_BREAKPOINT}px)`);
@@ -55,12 +70,12 @@ export function DashboardGrid({ layout, panels, onLayoutChange }: Props) {
   // re-sincroniza quando a prop muda, e um arrasto em andamento morria no
   // primeiro render — que é justamente o que `onDragStart` provoca.
   const visible = useMemo(
-    () => layoutFor(layout, panelIds.split(',')),
-    [layout, panelIds],
+    () => layoutFor(rascunho ?? layout, panelIds.split(',')),
+    [rascunho, layout, panelIds],
   );
 
-  // A grade emite mudança também ao montar e ao medir a largura. Gravar tudo
-  // devolveria o layout ao servidor sem ninguém ter arrastado nada.
+  // A grade emite mudança também ao montar e ao medir a largura. Tratar isso
+  // como edição marcaria a disposição como mexida sem ninguém ter arrastado.
   //
   // A comparação usa `serializeLayout` dos dois lados: comparar JSON.stringify
   // direto dava diferença por ordem de chaves — o objeto vindo da grade e o
@@ -68,8 +83,8 @@ export function DashboardGrid({ layout, panels, onLayoutChange }: Props) {
   // parecia uma mudança.
   const ultimo = useRef<string>('');
   useEffect(() => {
-    ultimo.current = serializeLayout(visible);
-  }, [visible]);
+    ultimo.current = serializeLayout(layoutFor(layout, panelIds.split(',')));
+  }, [layout, panelIds]);
 
   const handleChange = useCallback(
     (next: Layout) => {
@@ -77,10 +92,32 @@ export function DashboardGrid({ layout, panels, onLayoutChange }: Props) {
       const serializado = serializeLayout(layoutFor(limpo, panelIds.split(',')));
       if (serializado === ultimo.current) return;
       ultimo.current = serializado;
-      onLayoutChange(limpo);
+      setRascunho(limpo);
     },
-    [onLayoutChange, panelIds],
+    [panelIds],
   );
+
+  const salvar = async () => {
+    if (!rascunho) {
+      // Entrou no modo e não mexeu em nada: fixar a disposição atual para
+      // esta tela ainda é uma escolha legítima.
+      setSalvando(true);
+      await onSave(layout);
+      setSalvando(false);
+      setPinned(false);
+      return;
+    }
+    setSalvando(true);
+    await onSave(rascunho);
+    setSalvando(false);
+    setRascunho(null);
+    setPinned(false);
+  };
+
+  const descartar = () => {
+    setRascunho(null);
+    setPinned(false);
+  };
 
   // Objetos de configuração recriados a cada render provocam a mesma
   // re-sincronização que matava o arrasto.
@@ -122,16 +159,29 @@ export function DashboardGrid({ layout, panels, onLayoutChange }: Props) {
     <div ref={containerRef}>
       <div className="grid-bar">
         <p className={`grid-hint${arranging ? ' is-on' : ''}`} role="status">
-          {arranging ? 'Arraste para mover, puxe o canto para redimensionar.' : ''}
+          {arranging
+            ? `Arraste para mover, puxe o canto para redimensionar. Salvar guarda para ${janela.largura} × ${janela.altura}.`
+            : ''}
         </p>
-        <button
-          type="button"
-          className={`btn${pinned ? ' btn-primary' : ''}`}
-          aria-pressed={pinned}
-          onClick={() => setPinned((v) => !v)}
-        >
-          {pinned ? 'Concluir' : 'Organizar'}
-        </button>
+        {arranging ? (
+          <div className="grid-bar-actions">
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={salvando}
+              onClick={() => void salvar()}
+            >
+              {salvando ? 'Salvando…' : 'Salvar para esta tela'}
+            </button>
+            <button type="button" className="btn" onClick={descartar}>
+              Descartar
+            </button>
+          </div>
+        ) : (
+          <button type="button" className="btn" onClick={() => setPinned(true)}>
+            Organizar
+          </button>
+        )}
       </div>
 
       {mounted && (

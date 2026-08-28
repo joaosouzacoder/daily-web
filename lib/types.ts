@@ -167,8 +167,17 @@ export interface DashboardState {
   mailboxes: MailboxRef[];
   /** Quantos dias a agenda cobre, contando hoje. Escolha de cada usuário. */
   agendaDays: number;
-  /** Disposição dos painéis na grade, arrastada e redimensionada pelo dono. */
+  /** Disposição única, de antes de existir gravação por tamanho de tela.
+   *  Vale enquanto `layouts` estiver vazio. */
   layout: { i: string; x: number; y: number; w: number; h: number }[];
+  /** Disposições gravadas por tamanho de janela. O cliente escolhe a mais
+   *  próxima da janela dele — o servidor não sabe o tamanho da tela de quem
+   *  pediu o estado. */
+  layouts: {
+    width: number;
+    height: number;
+    layout: { i: string; x: number; y: number; w: number; h: number }[];
+  }[];
   email: PanelResult<EmailEnvelope[]>;
   agenda: PanelResult<AgendaItem[]>;
   pulls: PanelResult<PullsDigest>;

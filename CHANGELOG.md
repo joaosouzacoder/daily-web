@@ -9,6 +9,12 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Added
+- The dashboard arrangement is saved per screen size. **Salvar para esta tela**
+  records the exact window width and height alongside the arrangement, and on
+  load the closest saved size wins — so opening the DevTools or a bookmarks bar
+  does not drop you back to the default, while a different monitor keeps its
+  own arrangement. Up to 20 sizes per user; saving again at the same size
+  replaces it.
 - **Notas rápidas**, a new module: a notepad with tabs, kept on the server so
   the notes follow you between machines. Tabs run down the left side and the
   column scrolls on its own when there are many, so the panel stays inside its
@@ -63,6 +69,9 @@ Only `main` is maintained; there are no release branches.
   did not exist, so GitHub reported the project as "Other".
 
 ### Changed
+- The arrangement is saved when you ask, not while you drag. **Organizar** now
+  leads to **Salvar para esta tela** and **Descartar**, and nothing reaches the
+  server until you pick one — so a layout you messed up costs nothing.
 - Rearranging is entered only through the **Organizar** button. Holding Ctrl
   used to enter it as well, which meant a modifier key silently changed what a
   click did anywhere on the dashboard.

@@ -53,6 +53,7 @@ function state(over: Partial<DashboardState> = {}): DashboardState {
     mailboxes: [{ id: 'mail-1', label: 'Trabalho' }],
     agendaDays: 2,
     layout: defaultLayout(),
+    layouts: [],
     email: { data: [envelope({ id: '1' }), envelope({ id: '2' })], error: null },
     agenda: { data: [], error: null },
     pulls: { data: { items: [], errors: [] }, error: null },

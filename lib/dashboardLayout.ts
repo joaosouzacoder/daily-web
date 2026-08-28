@@ -97,3 +97,93 @@ export function layoutFor(layout: PanelPlacement[], enabled: string[]): PanelPla
 export function isDefaultLayout(layout: PanelPlacement[]): boolean {
   return serializeLayout(layout) === serializeLayout(defaultLayout());
 }
+
+/** Uma disposição gravada junto com o tamanho de janela em que foi feita. */
+export interface SizedLayout {
+  width: number;
+  height: number;
+  layout: PanelPlacement[];
+}
+
+/** Quantos tamanhos de tela um usuário guarda. Cada monitor, cada notebook e
+ *  cada janela encaixada é um; vinte cobre isso com folga e impede que a
+ *  preferência cresça sem fim. */
+export const MAX_SIZED_LAYOUTS = 20;
+
+/** Duas janelas são a mesma tela quando batem no pixel. É assim que salvar de
+ *  novo no mesmo monitor substitui em vez de acumular. */
+function mesmaTela(a: SizedLayout, width: number, height: number): boolean {
+  return a.width === width && a.height === height;
+}
+
+export function parseSizedLayouts(raw: unknown): SizedLayout[] {
+  const lista = Array.isArray(raw) ? raw : [];
+  const saida: SizedLayout[] = [];
+  for (const item of lista) {
+    if (!item || typeof item !== 'object') continue;
+    const { width, height, layout } = item as Record<string, unknown>;
+    // Tamanho não positivo não corresponde a janela nenhuma e estragaria a
+    // conta de distância.
+    if (!isFiniteNumber(width) || !isFiniteNumber(height)) continue;
+    if (width <= 0 || height <= 0) continue;
+    const limpo = { width: Math.round(width), height: Math.round(height), layout: parseLayout(layout) };
+    if (saida.some((s) => mesmaTela(s, limpo.width, limpo.height))) continue;
+    saida.push(limpo);
+  }
+  return saida.slice(0, MAX_SIZED_LAYOUTS);
+}
+
+export function serializeSizedLayouts(entries: SizedLayout[]): string {
+  return JSON.stringify(
+    parseSizedLayouts(entries).map((e) => ({
+      width: e.width,
+      height: e.height,
+      layout: JSON.parse(serializeLayout(e.layout)) as PanelPlacement[],
+    })),
+  );
+}
+
+/**
+ * Grava a disposição para este tamanho de tela. Salvar de novo no mesmo
+ * tamanho substitui; um tamanho novo entra na frente, e o mais antigo sai
+ * quando o teto é alcançado.
+ */
+export function putSizedLayout(
+  entries: SizedLayout[],
+  width: number,
+  height: number,
+  layout: PanelPlacement[],
+): SizedLayout[] {
+  const outros = entries.filter((e) => !mesmaTela(e, width, height));
+  return [{ width: Math.round(width), height: Math.round(height), layout }, ...outros].slice(
+    0,
+    MAX_SIZED_LAYOUTS,
+  );
+}
+
+/**
+ * A disposição mais parecida com a janela de agora.
+ *
+ * A distância é euclidiana sobre largura e altura, sem tolerância máxima: se
+ * existe alguma disposição gravada, ela é melhor palpite do que o padrão —
+ * a grade tem doze colunas independentemente do tamanho em pixels, então uma
+ * disposição feita numa tela maior continua desenhável numa menor.
+ *
+ * Empate resolve pela primeira, que é a gravada mais recentemente.
+ */
+export function nearestLayout(
+  entries: SizedLayout[],
+  width: number,
+  height: number,
+): SizedLayout | null {
+  let melhor: SizedLayout | null = null;
+  let menor = Infinity;
+  for (const entry of entries) {
+    const distancia = Math.hypot(entry.width - width, entry.height - height);
+    if (distancia < menor) {
+      menor = distancia;
+      melhor = entry;
+    }
+  }
+  return melhor;
+}

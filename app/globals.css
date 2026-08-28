@@ -2209,6 +2209,13 @@ textarea.mail-reply-input {
   margin-bottom: 0;
 }
 
+.grid-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex: none;
+}
+
 /* ---------- barra de rolagem ---------- */
 
 /* A barra padrão do navegador é clara e destoa de tudo — aparece assim que um
