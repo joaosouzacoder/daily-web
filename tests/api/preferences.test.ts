@@ -71,11 +71,38 @@ describe('disposição por tamanho de tela', () => {
     expect(grande.layout.find((p: { i: string }) => p.i === 'email').w).toBe(6);
   });
 
-  // Sem tamanho não dá para saber a que tela a disposição pertence.
-  it('recusa gravar sem o tamanho da janela', async () => {
-    expect((await route(req({ layout: disp }))).status).toBe(400);
+  // Um deploy deixa abas abertas rodando o cliente anterior, que gravava a
+  // cada arraste sem mandar tamanho. Recusar isso fazia a aba antiga mostrar
+  // erro no meio do arrasto.
+  it('aceita o cliente antigo, que não manda tamanho', async () => {
+    const res = await route(req({ layout: disp }));
+    expect(res.status).toBe(200);
+
+    // Vai para a disposição única, que é o que aquele cliente sempre gravou.
+    const { layout, layouts } = await res.json();
+    expect(layouts).toEqual([]);
+    expect(layout.find((p: { i: string }) => p.i === 'email').x).toBe(5);
   });
 
+  it('a disposição única do cliente antigo vale enquanto não há por tamanho', async () => {
+    await route(req({ layout: disp }));
+
+    const { dashboardLayout, dashboardLayouts } = await import('@/lib/preferences');
+    expect(dashboardLayouts('u-1')).toEqual([]);
+    expect(dashboardLayout('u-1').find((p) => p.i === 'email')?.x).toBe(5);
+  });
+
+  it('gravar por tamanho depois não é atrapalhado pelo cliente antigo', async () => {
+    await route(req({ layout: disp }));
+    const res = await route(
+      req({ layout: [{ i: 'email', x: 0, y: 0, w: 6, h: 14 }], viewport: { width: 1920, height: 1080 } }),
+    );
+    const { layouts } = await res.json();
+    expect(layouts).toHaveLength(1);
+    expect(layouts[0].layout.find((p: { i: string }) => p.i === 'email').w).toBe(6);
+  });
+
+  // Tamanho presente e sem sentido é defeito de cliente, não aba velha.
   it('recusa tamanho que não vem de tela nenhuma', async () => {
     for (const viewport of [
       { width: 0, height: 900 },

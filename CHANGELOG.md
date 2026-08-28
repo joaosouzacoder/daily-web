@@ -93,6 +93,12 @@ Only `main` is maintained; there are no release branches.
   Vitest 2, which no longer ships it, and `npm run users` depends on it.
 
 ### Fixed
+- Saving the layout no longer fails for a tab opened before the deploy. The
+  previous client saved on every drag and sent no window size, and the new
+  route rejected that with "tamanho de tela inválido" — in the middle of the
+  drag. A request without a size now falls back to the single arrangement,
+  which is what that client always wrote; only a size that is present and
+  nonsensical is still refused.
 - A module with no fields no longer offers a **Conectar** button that opens an
   empty form.
 - An IMAP uid is per mailbox, so the same number means different messages in

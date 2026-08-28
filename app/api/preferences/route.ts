@@ -5,6 +5,7 @@ import { parseLayout, putSizedLayout } from '@/lib/dashboardLayout';
 import {
   dashboardLayouts,
   setAgendaDays,
+  setDashboardLayout,
   setDashboardLayouts,
   resetDashboardLayout,
 } from '@/lib/preferences';
@@ -55,21 +56,29 @@ export async function PATCH(request: NextRequest) {
     } else if (Array.isArray(body.layout)) {
       // O tamanho da janela vem do cliente porque só ele sabe: o servidor
       // nunca vê a tela de quem pediu.
-      const viewport = body.viewport as { width?: unknown; height?: unknown } | undefined;
-      if (!isTamanhoDeTela(viewport)) {
-        return NextResponse.json({ error: 'tamanho de tela inválido' }, { status: 400 });
-      }
+      //
+      // Sem tamanho não é erro: um deploy deixa abas abertas rodando o cliente
+      // anterior, que gravava a cada arraste e não mandava tamanho nenhum.
+      // Recusar essas requisições fazia a aba antiga mostrar "tamanho de tela
+      // inválido" enquanto a pessoa arrastava. Elas caem na disposição única,
+      // que é o que aquele cliente sempre gravou.
+      //
       // parseLayout prende o que vier fora dos limites: um w de 999 ou um id
       // desconhecido não pode virar estado gravado.
-      setDashboardLayouts(
-        userId,
-        putSizedLayout(
-          dashboardLayouts(userId),
-          viewport.width,
-          viewport.height,
-          parseLayout(body.layout),
-        ),
-      );
+      const layout = parseLayout(body.layout);
+      const viewport = body.viewport as { width?: unknown; height?: unknown } | undefined;
+
+      if (viewport === undefined || viewport === null) {
+        setDashboardLayout(userId, layout);
+      } else if (isTamanhoDeTela(viewport)) {
+        setDashboardLayouts(
+          userId,
+          putSizedLayout(dashboardLayouts(userId), viewport.width, viewport.height, layout),
+        );
+      } else {
+        // Tamanho presente e sem sentido é defeito de cliente, não aba velha.
+        return NextResponse.json({ error: 'tamanho de tela inválido' }, { status: 400 });
+      }
     } else {
       return NextResponse.json({ error: 'layout inválido' }, { status: 400 });
     }
