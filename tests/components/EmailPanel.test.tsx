@@ -278,7 +278,7 @@ describe('etiquetas vindas do servidor', () => {
 
   it('mostra a etiqueta que veio do servidor, sem ninguém ter clicado nesta sessão', async () => {
     montar(etiquetada);
-    fireEvent.click(screen.getByRole('button', { name: /Revisão do PR/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Revisão do PR/ }));
     expect(await screen.findByText('Clientes')).toBeTruthy();
     expect(screen.getByText('Financeiro')).toBeTruthy();
   });
