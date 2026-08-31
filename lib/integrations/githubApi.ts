@@ -1,5 +1,6 @@
 import type { Connection } from '@/lib/vault/connections';
 import type { PullsDigest, PullRequestItem } from '@/lib/types';
+import { isValidRepo } from '@/lib/api/validation';
 
 const TIMEOUT_MS = 20_000;
 const API = 'https://api.github.com';
@@ -84,6 +85,14 @@ export function toPullItems(
     isPullRequest: item.pull_request !== undefined && item.pull_request !== null,
     updatedAt: item.updated_at ?? '',
   }));
+}
+
+/** O endereço do repositório no GitHub, ou `null` quando o nome guardado não
+ *  tem a forma `dono/nome`. O nome é digitado pelo usuário e aqui vira href:
+ *  o que não casa com o formato não vira link, em vez de virar um link torto. */
+export function repoUrl(repo: string): string | null {
+  if (!isValidRepo(repo)) return null;
+  return `https://github.com/${repo}`;
 }
 
 export interface RepoGroup {

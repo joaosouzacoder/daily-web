@@ -1,7 +1,20 @@
 import { getDb } from './db';
 import { fetchMentions } from './integrations/jiraApi';
 import type { Connection } from './vault/connections';
-import type { NotificationItem } from '@/lib/types';
+import type {
+  EmailEnvelope,
+  NotificationItem,
+  NotificationSource,
+  PanelResult,
+  PullRequestItem,
+  PullsDigest,
+} from '@/lib/types';
+
+/** Um sino com tudo é um sino que ninguém lê. Cada fonte entra com os mais
+ *  recentes até este teto; o painel continua mostrando a lista inteira. */
+const PER_SOURCE_LIMIT = 20;
+
+const SOURCES: NotificationSource[] = ['jira_mention', 'pull_request', 'email'];
 
 export function isRead(userId: string, source: string, externalId: string): boolean {
   const row = getDb()
@@ -25,10 +38,105 @@ export async function getNotifications(
 ): Promise<NotificationItem[]> {
   const mentions = await fetchMentions(connection);
   return mentions.map((issue) => ({
-    id: issue.key,
+    id: notificationId('jira_mention', issue.key),
     source: 'jira_mention' as const,
     title: `${issue.key} — ${issue.summary}`,
     url: issue.url,
     read: isRead(userId, 'jira_mention', issue.key),
   }));
+}
+
+
+/** O id que a tela usa e a rota de "lida" recebe de volta. A fonte vai no
+ *  começo porque duas fontes podem ter o mesmo id externo, e é a fonte que
+ *  diz em qual chave o "lida" precisa ser gravado. */
+export function notificationId(source: NotificationSource, externalId: string): string {
+  return `${source}:${externalId}`;
+}
+
+/** A volta de `notificationId`. O corte é no primeiro `:` apenas: o id
+ *  externo de um e-mail carrega `:` dentro, e cortar em todos truncaria a
+ *  chave usada para gravar o "lida". */
+export function parseNotificationId(
+  id: string,
+): { source: NotificationSource; externalId: string } | null {
+  const corte = id.indexOf(':');
+  if (corte <= 0) return null;
+  const source = id.slice(0, corte);
+  const externalId = id.slice(corte + 1);
+  if (!SOURCES.includes(source as NotificationSource) || externalId === '') return null;
+  return { source: source as NotificationSource, externalId };
+}
+
+/** Um aviso por pull request aberto. Issue fica de fora: o painel traz as
+ *  duas coisas na mesma lista, mas quem pediu aviso pediu de PR. */
+export function pullNotifications(userId: string, items: PullRequestItem[]): NotificationItem[] {
+  return items
+    .filter((item) => item.isPullRequest)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .slice(0, PER_SOURCE_LIMIT)
+    .map((item) => {
+      const externalId = `${item.repo}#${item.number}`;
+      return {
+        id: notificationId('pull_request', externalId),
+        source: 'pull_request' as const,
+        title: `${externalId} — ${item.title}`,
+        url: item.url,
+        read: isRead(userId, 'pull_request', externalId),
+      };
+    });
+}
+
+/** Um aviso por e-mail que chegou e ainda não foi lido. Marcar o aviso como
+ *  lido não mexe na caixa: dispensar o aviso e ler o e-mail são coisas
+ *  diferentes, e o sino não escreve no servidor de e-mail. */
+export function emailNotifications(userId: string, envelopes: EmailEnvelope[]): NotificationItem[] {
+  return envelopes
+    .filter((envelope) => envelope.mailbox === 'inbox' && envelope.unread)
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, PER_SOURCE_LIMIT)
+    .map((envelope) => {
+      // O Message-Id acompanha a mensagem; o uid é por caixa e só serve
+      // quando o servidor não mandou o header.
+      const externalId = envelope.messageId || `${envelope.account}:${envelope.id}`;
+      return {
+        id: notificationId('email', externalId),
+        source: 'email' as const,
+        title: `${envelope.from} — ${envelope.subject || '(sem assunto)'}`,
+        url: '',
+        read: isRead(userId, 'email', externalId),
+      };
+    });
+}
+
+
+/**
+ * As três fontes do sino numa lista só. Cada painel já foi buscado para a
+ * tela, então o aviso sai do que está em mãos — nenhuma ida a mais ao Jira,
+ * ao GitHub ou ao IMAP.
+ *
+ * O sino fica ausente só quando nenhuma fonte está ligada; basta uma para a
+ * lista existir. Erro de uma fonte não apaga o aviso das outras.
+ */
+export function combineNotifications(
+  userId: string,
+  mentions: PanelResult<NotificationItem[]>,
+  pulls: PanelResult<PullsDigest>,
+  email: PanelResult<EmailEnvelope[]>,
+): PanelResult<NotificationItem[]> {
+  const desligado =
+    mentions.data === null &&
+    mentions.error === null &&
+    pulls.data === null &&
+    pulls.error === null &&
+    email.data === null &&
+    email.error === null;
+  if (desligado) return { data: null, error: null };
+
+  const items = [
+    ...(mentions.data ?? []),
+    ...pullNotifications(userId, pulls.data?.items ?? []),
+    ...emailNotifications(userId, email.data ?? []),
+  ];
+  return { data: items, error: mentions.error };
 }

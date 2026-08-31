@@ -134,3 +134,24 @@ describe('PullsPanel', () => {
     );
   });
 });
+
+describe('repositório clicável', () => {
+  it('o nome do repositório abre o repositório no GitHub', () => {
+    render(<PullsPanel pulls={{ data: { items: [pull({})], errors: [] }, error: null }} />);
+    const link = screen.getByRole('link', { name: 'joao/daily-web' });
+    expect(link).toHaveAttribute('href', 'https://github.com/joao/daily-web');
+    expect(link).toHaveAttribute('target', '_blank');
+  });
+
+  // O nome vem da configuração do usuário e vira href. O que não tem a forma
+  // dono/nome continua no cabeçalho, como texto.
+  it('um nome fora do formato continua texto, sem virar link', () => {
+    render(
+      <PullsPanel
+        pulls={{ data: { items: [pull({ repo: 'javascript:alert(1)' })], errors: [] }, error: null }}
+      />,
+    );
+    expect(screen.queryByRole('link', { name: 'javascript:alert(1)' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'javascript:alert(1)' })).toBeInTheDocument();
+  });
+});

@@ -1,7 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { NotificationItem, PanelResult } from '@/lib/types';
+import type { NotificationItem, NotificationSource, PanelResult } from '@/lib/types';
+
+/** De onde o aviso veio, em uma palavra. O rótulo era fixo em "JIRA", que
+ *  passou a mentir quando o sino ganhou pull request e e-mail. */
+const SOURCE_LABEL: Record<NotificationSource, string> = {
+  jira_mention: 'JIRA',
+  pull_request: 'PR',
+  email: 'E-MAIL',
+};
 
 interface Props {
   notifications: PanelResult<NotificationItem[]>;
@@ -74,11 +82,17 @@ export function NotificationsBell({ notifications, onChanged, onMarkedRead }: Pr
             <ul>
               {items.map((item) => (
                 <li key={item.id} className={`bell-item${item.read ? ' is-read' : ''}`}>
-                  <a href={item.url} target="_blank" rel="noreferrer">
-                    {item.title}
-                  </a>
+                  {/* O aviso de e-mail não tem página para abrir: vira texto,
+                      porque um href vazio recarregaria o dashboard. */}
+                  {item.url ? (
+                    <a href={item.url} target="_blank" rel="noreferrer">
+                      {item.title}
+                    </a>
+                  ) : (
+                    <span className="bell-item-title">{item.title}</span>
+                  )}
                   <div className="bell-item-foot">
-                    <span className="bell-source mono">JIRA</span>
+                    <span className="bell-source mono">{SOURCE_LABEL[item.source]}</span>
                     {!item.read && (
                       <button
                         type="button"

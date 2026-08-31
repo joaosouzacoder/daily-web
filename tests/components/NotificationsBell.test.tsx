@@ -117,3 +117,45 @@ describe('NotificationsBell', () => {
     expect(screen.queryByText('Mencionado em A-1')).toBeNull();
   });
 });
+
+describe('avisos de mais de uma fonte', () => {
+  const variadas = [
+    { id: 'jira_mention:A-1', source: 'jira_mention' as const, title: 'Mencionado em A-1', url: 'https://x/A-1', read: false },
+    { id: 'pull_request:joao/repo#7', source: 'pull_request' as const, title: 'joao/repo#7 — Corrige login', url: 'https://github.com/joao/repo/pull/7', read: false },
+    { id: 'email:<a@x>', source: 'email' as const, title: 'Milton — Revisão', url: '', read: false },
+  ];
+
+  function montar() {
+    render(
+      <NotificationsBell
+        notifications={{ data: variadas, error: null }}
+        onChanged={() => {}}
+        onMarkedRead={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /notificações/ }));
+  }
+
+  // O rótulo era fixo em "JIRA": com três fontes, o aviso de PR e o de
+  // e-mail também se anunciavam como Jira.
+  it('diz de qual fonte veio cada aviso', () => {
+    montar();
+    expect(screen.getByText('JIRA')).toBeTruthy();
+    expect(screen.getByText('PR')).toBeTruthy();
+    expect(screen.getByText('E-MAIL')).toBeTruthy();
+  });
+
+  it('o aviso com endereço abre a página de origem', () => {
+    montar();
+    const link = screen.getByRole('link', { name: 'joao/repo#7 — Corrige login' });
+    expect(link.getAttribute('href')).toBe('https://github.com/joao/repo/pull/7');
+  });
+
+  // O e-mail não tem página para abrir; um href vazio recarrega o dashboard
+  // e faz o aviso parecer quebrado.
+  it('o aviso sem endereço não vira link', () => {
+    montar();
+    expect(screen.queryByRole('link', { name: 'Milton — Revisão' })).toBeNull();
+    expect(screen.getByText('Milton — Revisão')).toBeTruthy();
+  });
+});

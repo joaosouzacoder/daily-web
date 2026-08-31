@@ -9,6 +9,18 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Added
+- The repository name in the pull requests panel links to the repository on
+  GitHub. Pull requests and issues already linked to their own pages; the
+  repository heading was the only name on the panel that was not clickable. A
+  name that is not in `owner/name` form stays plain text instead of becoming a
+  broken link.
+- The notification bell now covers three sources instead of one. An open pull
+  request and an unread email raise a notification alongside the Jira
+  mentions, both derived from what the refresh already loaded — no extra call
+  to GitHub or IMAP. Each source contributes at most 20 of its most recent
+  items, so a full inbox cannot bury the rest. Dismissing an email
+  notification does not mark the email as read on the server: they are
+  separate actions.
 - The dashboard arrangement is saved per screen size. **Salvar para esta tela**
   records the exact window width and height alongside the arrangement, and on
   load the closest saved size wins — so opening the DevTools or a bookmarks bar
@@ -98,6 +110,11 @@ Only `main` is maintained; there are no release branches.
   keep working. New hashes are written as `$2b$` instead of `$2a$`.
 
 ### Fixed
+- Marking a notification as read now records the source it actually came
+  from. The route had `jira_mention` hard-coded, which was invisible while
+  Jira was the only source; with three, a dismissed pull request or email was
+  written under the wrong key and came back on the next cycle. The bell also
+  labelled every notification `JIRA` for the same reason.
 - Email tags now survive a reload, and tags applied in Gmail itself show up in
   the daily. The panel only ever kept tags in component state, filled in when
   you clicked — so a refresh emptied it and a tag created anywhere else never

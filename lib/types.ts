@@ -131,7 +131,7 @@ export interface Note {
   updatedAt: string;
 }
 
-export type NotificationSource = 'jira_mention';
+export type NotificationSource = 'jira_mention' | 'pull_request' | 'email';
 
 export interface NotificationItem {
   id: string;

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { PanelResult, PullRequestItem, PullsDigest } from '@/lib/types';
-import { groupByRepo, type RepoGroup } from '@/lib/integrations/githubApi';
+import { groupByRepo, repoUrl, type RepoGroup } from '@/lib/integrations/githubApi';
 import { Section } from './ui/Section';
 import { EmptyState } from './ui/EmptyState';
 import { SkeletonRows } from './ui/Skeleton';
@@ -27,9 +27,18 @@ function ItemRow({ item }: { item: PullRequestItem }) {
 }
 
 function RepoBlock({ group }: { group: RepoGroup }) {
+  const url = repoUrl(group.repo);
   return (
     <div className="pull-repo">
-      <h3 className="pull-repo-name">{group.repo}</h3>
+      <h3 className="pull-repo-name">
+        {url ? (
+          <a href={url} target="_blank" rel="noreferrer">
+            {group.repo}
+          </a>
+        ) : (
+          group.repo
+        )}
+      </h3>
 
       {group.issues.length > 0 && (
         <div className="pull-kind">

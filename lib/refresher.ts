@@ -4,7 +4,7 @@ import * as agendaSource from './integrations/agenda';
 import * as jiraApi from './integrations/jiraApi';
 import * as githubApi from './integrations/githubApi';
 import { fetchTasks } from './tasks';
-import { getNotifications } from './notifications';
+import { combineNotifications, getNotifications } from './notifications';
 import { getPomodoroState } from './pomodoro';
 import { warmBodyCache, pruneOldBodies } from './emailCache';
 import { listUsers } from './auth/users';
@@ -64,7 +64,7 @@ export async function refreshAll(userId: string): Promise<DashboardState> {
 
   const watched = jiraConnection ? jiraWatchedKeys(userId) : [];
 
-  const [email, agenda, pulls, jira, tasks, notifications, jiraWatched] = await Promise.all([
+  const [email, agenda, pulls, jira, tasks, mentions, jiraWatched] = await Promise.all([
     has('email') ? mergeConnections(mailConnections, (c) => imap.listEnvelopes(c, EMAIL_LIMIT)) : OFF,
     has('agenda')
       ? mergeConnections(calendars, (c) => agendaSource.fetchAgenda(c, undefined, days))
@@ -77,6 +77,10 @@ export async function refreshAll(userId: string): Promise<DashboardState> {
       ? panel(() => jiraApi.fetchByKeys(jiraConnection, watched))
       : ({ data: [], error: null } as PanelResult<never[]>),
   ]);
+
+  // O sino soma menção do Jira, pull request aberto e e-mail não lido. As
+  // três já foram buscadas acima: o aviso é derivado, não é uma quarta ida.
+  const notifications = combineNotifications(userId, mentions, pulls, email);
 
   const mailboxes: MailboxRef[] = mailConnections.map((c) => ({ id: c.id, label: c.label }));
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { groupByRepo, parseRepoList, rankPulls, serializeRepoList, toPullItems } from '@/lib/integrations/githubApi';
+import { groupByRepo, parseRepoList, rankPulls, repoUrl, serializeRepoList, toPullItems } from '@/lib/integrations/githubApi';
 import type { PullRequestItem } from '@/lib/types';
 
 const ME = 'joaosouzacoder';
@@ -137,5 +137,26 @@ describe('groupByRepo', () => {
 
   it('devolve vazio para lista vazia', () => {
     expect(groupByRepo([])).toEqual([]);
+  });
+});
+
+describe('repoUrl', () => {
+  it('aponta para o repositório no GitHub', () => {
+    expect(repoUrl('joaosouzacoder/daily-web')).toBe('https://github.com/joaosouzacoder/daily-web');
+  });
+
+  // O nome do repositório é digitado pelo usuário e vira href. Um valor
+  // estranho não pode virar link nenhum: sem dono/nome não há URL.
+  it('recusa o que não tem a forma dono/nome', () => {
+    expect(repoUrl('daily-web')).toBeNull();
+    expect(repoUrl('')).toBeNull();
+    expect(repoUrl('a/b/c')).toBeNull();
+  });
+
+  it('recusa caminho relativo e esquema embutido', () => {
+    expect(repoUrl('../../etc/passwd')).toBeNull();
+    expect(repoUrl('javascript:alert(1)')).toBeNull();
+    expect(repoUrl('joao/repo?x=1')).toBeNull();
+    expect(repoUrl('https://evil.com/a')).toBeNull();
   });
 });
