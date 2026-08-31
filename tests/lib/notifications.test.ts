@@ -184,11 +184,11 @@ describe('combineNotifications', () => {
     const { combineNotifications } = await import('@/lib/notifications');
     const result = combineNotifications(
       'u-1',
-      { data: [{ id: 'jira_mention:ENG-1', source: 'jira_mention' as const, title: 'ENG-1', url: 'u', read: false }], error: null },
+      { data: [{ id: 'jira_mention:ENG-1', source: 'jira_mention' as const, title: 'ENG-1', url: 'u', read: false, date: '2026-08-30T10:00:00Z' }], error: null },
       { data: { items: [pull()], errors: [] }, error: null },
       { data: [envelope()], error: null },
     );
-    expect(result.data?.map((n) => n.source)).toEqual(['jira_mention', 'pull_request', 'email']);
+    expect(result.data?.map((n) => n.source).sort()).toEqual(['email', 'jira_mention', 'pull_request']);
   });
 
   // O sino precisa funcionar para quem não usa Jira: era a única fonte, e o
@@ -210,5 +210,31 @@ describe('combineNotifications', () => {
     const result = combineNotifications('u-1', { data: null, error: 'Jira fora do ar' }, OFF, { data: [envelope()], error: null });
     expect(result.error).toBe('Jira fora do ar');
     expect(result.data).toHaveLength(1);
+  });
+});
+
+describe('ordem do sino', () => {
+  // As fontes eram concatenadas na ordem jira → PR → e-mail, então um e-mail
+  // recém-chegado ia parar no fim da lista, atrás de PRs de semanas atrás.
+  it('mostra o mais recente primeiro, misturando as fontes', async () => {
+    const { combineNotifications } = await import('@/lib/notifications');
+    const result = combineNotifications(
+      'u-1',
+      { data: [{ id: 'jira_mention:ENG-1', source: 'jira_mention' as const, title: 'ENG-1', url: 'u', read: false, date: '2026-08-20T10:00:00Z' }], error: null },
+      { data: { items: [pull({ updatedAt: '2026-08-10T10:00:00Z' })], errors: [] }, error: null },
+      { data: [envelope({ date: '2026-08-30T10:00:00Z' })], error: null },
+    );
+    expect(result.data?.map((n) => n.source)).toEqual(['email', 'jira_mention', 'pull_request']);
+  });
+
+  it('o e-mail que acabou de chegar fica no topo', async () => {
+    const { combineNotifications } = await import('@/lib/notifications');
+    const result = combineNotifications(
+      'u-1',
+      { data: [], error: null },
+      { data: { items: [pull({ updatedAt: '2026-08-31T09:00:00Z' })], errors: [] }, error: null },
+      { data: [envelope({ date: '2026-08-31T10:00:00Z' })], error: null },
+    );
+    expect(result.data?.[0].source).toBe('email');
   });
 });

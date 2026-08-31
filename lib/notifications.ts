@@ -43,6 +43,7 @@ export async function getNotifications(
     title: `${issue.key} — ${issue.summary}`,
     url: issue.url,
     read: isRead(userId, 'jira_mention', issue.key),
+    date: issue.updatedAt,
   }));
 }
 
@@ -83,6 +84,7 @@ export function pullNotifications(userId: string, items: PullRequestItem[]): Not
         title: `${externalId} — ${item.title}`,
         url: item.url,
         read: isRead(userId, 'pull_request', externalId),
+        date: item.updatedAt,
       };
     });
 }
@@ -105,6 +107,7 @@ export function emailNotifications(userId: string, envelopes: EmailEnvelope[]): 
         title: `${envelope.from} — ${envelope.subject || '(sem assunto)'}`,
         url: '',
         read: isRead(userId, 'email', externalId),
+        date: envelope.date,
       };
     });
 }
@@ -137,6 +140,6 @@ export function combineNotifications(
     ...(mentions.data ?? []),
     ...pullNotifications(userId, pulls.data?.items ?? []),
     ...emailNotifications(userId, email.data ?? []),
-  ];
+  ].sort((a, b) => b.date.localeCompare(a.date));
   return { data: items, error: mentions.error };
 }

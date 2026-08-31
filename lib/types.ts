@@ -139,6 +139,10 @@ export interface NotificationItem {
   title: string;
   url: string;
   read: boolean;
+  /** ISO do acontecimento que gerou o aviso. É por ela que o sino ordena:
+   *  sem uma data comum, a lista sairia agrupada por fonte e o que acabou de
+   *  chegar ficaria atrás do que é antigo. */
+  date: string;
 }
 
 export type PomodoroPhase = 'focus' | 'rest';

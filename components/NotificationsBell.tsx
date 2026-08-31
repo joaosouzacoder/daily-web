@@ -39,7 +39,11 @@ export function NotificationsBell({ notifications, onChanged, onMarkedRead }: Pr
     onMarkedRead(item.id);
     setError(null);
 
-    const res = await fetch(`/api/notifications/${item.id}/read`, { method: 'POST' });
+    const res = await fetch('/api/notifications/read', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: item.id }),
+    });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       setError(data.error ?? 'Falha ao marcar como lida');

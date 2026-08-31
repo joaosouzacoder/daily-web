@@ -110,6 +110,15 @@ Only `main` is maintained; there are no release branches.
   keep working. New hashes are written as `$2b$` instead of `$2a$`.
 
 ### Fixed
+- Marking a notification as read works for pull requests and emails. The
+  notification id was going into the URL path, and a pull request id carries
+  both `/` and `#` — the `#` opened a fragment, so the browser dropped the
+  `/read` and the request never reached the route. The id now travels in the
+  request body, which also covers the email ids, since a Message-Id is free
+  text and does not belong in a path.
+- The bell is ordered by when things happened, newest first. The sources were
+  concatenated one after another, so a message that had just arrived landed at
+  the bottom of the list, behind pull requests from weeks earlier.
 - Marking a notification as read now records the source it actually came
   from. The route had `jira_mention` hard-coded, which was invisible while
   Jira was the only source; with three, a dismissed pull request or email was

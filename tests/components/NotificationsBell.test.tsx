@@ -13,14 +13,14 @@ const items = [
     source: 'jira_mention' as const,
     title: 'Mencionado em A-1',
     url: 'https://x/A-1',
-    read: false,
+    read: false, date: '2026-08-26T10:00:00Z',
   },
   {
     id: 'A-2',
     source: 'jira_mention' as const,
     title: 'Mencionado em A-2',
     url: 'https://x/A-2',
-    read: true,
+    read: true, date: '2026-08-26T10:00:00Z',
   },
 ];
 
@@ -66,7 +66,11 @@ describe('NotificationsBell', () => {
     fireEvent.click(screen.getByRole('button', { name: /notificações/ }));
     fireEvent.click(screen.getByRole('button', { name: 'marcar Mencionado em A-1 como lida' }));
     await waitFor(() =>
-      expect(fetchSpy).toHaveBeenCalledWith('/api/notifications/A-1/read', { method: 'POST' }),
+      expect(fetchSpy).toHaveBeenCalledWith('/api/notifications/read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'A-1' }),
+      }),
     );
   });
 
@@ -120,9 +124,9 @@ describe('NotificationsBell', () => {
 
 describe('avisos de mais de uma fonte', () => {
   const variadas = [
-    { id: 'jira_mention:A-1', source: 'jira_mention' as const, title: 'Mencionado em A-1', url: 'https://x/A-1', read: false },
-    { id: 'pull_request:joao/repo#7', source: 'pull_request' as const, title: 'joao/repo#7 — Corrige login', url: 'https://github.com/joao/repo/pull/7', read: false },
-    { id: 'email:<a@x>', source: 'email' as const, title: 'Milton — Revisão', url: '', read: false },
+    { id: 'jira_mention:A-1', source: 'jira_mention' as const, title: 'Mencionado em A-1', url: 'https://x/A-1', read: false, date: '2026-08-26T10:00:00Z' },
+    { id: 'pull_request:joao/repo#7', source: 'pull_request' as const, title: 'joao/repo#7 — Corrige login', url: 'https://github.com/joao/repo/pull/7', read: false, date: '2026-08-26T10:00:00Z' },
+    { id: 'email:<a@x>', source: 'email' as const, title: 'Milton — Revisão', url: '', read: false, date: '2026-08-26T10:00:00Z' },
   ];
 
   function montar() {
@@ -157,5 +161,33 @@ describe('avisos de mais de uma fonte', () => {
     montar();
     expect(screen.queryByRole('link', { name: 'Milton — Revisão' })).toBeNull();
     expect(screen.getByText('Milton — Revisão')).toBeTruthy();
+  });
+});
+
+describe('marcar como lida com id que tem caractere de URL', () => {
+  // O id do PR carrega '/' e '#'. Indo cru no caminho, o '#' virava fragmento
+  // e o '/read' sumia da requisição: o clique nunca chegava ao servidor.
+  it('não perde parte da requisição por causa do id', async () => {
+    const fetchMock = vi.spyOn(global, 'fetch').mockResolvedValue(new Response('{}', { status: 200 }));
+    render(
+      <NotificationsBell
+        notifications={{ data: [{
+          id: 'pull_request:joao/daily-web#12',
+          source: 'pull_request' as const,
+          title: 'joao/daily-web#12 — Corrige login',
+          url: 'https://github.com/joao/daily-web/pull/12',
+          read: false, date: '2026-08-26T10:00:00Z',
+        }], error: null }}
+        onChanged={() => {}}
+        onMarkedRead={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /notificações/ }));
+    fireEvent.click(screen.getByRole('button', { name: /marcar .* como lida/ }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).not.toContain('#');
+    expect(JSON.parse(String(init?.body))).toEqual({ id: 'pull_request:joao/daily-web#12' });
   });
 });

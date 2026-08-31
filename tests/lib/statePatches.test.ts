@@ -44,7 +44,7 @@ function task(over: Partial<TodoTask>): TodoTask {
 }
 
 function notification(over: Partial<NotificationItem>): NotificationItem {
-  return { id: 'ENG-1', source: 'jira_mention', title: 'ENG-1 — x', url: 'u', read: false, ...over };
+  return { id: 'ENG-1', source: 'jira_mention', title: 'ENG-1 — x', url: 'u', read: false, date: '2026-08-26T10:00:00Z', ...over };
 }
 
 function state(over: Partial<DashboardState> = {}): DashboardState {
