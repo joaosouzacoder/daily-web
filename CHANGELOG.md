@@ -91,6 +91,11 @@ Only `main` is maintained; there are no release branches.
   actions to v7.
 - `vite-node` is now a direct dev dependency. It used to arrive through
   Vitest 2, which no longer ships it, and `npm run users` depends on it.
+- Dependencies brought up to date again: bcryptjs 3, TypeScript 7, jsdom 30,
+  and the `@types` for node and better-sqlite3. bcryptjs is the only one that
+  reaches production; hashes written by version 2 still verify, which was
+  checked against hashes generated before the upgrade, so stored passwords
+  keep working. New hashes are written as `$2b$` instead of `$2a$`.
 
 ### Fixed
 - Email tags now survive a reload, and tags applied in Gmail itself show up in
