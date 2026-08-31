@@ -14,8 +14,9 @@ import {
   normalizeStatus,
   stalenessLabel,
 } from '@/lib/parsers/jira';
-import type { JiraNode } from '@/lib/parsers/jira';
+import type { JiraNode, JiraProjectGroup } from '@/lib/parsers/jira';
 import { Section } from './ui/Section';
+import { Tabs } from './ui/Tabs';
 import { FilterBar } from './ui/FilterBar';
 import { SearchInput } from './ui/SearchInput';
 import { Chip } from './ui/Chip';
@@ -31,15 +32,22 @@ const FILTER_LABEL: Record<Filter, string> = {
   reporter: 'Relator',
 };
 
+/** As duas listas do painel. Não são recortes da mesma coleção: "Em aberto"
+ *  é o que ainda pede trabalho, "Entregues" é o que saiu hoje. */
+type Aba = 'abertas' | 'entregues';
+
 interface Props {
   jira: PanelResult<JiraItem[]>;
   /** Issues acompanhadas por escolha, mesmo não sendo suas. */
   watched: PanelResult<JiraItem[]>;
+  /** Issues que você encerrou hoje. */
+  delivered: PanelResult<JiraItem[]>;
   onChanged: () => void;
   loading?: boolean;
 }
 
-export function JiraPanel({ jira, watched, onChanged, loading = false }: Props) {
+export function JiraPanel({ jira, watched, delivered, onChanged, loading = false }: Props) {
+  const [aba, setAba] = useState<Aba>('abertas');
   const [novaChave, setNovaChave] = useState('');
   const [watchError, setWatchError] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
@@ -127,6 +135,11 @@ export function JiraPanel({ jira, watched, onChanged, loading = false }: Props) 
   const projects = useMemo(() => buildJiraTree(visible), [visible]);
   const situations = useMemo(() => groupByStatusCategory(visible), [visible]);
 
+  // Entregues repete a estrutura de "Em aberto": hierarquia, separada por
+  // projeto, para DAD e PDS não se misturarem só porque saíram no mesmo dia.
+  const entregues = useMemo(() => delivered.data ?? [], [delivered.data]);
+  const entreguesProjects = useMemo(() => buildJiraTree(entregues), [entregues]);
+
   const activeFilters: ActiveFilter[] = [
     ...(query.trim() ? [{ id: 'query', label: `Busca: ${query.trim()}` }] : []),
     ...(filter !== 'both' ? [{ id: 'role', label: FILTER_LABEL[filter] }] : []),
@@ -145,159 +158,225 @@ export function JiraPanel({ jira, watched, onChanged, loading = false }: Props) 
   return (
     <Section
       eyebrow="Jira"
-      count={activeFilters.length > 0 ? `${visible.length} de ${all.length}` : undefined}
+      count={
+        aba === 'abertas' && activeFilters.length > 0
+          ? `${visible.length} de ${all.length}`
+          : undefined
+      }
     >
-      <FilterBar label="Filtrar issues">
-        <SearchInput value={query} onChange={setQuery} label="buscar issues" placeholder="chave ou resumo" />
-        {(Object.keys(FILTER_LABEL) as Filter[]).map((f) => (
-          <Chip key={f} active={filter === f} onClick={() => setFilter(f)}>
-            {FILTER_LABEL[f]}
-          </Chip>
-        ))}
-        <Chip active={!grouped} onClick={() => setGrouped((g) => !g)}>
-          {grouped ? 'Lista simples' : 'Hierarquia'}
-        </Chip>
-      </FilterBar>
+      <Tabs
+        id="jira"
+        label="listas do Jira"
+        active={aba}
+        onChange={(id) => setAba(id as Aba)}
+        tabs={[
+          { id: 'abertas', label: 'Em aberto', count: all.length },
+          { id: 'entregues', label: 'Entregues', count: entregues.length },
+        ]}
+      />
 
-      <ActiveFilters filters={activeFilters} onRemove={clearFilter} onClearAll={clearAll} />
-
-      {/* Acompanhar uma issue que não é sua: o Jira do time vizinho que trava
-          o seu, ou o que você abriu para outra pessoa. */}
-      <div className="jira-watch">
-        <h3 className="jira-group-label eyebrow">
-          Acompanhando
-          {acompanhadas.length > 0 && (
-            <span className="section-count mono"> {acompanhadas.length}</span>
+      {aba === 'entregues' && (
+        <div id="jira-panel-entregues" role="tabpanel" aria-labelledby="jira-tab-entregues">
+          {delivered.error && (
+            <p role="alert" className="panel-error">
+              {delivered.error}
+            </p>
           )}
-        </h3>
 
-        <div className="jira-watch-add">
-          <input
-            className="field"
-            aria-label="acompanhar issue do Jira"
-            placeholder="ABC-123"
-            value={novaChave}
-            onChange={(e) => setNovaChave(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') void acompanhar();
-            }}
+          {loading && entregues.length === 0 && <SkeletonRows count={3} />}
+
+          {!loading && entregues.length === 0 && !delivered.error && (
+            <EmptyState message="Nenhuma issue entregue hoje." />
+          )}
+
+          <JiraProjects
+            groups={entreguesProjects}
+            expandidos={expandidos}
+            onAlternar={alternarRamo}
           />
-          <button
-            type="button"
-            className="btn"
-            disabled={salvando || novaChave.trim().length === 0}
-            onClick={() => void acompanhar()}
-          >
-            {salvando ? 'Buscando…' : 'Acompanhar'}
-          </button>
         </div>
+      )}
 
-        {watchError && (
-          <p role="alert" className="panel-error">
-            {watchError}
-          </p>
-        )}
-        {watched.error && (
-          <p role="alert" className="panel-error">
-            {watched.error}
-          </p>
-        )}
+      {aba === 'abertas' && (
+        <div id="jira-panel-abertas" role="tabpanel" aria-labelledby="jira-tab-abertas">
+          <FilterBar label="Filtrar issues">
+            <SearchInput value={query} onChange={setQuery} label="buscar issues" placeholder="chave ou resumo" />
+            {(Object.keys(FILTER_LABEL) as Filter[]).map((f) => (
+              <Chip key={f} active={filter === f} onClick={() => setFilter(f)}>
+                {FILTER_LABEL[f]}
+              </Chip>
+            ))}
+            <Chip active={!grouped} onClick={() => setGrouped((g) => !g)}>
+              {grouped ? 'Lista simples' : 'Hierarquia'}
+            </Chip>
+          </FilterBar>
 
-        {acompanhadas.length === 0 && !watchError && (
-          <p className="empty">Nenhuma issue acompanhada.</p>
-        )}
+          <ActiveFilters filters={activeFilters} onRemove={clearFilter} onClearAll={clearAll} />
 
-        <ul>
-          {acompanhadas.map((issue) => (
-            <li key={issue.key} className="jira-row">
-              <span className="jira-kind mono">{issueMarker(issue)}</span>
-              <div className="jira-main">
-                <div className="jira-line">
-                  <a className="jira-key mono" href={issue.url} target="_blank" rel="noreferrer">
-                    {issue.key}
-                  </a>
-                  <span className="jira-summary">{issue.summary}</span>
-                </div>
-                <div className="jira-meta">
-                  <span className={`jira-status jira-status-${issue.statusCategory}`}>
-                    {normalizeStatus(issue.status)}
-                  </span>
-                  {stalenessLabel(issue) && (
-                    <span className="jira-stale">{stalenessLabel(issue)}</span>
-                  )}
-                  {issue.dueDate && dueLabel(issue.dueDate) && (
-                    <span className={isOverdue(issue.dueDate) ? 'jira-due is-overdue' : 'jira-due'}>
-                      {dueLabel(issue.dueDate)}
-                    </span>
-                  )}
-                </div>
-              </div>
+          {/* Acompanhar uma issue que não é sua: o Jira do time vizinho que trava
+              o seu, ou o que você abriu para outra pessoa. */}
+          <div className="jira-watch">
+            <h3 className="jira-group-label eyebrow">
+              Acompanhando
+              {acompanhadas.length > 0 && (
+                <span className="section-count mono"> {acompanhadas.length}</span>
+              )}
+            </h3>
+
+            <div className="jira-watch-add">
+              <input
+                className="field"
+                aria-label="acompanhar issue do Jira"
+                placeholder="ABC-123"
+                value={novaChave}
+                onChange={(e) => setNovaChave(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void acompanhar();
+                }}
+              />
               <button
                 type="button"
-                className="icon-btn icon-btn-danger"
-                aria-label={`parar de acompanhar ${issue.key}`}
-                onClick={() => void parar(issue.key)}
+                className="btn"
+                disabled={salvando || novaChave.trim().length === 0}
+                onClick={() => void acompanhar()}
               >
-                ×
+                {salvando ? 'Buscando…' : 'Acompanhar'}
               </button>
-            </li>
-          ))}
-        </ul>
-      </div>
+            </div>
 
-      {jira.error && (
-        <p role="alert" className="panel-error">
-          {jira.error}
-        </p>
-      )}
+            {watchError && (
+              <p role="alert" className="panel-error">
+                {watchError}
+              </p>
+            )}
+            {watched.error && (
+              <p role="alert" className="panel-error">
+                {watched.error}
+              </p>
+            )}
 
-      {loading && all.length === 0 && <SkeletonRows count={5} />}
+            {acompanhadas.length === 0 && !watchError && (
+              <p className="empty">Nenhuma issue acompanhada.</p>
+            )}
 
-      {!loading && all.length === 0 && !jira.error && <EmptyState message="Nenhuma issue atribuída." />}
-
-      {all.length > 0 && visible.length === 0 && (
-        <EmptyState message="Nenhuma issue com esses filtros." />
-      )}
-
-      {grouped &&
-        visible.length > 0 &&
-        situations.map((group) => (
-          <div key={group.category} className="jira-project">
-            <h3 className="jira-group-label eyebrow">
-              {group.label}
-              <span className="section-count mono"> {group.issues.length}</span>
-            </h3>
             <ul>
-              {group.issues.map((issue) => (
-                <JiraRow key={issue.key} issue={issue} showRole={filter === 'both'} depth={0} />
+              {acompanhadas.map((issue) => (
+                <li key={issue.key} className="jira-row">
+                  <span className="jira-kind mono">{issueMarker(issue)}</span>
+                  <div className="jira-main">
+                    <div className="jira-line">
+                      <a className="jira-key mono" href={issue.url} target="_blank" rel="noreferrer">
+                        {issue.key}
+                      </a>
+                      <span className="jira-summary">{issue.summary}</span>
+                    </div>
+                    <div className="jira-meta">
+                      <span className={`jira-status jira-status-${issue.statusCategory}`}>
+                        {normalizeStatus(issue.status)}
+                      </span>
+                      {stalenessLabel(issue) && (
+                        <span className="jira-stale">{stalenessLabel(issue)}</span>
+                      )}
+                      {issue.dueDate && dueLabel(issue.dueDate) && (
+                        <span className={isOverdue(issue.dueDate) ? 'jira-due is-overdue' : 'jira-due'}>
+                          {dueLabel(issue.dueDate)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="icon-btn icon-btn-danger"
+                    aria-label={`parar de acompanhar ${issue.key}`}
+                    onClick={() => void parar(issue.key)}
+                  >
+                    ×
+                  </button>
+                </li>
               ))}
             </ul>
           </div>
-        ))}
 
-      {!grouped &&
-        visible.length > 0 &&
-        projects.map((group) => (
-          <div key={group.project} className="jira-project">
-            <h3 className="jira-group-label eyebrow">
-              {group.project}
-              <span className="section-count mono"> {group.count}</span>
-            </h3>
-            <ul>
-              {group.roots.map((node) => (
-                <JiraBranch
-                  key={node.issue.key}
-                  node={node}
-                  showRole={filter === 'both'}
-                  depth={0}
-                  expandidos={expandidos}
-                  onAlternar={alternarRamo}
-                />
-              ))}
-            </ul>
-          </div>
-        ))}
+          {jira.error && (
+            <p role="alert" className="panel-error">
+              {jira.error}
+            </p>
+          )}
+
+          {loading && all.length === 0 && <SkeletonRows count={5} />}
+
+          {!loading && all.length === 0 && !jira.error && <EmptyState message="Nenhuma issue atribuída." />}
+
+          {all.length > 0 && visible.length === 0 && (
+            <EmptyState message="Nenhuma issue com esses filtros." />
+          )}
+
+          {grouped &&
+            visible.length > 0 &&
+            situations.map((group) => (
+              <div key={group.category} className="jira-project">
+                <h3 className="jira-group-label eyebrow">
+                  {group.label}
+                  <span className="section-count mono"> {group.issues.length}</span>
+                </h3>
+                <ul>
+                  {group.issues.map((issue) => (
+                    <JiraRow key={issue.key} issue={issue} showRole={filter === 'both'} depth={0} />
+                  ))}
+                </ul>
+              </div>
+            ))}
+
+          {!grouped && visible.length > 0 && (
+            <JiraProjects
+              groups={projects}
+              showRole={filter === 'both'}
+              expandidos={expandidos}
+              onAlternar={alternarRamo}
+            />
+          )}
+        </div>
+      )}
     </Section>
+  );
+}
+
+/** A hierarquia por projeto: um bloco por projeto, e dentro dele a árvore de
+ *  pais e filhas. É o que as duas abas têm em comum. */
+function JiraProjects({
+  groups,
+  showRole = false,
+  expandidos,
+  onAlternar,
+}: {
+  groups: JiraProjectGroup[];
+  showRole?: boolean;
+  expandidos: Set<string>;
+  onAlternar: (chave: string) => void;
+}) {
+  return (
+    <>
+      {groups.map((group) => (
+        <div key={group.project} className="jira-project">
+          <h3 className="jira-group-label eyebrow">
+            {group.project}
+            <span className="section-count mono"> {group.count}</span>
+          </h3>
+          <ul>
+            {group.roots.map((node) => (
+              <JiraBranch
+                key={node.issue.key}
+                node={node}
+                showRole={showRole}
+                depth={0}
+                expandidos={expandidos}
+                onAlternar={onAlternar}
+              />
+            ))}
+          </ul>
+        </div>
+      ))}
+    </>
   );
 }
 

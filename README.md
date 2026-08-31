@@ -133,6 +133,13 @@ panel's own buttons, and it governs what the server fetches too.
 [id.atlassian.com](https://id.atlassian.com/manage-profile/security/api-tokens).
 The domain is the start of the URL: in `acme.atlassian.net`, it is `acme`.
 
+The panel has two tabs. **Em aberto** lists the issues where you are the
+assignee or the reporter; **Entregues** lists the ones you closed today, in
+green. Both group by project and nest the hierarchy, so an epic and its
+stories read as one tree. Nothing here names a status: the delivered list
+asks for issues in the Done category that you moved today, which works the
+same whether your workflow ends in "Resolvido" or in "Done".
+
 **GitHub** — personal access token at
 [github.com/settings/tokens](https://github.com/settings/tokens). Scope `repo`
 for private repositories; for public ones, no scope is needed.

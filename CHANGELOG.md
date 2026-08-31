@@ -9,6 +9,17 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Added
+- The Jira panel is split into two tabs. **Em aberto** holds what the panel
+  always showed, the issues where you are the assignee or the reporter, and
+  **Entregues** lists the ones you closed today, in the same shape: the
+  hierarchy, grouped by project, so a service request in PDS does not sit
+  next to a story in DAD. A delivered issue reads its status in green,
+  the only situation that asks nothing more of you. The query names no
+  status: it asks for issues currently in the Done category whose status you
+  changed today, or that were resolved today under your name, so a workflow
+  that closes in "Resolvido" and one that closes in "Done" both work.
+  Something you closed and someone reopened is not delivered, and does not
+  appear.
 - The repository name in the pull requests panel links to the repository on
   GitHub. Pull requests and issues already linked to their own pages; the
   repository heading was the only name on the panel that was not clickable. A

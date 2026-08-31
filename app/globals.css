@@ -389,6 +389,40 @@ input[type='checkbox']:checked {
   color: var(--text);
 }
 
+/* ---------- abas ----------
+   Sublinhado em vez de pílula: um chip já quer dizer "filtro ligado" nesta
+   interface, e a aba precisa dizer outra coisa. */
+.tabs {
+  display: flex;
+  gap: var(--s4);
+  margin-bottom: var(--s4);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.tab {
+  padding: 0 0 var(--s2);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: none;
+  color: var(--text-faint);
+  font-size: var(--step--1);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+.tab.is-active {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+}
+
 .chip-removable {
   cursor: default;
   padding-right: var(--s2);
@@ -1158,6 +1192,12 @@ textarea.mail-reply-input {
 
 .jira-status-indeterminate {
   color: var(--accent);
+}
+
+/* Entregue é a única situação que não pede nada de você: verde, e a aba
+   "Entregues" fica legível de relance, sem ler status por status. */
+.jira-status-done {
+  color: var(--success);
 }
 
 /* Esquecido e atrasado são os dois avisos do painel: ficam quentes, e são
