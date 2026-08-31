@@ -133,6 +133,7 @@ export default function DashboardPage() {
         <JiraPanel
           jira={state?.jira ?? { data: [], error: null }}
           watched={state?.jiraWatched ?? { data: [], error: null }}
+          delivered={state?.jiraDelivered ?? { data: [], error: null }}
           onChanged={reload}
           loading={booting}
         />

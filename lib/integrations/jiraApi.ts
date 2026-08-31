@@ -135,6 +135,33 @@ export async function fetchIssues(conn: Connection, filter: JiraFilter): Promise
   return [...byKey.values()];
 }
 
+// O que saiu das suas mãos hoje. Duas condições, unidas porque as instâncias
+// se comportam de formas diferentes:
+//
+//   - `status CHANGED BY currentUser() DURING (startOfDay(), now())` pega a
+//     transição que você mesmo fez. Não depende do nome do status final, que
+//     é livre por workflow — este Jira encerra em "Resolvido" e "Fechado",
+//     outro encerra em "Done", e listar nomes quebraria fora daqui.
+//   - `resolved >= startOfDay()` pega o que foi resolvido no seu nome sem que
+//     a transição tenha sido sua, que é o caso de automação de workflow.
+//
+// `statusCategory = Done` por fora descarta o que você fechou e alguém
+// reabriu depois: reaberto não é entregue.
+const DELIVERED_TODAY =
+  'statusCategory = Done AND (' +
+  'status CHANGED BY currentUser() DURING (startOfDay(), now())' +
+  ' OR (assignee = currentUser() AND resolved >= startOfDay())' +
+  ') ORDER BY updated DESC';
+
+/** Issues que este usuário encerrou hoje. O recorte do dia é o do Jira
+ *  (`startOfDay()`), que usa o fuso do perfil de quem está autenticado —
+ *  o mesmo que a pessoa vê na interface do Atlassian. */
+export async function fetchDeliveredToday(conn: Connection): Promise<JiraItem[]> {
+  const auth = jiraAuth(conn);
+  const raw = await search(auth, DELIVERED_TODAY);
+  return raw.map((issue) => toJiraItem(issue, auth.baseUrl, 'assignee'));
+}
+
 interface Myself {
   accountId?: string;
 }

@@ -1,7 +1,22 @@
 import { describe, expect, it, afterEach, vi } from 'vitest';
+import type { ComponentProps } from 'react';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import { JiraPanel } from '@/components/JiraPanel';
 import type { JiraItem } from '@/lib/types';
+
+/** As três listas do painel são obrigatórias; cada teste só quer falar de
+ *  uma delas, então o resto vem vazio por padrão. */
+function Panel(props: Partial<ComponentProps<typeof JiraPanel>>) {
+  return (
+    <JiraPanel
+      jira={{ data: [], error: null }}
+      watched={{ data: [], error: null }}
+      delivered={{ data: [], error: null }}
+      onChanged={() => {}}
+      {...props}
+    />
+  );
+}
 
 function issue(over: Partial<JiraItem>): JiraItem {
   return {
@@ -28,14 +43,14 @@ afterEach(() => {
 
 describe('JiraPanel', () => {
   it('lista as issues com chave e resumo', () => {
-    render(<JiraPanel watched={{ data: [], error: null }} onChanged={() => {}} jira={{ data: [issue({})], error: null }} />);
+    render(<Panel watched={{ data: [], error: null }} onChanged={() => {}} jira={{ data: [issue({})], error: null }} />);
     expect(screen.getByText('A-1')).toBeInTheDocument();
     expect(screen.getByText('Resumo')).toBeInTheDocument();
   });
 
   it('mostra issues com papel both no filtro minhas', () => {
     render(
-      <JiraPanel
+      <Panel
         watched={{ data: [], error: null }}
         onChanged={() => {}}
         jira={{
@@ -51,7 +66,7 @@ describe('JiraPanel', () => {
 
   it('mostra issues com papel both no filtro relator', () => {
     render(
-      <JiraPanel
+      <Panel
         watched={{ data: [], error: null }}
         onChanged={() => {}}
         jira={{
@@ -67,7 +82,7 @@ describe('JiraPanel', () => {
 
   it('filtra por busca textual', () => {
     render(
-      <JiraPanel
+      <Panel
         watched={{ data: [], error: null }}
         onChanged={() => {}}
         jira={{
@@ -86,7 +101,7 @@ describe('JiraPanel', () => {
 
   it('separa os projetos em blocos próprios na hierarquia', () => {
     render(
-      <JiraPanel
+      <Panel
         watched={{ data: [], error: null }}
         onChanged={() => {}}
         jira={{
@@ -104,7 +119,7 @@ describe('JiraPanel', () => {
 
   it('aninha a filha sob a mãe quando as duas estão na lista', () => {
     render(
-      <JiraPanel
+      <Panel
         watched={{ data: [], error: null }}
         onChanged={() => {}}
         jira={{
@@ -135,7 +150,7 @@ describe('JiraPanel', () => {
   // projeto quase não agrupava: 16 das 19 issues reais são do mesmo projeto.
   it('na lista simples, agrupa por situação em vez de projeto', () => {
     render(
-      <JiraPanel
+      <Panel
         watched={{ data: [], error: null }}
         onChanged={() => {}}
         jira={{
@@ -157,7 +172,7 @@ describe('JiraPanel', () => {
 
   it('mostra o contador quando um filtro está ativo', () => {
     render(
-      <JiraPanel
+      <Panel
         watched={{ data: [], error: null }}
         onChanged={() => {}}
         jira={{
@@ -171,7 +186,7 @@ describe('JiraPanel', () => {
   });
 
   it('mostra o erro do painel quando presente', () => {
-    render(<JiraPanel watched={{ data: [], error: null }} onChanged={() => {}} jira={{ data: null, error: 'jira falhou' }} />);
+    render(<Panel watched={{ data: [], error: null }} onChanged={() => {}} jira={{ data: null, error: 'jira falhou' }} />);
     expect(screen.getByRole('alert').textContent).toContain('jira falhou');
   });
 });
@@ -180,19 +195,19 @@ describe('situação, idade e prazo na linha', () => {
   // O selo antigo mostrava o papel, que em 15 de 19 issues dizia a mesma
   // coisa. O status tem cinco valores distintos e é o que faltava.
   it('mostra o status em vez do papel padrão', () => {
-    render(<JiraPanel watched={{ data: [], error: null }} onChanged={() => {}} jira={{ data: [issue({ status: 'Freezing' })], error: null }} />);
+    render(<Panel watched={{ data: [], error: null }} onChanged={() => {}} jira={{ data: [issue({ status: 'Freezing' })], error: null }} />);
     expect(screen.getByText('Freezing')).toBeInTheDocument();
     expect(screen.queryByText('RES')).toBeNull();
   });
 
   it('ainda marca quando você é só o relator, que é a exceção', () => {
-    render(<JiraPanel watched={{ data: [], error: null }} onChanged={() => {}} jira={{ data: [issue({ role: 'reporter' })], error: null }} />);
+    render(<Panel watched={{ data: [], error: null }} onChanged={() => {}} jira={{ data: [issue({ role: 'reporter' })], error: null }} />);
     expect(screen.getByText('REL')).toBeInTheDocument();
   });
 
   it('junta o mesmo status escrito com caixas diferentes', () => {
     render(
-      <JiraPanel
+      <Panel
         watched={{ data: [], error: null }}
         onChanged={() => {}}
         jira={{
@@ -212,13 +227,13 @@ describe('situação, idade e prazo na linha', () => {
   }
 
   it('avisa o que está parado há tempo demais', () => {
-    render(<JiraPanel watched={{ data: [], error: null }} onChanged={() => {}} jira={{ data: [issue({ updatedAt: diasAtras(14) })], error: null }} />);
+    render(<Panel watched={{ data: [], error: null }} onChanged={() => {}} jira={{ data: [issue({ updatedAt: diasAtras(14) })], error: null }} />);
     expect(screen.getByText('parado há 14d')).toBeInTheDocument();
   });
 
   // Quase tudo é mexido a cada dois dias; avisar sempre apagaria o sinal.
   it('cala sobre o que foi mexido há pouco', () => {
-    render(<JiraPanel watched={{ data: [], error: null }} onChanged={() => {}} jira={{ data: [issue({ updatedAt: diasAtras(1) })], error: null }} />);
+    render(<Panel watched={{ data: [], error: null }} onChanged={() => {}} jira={{ data: [issue({ updatedAt: diasAtras(1) })], error: null }} />);
     expect(screen.queryByText(/parado há/)).toBeNull();
   });
 
@@ -227,14 +242,14 @@ describe('situação, idade e prazo na linha', () => {
     const iso = (d: Date) =>
       `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-    render(<JiraPanel watched={{ data: [], error: null }} onChanged={() => {}} jira={{ data: [issue({ dueDate: iso(ontem) })], error: null }} />);
+    render(<Panel watched={{ data: [], error: null }} onChanged={() => {}} jira={{ data: [issue({ dueDate: iso(ontem) })], error: null }} />);
     const prazo = screen.getByText('venceu há 1d');
     expect(prazo).toBeInTheDocument();
     expect(prazo.className).toContain('is-overdue');
   });
 
   it('não inventa prazo para issue sem data', () => {
-    render(<JiraPanel watched={{ data: [], error: null }} onChanged={() => {}} jira={{ data: [issue({ dueDate: '' })], error: null }} />);
+    render(<Panel watched={{ data: [], error: null }} onChanged={() => {}} jira={{ data: [issue({ dueDate: '' })], error: null }} />);
     expect(screen.queryByText(/vence/)).toBeNull();
   });
 });
@@ -248,7 +263,7 @@ describe('acompanhamento otimista', () => {
 
   function montar(onChanged = () => {}) {
     render(
-      <JiraPanel
+      <Panel
         jira={{ data: [], error: null }}
         watched={{ data: [acompanhada], error: null }}
         onChanged={onChanged}
@@ -314,7 +329,7 @@ describe('hierarquia expansível', () => {
 
   function montar() {
     render(
-      <JiraPanel
+      <Panel
         jira={{ data: arvore, error: null }}
         watched={{ data: [], error: null }}
         onChanged={() => {}}
@@ -370,7 +385,7 @@ describe('hierarquia expansível', () => {
 
   it('diz quantas issues estão sob a que tem mais de uma', () => {
     render(
-      <JiraPanel
+      <Panel
         jira={{
           data: [
             issue({ key: 'TT-100', summary: 'Épico', project: 'TT', parent: null }),
@@ -394,5 +409,97 @@ describe('hierarquia expansível', () => {
     expect(screen.queryByLabelText(/expandir/)).toBeNull();
     // E ali todas as issues aparecem, porque não há o que colapsar.
     expect(screen.getByText('TT-102')).toBeInTheDocument();
+  });
+});
+
+// As duas listas não são recortes uma da outra: "Em aberto" é o que ainda
+// pede trabalho e "Entregues" é o que saiu hoje.
+describe('aba Entregues', () => {
+  const entregue = (over: Partial<JiraItem> = {}) =>
+    issue({ statusCategory: 'done', status: 'Resolvido', ...over });
+
+  it('abre em "Em aberto" e não mostra as entregues', () => {
+    render(
+      <Panel
+        jira={{ data: [issue({ key: 'TT-1' })], error: null }}
+        delivered={{ data: [entregue({ key: 'TT-9' })], error: null }}
+      />,
+    );
+    expect(screen.getByRole('tab', { name: /Em aberto/ })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText('TT-1')).toBeInTheDocument();
+    expect(screen.queryByText('TT-9')).toBeNull();
+  });
+
+  it('mostra as entregues de hoje ao trocar de aba', () => {
+    render(
+      <Panel
+        jira={{ data: [issue({ key: 'TT-1' })], error: null }}
+        delivered={{ data: [entregue({ key: 'TT-9', summary: 'Ajuste do cashback' })], error: null }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('tab', { name: /Entregues/ }));
+    expect(screen.getByText('TT-9')).toBeInTheDocument();
+    expect(screen.getByText('Ajuste do cashback')).toBeInTheDocument();
+    expect(screen.queryByText('TT-1')).toBeNull();
+  });
+
+  it('conta as entregues no rótulo da aba', () => {
+    render(
+      <Panel
+        delivered={{ data: [entregue({ key: 'TT-9' }), entregue({ key: 'TT-8' })], error: null }}
+      />,
+    );
+    expect(screen.getByRole('tab', { name: 'Entregues, 2' })).toBeInTheDocument();
+  });
+
+  // O status é o que diz de relance que aquilo saiu; verde é a cor de
+  // "não pede mais nada de você".
+  it('marca o status da entregue como concluída', () => {
+    render(<Panel delivered={{ data: [entregue({ key: 'TT-9' })], error: null }} />);
+    fireEvent.click(screen.getByRole('tab', { name: /Entregues/ }));
+    expect(screen.getByText('Resolvido')).toHaveClass('jira-status-done');
+  });
+
+  // Mesma estrutura da outra aba: DAD e PDS não se misturam só porque
+  // saíram no mesmo dia.
+  it('separa os projetos em blocos e aninha a hierarquia', () => {
+    render(
+      <Panel
+        delivered={{
+          data: [
+            entregue({ key: 'DAD-1', project: 'DAD', summary: 'Épico mãe' }),
+            entregue({
+              key: 'DAD-2',
+              project: 'DAD',
+              summary: 'História filha',
+              parent: { key: 'DAD-1', summary: 'Épico mãe' },
+            }),
+            entregue({ key: 'PDS-1', project: 'PDS', summary: 'Chamado' }),
+          ],
+          error: null,
+        }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('tab', { name: /Entregues/ }));
+
+    expect(screen.getByRole('heading', { name: /DAD/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /PDS/ })).toBeInTheDocument();
+
+    // O ramo começa fechado, como na aba de abertas.
+    expect(screen.queryByText('DAD-2')).toBeNull();
+    fireEvent.click(screen.getByLabelText(/expandir a issue sob DAD-1/));
+    expect(screen.getByText('DAD-2')).toBeInTheDocument();
+  });
+
+  it('diz quando não houve entrega hoje', () => {
+    render(<Panel jira={{ data: [issue({})], error: null }} />);
+    fireEvent.click(screen.getByRole('tab', { name: /Entregues/ }));
+    expect(screen.getByText('Nenhuma issue entregue hoje.')).toBeInTheDocument();
+  });
+
+  it('mostra o erro da busca de entregues sem derrubar a aba', () => {
+    render(<Panel delivered={{ data: null, error: 'jira recusou o token' }} />);
+    fireEvent.click(screen.getByRole('tab', { name: /Entregues/ }));
+    expect(screen.getByRole('alert').textContent).toContain('jira recusou o token');
   });
 });

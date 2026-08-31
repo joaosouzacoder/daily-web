@@ -189,7 +189,7 @@ export const MODULES: Record<ModuleId, ModuleSpec> = {
   jira: {
     id: 'jira',
     label: 'Jira',
-    summary: 'Suas issues, em hierarquia, e menções.',
+    summary: 'Suas issues, em hierarquia, o que entregou hoje e menções.',
     multi: false,
     instructions: [
       'Precisa de um API token do Atlassian, que é gratuito.',

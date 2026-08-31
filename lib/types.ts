@@ -192,6 +192,9 @@ export interface DashboardState {
   jira: PanelResult<JiraItem[]>;
   /** Issues que o usuário escolheu acompanhar, mesmo não sendo dele. */
   jiraWatched: PanelResult<JiraItem[]>;
+  /** Issues que o usuário encerrou hoje. Ficam de fora de `jira`, que só
+   *  lista o que ainda está aberto. */
+  jiraDelivered: PanelResult<JiraItem[]>;
   tasks: PanelResult<TodoTask[]>;
   notifications: PanelResult<NotificationItem[]>;
   pomodoro: PomodoroState;
