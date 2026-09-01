@@ -52,7 +52,30 @@ async function mergeConnections<T>(
 const caches = new Map<string, DashboardState>();
 let timer: ReturnType<typeof setInterval> | null = null;
 
+type Patch = (state: DashboardState) => DashboardState;
+
+// Cada refresh em andamento tem a sua lista. O snapshot é montado a partir de
+// leituras feitas no começo do ciclo, então uma ação do usuário no meio dele
+// não aparece no resultado: gravar o snapshot cru desfazia a ação — o e-mail
+// apagado voltava para a tela até o ciclo seguinte. As ações do intervalo são
+// reaplicadas sobre o snapshot antes de ele virar cache.
+const emVoo = new Map<symbol, { userId: string; patches: Patch[] }>();
+
+// Um ciclo comporta poucas ações. Se passar disto, o snapshot é velho demais
+// para ser reconciliado e o cache atual — que já reflete tudo — fica de pé.
+const MAX_PATCHES_EM_VOO = 500;
+
 export async function refreshAll(userId: string): Promise<DashboardState> {
+  const ciclo = Symbol('refresh');
+  emVoo.set(ciclo, { userId, patches: [] });
+  try {
+    return await buildState(userId, ciclo);
+  } finally {
+    emVoo.delete(ciclo);
+  }
+}
+
+async function buildState(userId: string, ciclo: symbol): Promise<DashboardState> {
   const modules = enabledModules(userId);
   const has = (id: string) => modules.includes(id as never);
 
@@ -102,7 +125,13 @@ export async function refreshAll(userId: string): Promise<DashboardState> {
     notifications,
     pomodoro: getPomodoroState(userId),
   };
-  caches.set(userId, state);
+  const pendentes = emVoo.get(ciclo)?.patches ?? [];
+  const atual = caches.get(userId);
+  const reconciliado =
+    pendentes.length > MAX_PATCHES_EM_VOO && atual
+      ? atual
+      : pendentes.reduce((acc, patch) => patch(acc), state);
+  caches.set(userId, reconciliado);
 
   // Baixa os corpos que ainda faltam em segundo plano, sem segurar a
   // resposta: quando o usuário clicar, o e-mail já estará no banco.
@@ -112,7 +141,7 @@ export async function refreshAll(userId: string): Promise<DashboardState> {
     });
   }
 
-  return state;
+  return reconciliado;
 }
 
 export function getCachedState(userId: string): DashboardState | null {
@@ -134,6 +163,11 @@ export function patchCachedState(
   userId: string,
   patch: (state: DashboardState) => DashboardState,
 ): void {
+  // Registrado antes de aplicar: o refresh que já está lendo o servidor
+  // terminará com um retrato anterior a esta ação e precisa reaplicá-la.
+  for (const ciclo of emVoo.values()) {
+    if (ciclo.userId === userId) ciclo.patches.push(patch);
+  }
   const cache = caches.get(userId);
   if (!cache) return;
   caches.set(userId, patch(cache));
@@ -171,6 +205,7 @@ export function startRefreshLoop(intervalSeconds: number): void {
 
 export function resetCachesForTests(): void {
   caches.clear();
+  emVoo.clear();
   if (timer) clearInterval(timer);
   timer = null;
 }

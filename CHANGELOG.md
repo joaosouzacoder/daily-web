@@ -121,6 +121,13 @@ Only `main` is maintained; there are no release branches.
   keep working. New hashes are written as `$2b$` instead of `$2a$`.
 
 ### Fixed
+- Deleting an email no longer brings it back a few seconds later. A refresh
+  cycle reads the mailboxes at the start and only writes the cached dashboard
+  state at the end, so an action taken in between was overwritten by a
+  snapshot that predated it — the message reappeared on the panel until a
+  later cycle read the mailbox again. Actions applied while a refresh is in
+  flight are now replayed on top of its snapshot before it becomes the cache,
+  which covers marking as read, unread and moving as well.
 - Marking a notification as read works for pull requests and emails. The
   notification id was going into the URL path, and a pull request id carries
   both `/` and `#` — the `#` opened a fragment, so the browser dropped the

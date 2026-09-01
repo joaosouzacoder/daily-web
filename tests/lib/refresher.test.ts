@@ -189,3 +189,30 @@ describe('notificações', () => {
     expect(fetchMentions).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('ação concorrente com um refresh em voo', () => {
+  // O refresh lê a caixa no começo e só grava o cache no fim. Uma exclusão
+  // feita nesse meio-tempo era desfeita pela gravação: o e-mail voltava para
+  // a tela e o usuário precisava apagar de novo.
+  it('não ressuscita o e-mail apagado durante o refresh', async () => {
+    await connect(USER, 'email', { preset: 'gmail', user: 'a@x.com', password: 's' });
+    vi.mocked(listEnvelopes).mockResolvedValue([envelope({ id: '1' })]);
+
+    const { refreshAll, getCachedState, patchCachedState } = await import('@/lib/refresher');
+    await refreshAll(USER);
+
+    let liberar: (v: unknown[]) => void = () => {};
+    vi.mocked(listEnvelopes).mockImplementation(
+      () => new Promise((resolve) => (liberar = resolve as (v: unknown[]) => void)) as never,
+    );
+
+    const emVoo = refreshAll(USER);
+    const { removeEmails } = await import('@/lib/statePatches');
+    patchCachedState(USER, (state) => removeEmails(state, [{ account: 'mail-1', id: '1' }]));
+
+    liberar([envelope({ id: '1' })]);
+    await emVoo;
+
+    expect(getCachedState(USER)?.email.data).toEqual([]);
+  });
+});
