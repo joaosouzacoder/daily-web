@@ -29,7 +29,7 @@
     "react-grid-layout": "^2.2.4"
   },
   "devDependencies": {
-    "@testing-library/jest-dom": "^6.5.0",
+    "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.0.0",
     "@types/bcryptjs": "^3.0.0",
     "@types/better-sqlite3": "^9.6.0",
