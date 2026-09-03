@@ -3,6 +3,7 @@ import {
   countUnreadNotifications,
   markEmailsSeen,
   markNotificationRead,
+  markNotificationsRead,
   removeEmails,
   removeTask,
   setSubtaskCompleted,
@@ -139,6 +140,30 @@ describe('markNotificationRead', () => {
 
   it('ignora id desconhecido sem quebrar', () => {
     expect(countUnreadNotifications(markNotificationRead(state(), 'ZZZ'))).toBe(2);
+  });
+});
+
+describe('markNotificationsRead', () => {
+  it('zera o badge quando recebe o sino inteiro', () => {
+    const base = state();
+    const ids = (base.notifications.data ?? []).map((n) => n.id);
+
+    const next = markNotificationsRead(base, ids);
+    expect(countUnreadNotifications(next)).toBe(0);
+    expect(next.notifications.data?.every((n) => n.read)).toBe(true);
+  });
+
+  it('deixa de fora quem não está na lista', () => {
+    const next = markNotificationsRead(state(), ['A']);
+    expect(next.notifications.data?.find((n) => n.id === 'A')?.read).toBe(true);
+    expect(countUnreadNotifications(next)).toBe(1);
+  });
+
+  // Chamado com nada, devolve o mesmo estado: o refresher reaplica patches
+  // sobre o retrato dele, e um objeto novo a cada chamada seria desperdício.
+  it('devolve o mesmo estado para uma lista vazia', () => {
+    const base = state();
+    expect(markNotificationsRead(base, [])).toBe(base);
   });
 });
 

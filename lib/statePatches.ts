@@ -47,12 +47,19 @@ export function removeEmails(state: DashboardState, targets: EmailTarget[]): Das
   );
 }
 
-export function markNotificationRead(state: DashboardState, id: string): DashboardState {
-  if (!state.notifications.data) return state;
+export function markNotificationsRead(state: DashboardState, ids: string[]): DashboardState {
+  if (!state.notifications.data || ids.length === 0) return state;
+  // Conjunto, não `includes`: dispensar o sino inteiro passa aqui com todos
+  // os avisos de uma vez, e uma busca linear por item viraria quadrática.
+  const alvos = new Set(ids);
   const data: NotificationItem[] = state.notifications.data.map((item) =>
-    item.id === id ? { ...item, read: true } : item,
+    alvos.has(item.id) ? { ...item, read: true } : item,
   );
   return { ...state, notifications: { ...state.notifications, data } };
+}
+
+export function markNotificationRead(state: DashboardState, id: string): DashboardState {
+  return markNotificationsRead(state, [id]);
 }
 
 export function countUnreadNotifications(state: DashboardState): number {

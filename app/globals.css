@@ -1415,6 +1415,18 @@ textarea.mail-reply-input {
   animation: modal-in var(--med) var(--ease);
 }
 
+/* A contagem à esquerda e a ação à direita, acima da lista: quem abre o sino
+   para limpá-lo não precisa procurar o botão dentro dela. */
+.bell-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding-bottom: var(--s3);
+  margin-bottom: var(--s2);
+  border-bottom: 1px solid var(--hairline);
+}
+
 .bell-item {
   display: flex;
   flex-direction: column;

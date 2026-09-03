@@ -63,3 +63,62 @@ describe('POST /api/notifications/read', () => {
     expect((await POST(req(undefined))).status).toBe(400);
   });
 });
+
+// Marcar tudo é a mesma escrita, em lote: o sino manda a lista que está na
+// tela e a rota grava cada aviso na chave da sua própria fonte.
+describe('POST /api/notifications/read com uma lista', () => {
+  const reqIds = (ids: unknown) =>
+    new Request('http://localhost/api/notifications/read', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    });
+
+  it('grava cada aviso na fonte certa', async () => {
+    const { POST } = await import('@/app/api/notifications/read/route');
+    const { isRead } = await import('@/lib/notifications');
+
+    const res = await POST(reqIds(['jira_mention:ENG-1', 'pull_request:joao/repo#7', 'email:mail-1:<a@x>']));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, marked: 3 });
+    expect(isRead('u-1', 'jira_mention', 'ENG-1')).toBe(true);
+    expect(isRead('u-1', 'pull_request', 'joao/repo#7')).toBe(true);
+    expect(isRead('u-1', 'email', 'mail-1:<a@x>')).toBe(true);
+  });
+
+  // Gravar parte do lote deixaria a tela dizendo "tudo lido" com avisos que
+  // voltam no ciclo seguinte.
+  it('reprova o lote inteiro quando um id é irreconhecível', async () => {
+    const { POST } = await import('@/app/api/notifications/read/route');
+    const { isRead } = await import('@/lib/notifications');
+
+    const res = await POST(reqIds(['jira_mention:ENG-1', 'inventada:X-1']));
+    expect(res.status).toBe(400);
+    expect(isRead('u-1', 'jira_mention', 'ENG-1')).toBe(false);
+  });
+
+  it('marcar de novo o que já estava lido não é erro', async () => {
+    const { POST } = await import('@/app/api/notifications/read/route');
+    await POST(reqIds(['jira_mention:ENG-1']));
+    expect((await POST(reqIds(['jira_mention:ENG-1']))).status).toBe(200);
+  });
+
+  it('recusa uma lista vazia e uma que não é lista', async () => {
+    const { POST } = await import('@/app/api/notifications/read/route');
+    expect((await POST(reqIds([]))).status).toBe(400);
+    expect((await POST(reqIds('jira_mention:ENG-1'))).status).toBe(400);
+    expect((await POST(reqIds([1, 2]))).status).toBe(400);
+  });
+
+  // Teto de segurança: o sino traz no máximo 20 por fonte, três fontes.
+  it('recusa um lote maior do que a tela poderia mostrar', async () => {
+    const { POST } = await import('@/app/api/notifications/read/route');
+    const muitos = Array.from({ length: 201 }, (_, i) => `jira_mention:ENG-${i}`);
+    expect((await POST(reqIds(muitos))).status).toBe(400);
+  });
+
+  it('não deixa quem não entrou marcar o lote', async () => {
+    currentUser.mockReturnValue(null);
+    const { POST } = await import('@/app/api/notifications/read/route');
+    expect((await POST(reqIds(['jira_mention:ENG-1']))).status).toBe(401);
+  });
+});
