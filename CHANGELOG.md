@@ -9,6 +9,16 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Added
+- **Marcar todas como lidas**, in the notification bell. The bell holds up to
+  20 items per source across three sources, so emptying it one row at a time
+  cost up to 60 clicks. The button sits above the list with the unread count
+  beside it, and appears only when there is something to dismiss. It sends the
+  ids that were on screen when you clicked, in one request, and the badge drops
+  before the server answers, as the single row already did. A malformed id
+  fails the whole batch instead of writing part of it, which would leave the
+  screen claiming everything was read while the rest came back on the next
+  cycle. Dismissing an email notification still does not mark the email as
+  read on the server.
 - The Jira panel is split into two tabs. **Em aberto** holds what the panel
   always showed, the issues where you are the assignee or the reporter, and
   **Entregues** lists the ones you closed today, in the same shape: the

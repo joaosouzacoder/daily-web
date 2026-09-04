@@ -24,6 +24,7 @@ import {
 import {
   markEmailsSeen,
   markNotificationRead,
+  markNotificationsRead,
   removeEmails,
   removeTask,
   setSubtaskCompleted,
@@ -165,6 +166,7 @@ export default function DashboardPage() {
               notifications={state?.notifications ?? { data: [], error: null }}
               onChanged={reload}
               onMarkedRead={(id) => mutate((s) => markNotificationRead(s, id))}
+              onMarkedAllRead={(ids) => mutate((s) => markNotificationsRead(s, ids))}
             />
           ) : null
         }

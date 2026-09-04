@@ -16,13 +16,22 @@ interface Props {
   onChanged: () => void;
   /** Marca como lida na tela antes de o servidor responder. */
   onMarkedRead: (id: string) => void;
+  /** O mesmo, para o lote inteiro. */
+  onMarkedAllRead: (ids: string[]) => void;
 }
 
-export function NotificationsBell({ notifications, onChanged, onMarkedRead }: Props) {
+export function NotificationsBell({
+  notifications,
+  onChanged,
+  onMarkedRead,
+  onMarkedAllRead,
+}: Props) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [marcandoTodas, setMarcandoTodas] = useState(false);
   const items = notifications.data ?? [];
-  const unreadCount = items.filter((n) => !n.read).length;
+  const naoLidas = items.filter((n) => !n.read);
+  const unreadCount = naoLidas.length;
 
   useEffect(() => {
     if (!open) return;
@@ -53,6 +62,30 @@ export function NotificationsBell({ notifications, onChanged, onMarkedRead }: Pr
     }
   };
 
+  const markAllRead = async () => {
+    if (marcandoTodas || unreadCount === 0) return;
+    // Os ids são fixados antes da ida ao servidor: um ciclo do refresher no
+    // meio dela mudaria a lista, e o pedido tem de valer para o que estava
+    // na tela quando você clicou.
+    const ids = naoLidas.map((n) => n.id);
+
+    setMarcandoTodas(true);
+    onMarkedAllRead(ids);
+    setError(null);
+
+    const res = await fetch('/api/notifications/read', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    });
+    setMarcandoTodas(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? 'Falha ao marcar todas como lidas');
+      onChanged();
+    }
+  };
+
   return (
     <div className="bell">
       <button
@@ -70,6 +103,24 @@ export function NotificationsBell({ notifications, onChanged, onMarkedRead }: Pr
         <>
           <div className="bell-scrim" onClick={() => setOpen(false)} />
           <div className="bell-popover" role="dialog" aria-label="central de notificações">
+            {/* Dispensar um a um custa um clique por aviso, e o sino chega a
+                60. O botão só existe quando há o que dispensar. */}
+            {unreadCount > 0 && (
+              <div className="bell-head">
+                <span className="eyebrow">
+                  {unreadCount === 1 ? '1 não lida' : `${unreadCount} não lidas`}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={marcandoTodas}
+                  onClick={() => void markAllRead()}
+                >
+                  {marcandoTodas ? 'Marcando…' : 'Marcar todas como lidas'}
+                </button>
+              </div>
+            )}
+
             {notifications.error && (
               <p role="alert" className="panel-error">
                 {notifications.error}

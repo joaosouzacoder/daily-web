@@ -23,13 +23,29 @@ export function isRead(userId: string, source: string, externalId: string): bool
   return row !== undefined;
 }
 
+const INSERT_READ =
+  'INSERT INTO notifications_read (user_id, source, external_id, read_at) VALUES (?, ?, ?, ?) ' +
+  'ON CONFLICT (user_id, source, external_id) DO NOTHING';
+
 export function markRead(userId: string, source: string, externalId: string): void {
-  getDb()
-    .prepare(
-      'INSERT INTO notifications_read (user_id, source, external_id, read_at) VALUES (?, ?, ?, ?) ' +
-        'ON CONFLICT (user_id, source, external_id) DO NOTHING',
-    )
-    .run(userId, source, externalId, new Date().toISOString());
+  getDb().prepare(INSERT_READ).run(userId, source, externalId, new Date().toISOString());
+}
+
+/** Vários de uma vez, numa transação: dispensar o sino inteiro é uma decisão
+ *  só, e meia gravação deixaria parte dos avisos voltando no ciclo seguinte.
+ *  Devolve quantos foram gravados. */
+export function markManyRead(
+  userId: string,
+  avisos: { source: string; externalId: string }[],
+): number {
+  if (avisos.length === 0) return 0;
+  const db = getDb();
+  const insert = db.prepare(INSERT_READ);
+  const agora = new Date().toISOString();
+  db.transaction(() => {
+    for (const aviso of avisos) insert.run(userId, aviso.source, aviso.externalId, agora);
+  })();
+  return avisos.length;
 }
 
 export async function getNotifications(
