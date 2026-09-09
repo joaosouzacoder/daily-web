@@ -8,6 +8,23 @@ Only `main` is maintained; there are no release branches.
 
 ## [Unreleased]
 
+### Changed
+- Modules on the dashboard are drawn as raised surfaces, so it is clear where
+  one ends and the next begins. There was no background and no border before:
+  a panel was content loose on the page, and on a full dashboard the eye had
+  to guess the boundaries from the spacing alone. What delimits them is light,
+  not a frame: a gradient body, a hairline of light along the top and left
+  edge, and a shadow falling to the bottom right. The single column of narrow
+  screens gets the same surface, which it did not have at all. Entering
+  **Organizar** lifts the panel a step further and rings it, and the slot a
+  dragged panel will drop into is the negative of the same relief, pressed
+  into the page. Under `prefers-contrast: more` the border stops being an
+  accessory and becomes the boundary, since relief is low contrast by nature.
+- Text fields are pressed into the surface, the negative of the same relief.
+  Their background was the same tone that now sits between the two ends of the
+  panel gradient, so a field would fade out against the top of a panel and
+  reappear against the bottom.
+
 ### Added
 - A third tab, **Aprovados**, listing what you approved. There is no JQL
   function for it: `myApproved()` and `myDecided()` do not exist,

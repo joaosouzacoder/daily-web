@@ -150,7 +150,14 @@ export function DashboardGrid({ layout, panels, onSave }: Props) {
     const ordenados = [...visible].sort((a, b) => a.y - b.y || a.x - b.x);
     return (
       <div className="col">
-        {ordenados.map((p) => panels.find((painel) => painel.id === p.i)?.node)}
+        {ordenados.map((p) => (
+          // A mesma superfície da grade: sem ela, os módulos voltariam a
+          // ficar soltos na tela estreita, que é justamente onde a lista
+          // longa mais precisa de onde começa e onde termina.
+          <div key={p.i} className="painel">
+            {panels.find((painel) => painel.id === p.i)?.node}
+          </div>
+        ))}
       </div>
     );
   }
