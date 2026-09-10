@@ -9,6 +9,7 @@ async function aplicar(request: NextRequest, id: string) {
   const body = await request.json().catch(() => null);
   const title = body?.title;
   const text = body?.body;
+  const markdown = body?.markdown;
 
   if (title !== undefined && typeof title !== 'string') {
     return NextResponse.json({ error: 'título precisa ser texto' }, { status: 400 });
@@ -16,14 +17,17 @@ async function aplicar(request: NextRequest, id: string) {
   if (text !== undefined && typeof text !== 'string') {
     return NextResponse.json({ error: 'nota precisa ser texto' }, { status: 400 });
   }
-  if (title === undefined && text === undefined) {
+  if (markdown !== undefined && typeof markdown !== 'boolean') {
+    return NextResponse.json({ error: 'markdown precisa ser booleano' }, { status: 400 });
+  }
+  if (title === undefined && text === undefined && markdown === undefined) {
     return NextResponse.json({ error: 'nada para alterar' }, { status: 400 });
   }
 
   try {
     // A nota é buscada pelo dono da sessão, então um id de outra pessoa não
     // encontra linha nenhuma e volta 404 — nunca o conteúdo dela.
-    const note = updateNote(auth.value.id, id, { title, body: text });
+    const note = updateNote(auth.value.id, id, { title, body: text, markdown });
     if (!note) return NextResponse.json({ error: 'nota não encontrada' }, { status: 404 });
     return NextResponse.json({ note });
   } catch (err) {

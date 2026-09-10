@@ -181,3 +181,43 @@ describe('PUT /api/notes', () => {
     expect((await reordenar(req({ ids: [] }, 'PUT'))).status).toBe(401);
   });
 });
+
+// A escolha de abrir formatada é da nota, então viaja junto dela.
+describe('markdown por nota', () => {
+  it('nota nova nasce crua', async () => {
+    const criada = await (await criar(req({ title: 'A' }))).json();
+    expect(criada.note.markdown).toBe(false);
+  });
+
+  it('grava e devolve a escolha', async () => {
+    const { note } = await (await criar(req({ title: 'A' }))).json();
+
+    const res = await alterar(req({ markdown: true }, 'PATCH'), params(note.id));
+    expect(res.status).toBe(200);
+    expect((await res.json()).note.markdown).toBe(true);
+
+    const [lida] = (await (await listar()).json()).notes;
+    expect(lida.markdown).toBe(true);
+  });
+
+  it('gravar o corpo não desliga o que já estava ligado', async () => {
+    const { note } = await (await criar(req({ title: 'A' }))).json();
+    await alterar(req({ markdown: true }, 'PATCH'), params(note.id));
+
+    const res = await alterar(req({ body: '# Título' }, 'PATCH'), params(note.id));
+    const atualizada = (await res.json()).note;
+    expect(atualizada.markdown).toBe(true);
+    expect(atualizada.body).toBe('# Título');
+  });
+
+  it('recusa um valor que não é booleano', async () => {
+    const { note } = await (await criar(req({ title: 'A' }))).json();
+    const res = await alterar(req({ markdown: 'sim' }, 'PATCH'), params(note.id));
+    expect(res.status).toBe(400);
+  });
+
+  it('o toggle sozinho já é uma alteração válida', async () => {
+    const { note } = await (await criar(req({ title: 'A' }))).json();
+    expect((await alterar(req({ markdown: true }, 'PATCH'), params(note.id))).status).toBe(200);
+  });
+});

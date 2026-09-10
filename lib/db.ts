@@ -250,6 +250,16 @@ function addNotes(instance: Database.Database): void {
   `);
 }
 
+// A nota guarda se abre formatada. É escolha por nota, não por usuário: uma
+// aba de rascunho corrido e outra de anotação estruturada querem coisas
+// diferentes, e a nota já vive no servidor para acompanhar a pessoa entre
+// máquinas, e a preferência de leitura dela precisa acompanhar também.
+function addNotesMarkdown(instance: Database.Database): void {
+  instance.exec(`
+    ALTER TABLE notes ADD COLUMN markdown INTEGER NOT NULL DEFAULT 0;
+  `);
+}
+
 const MIGRATIONS: ((instance: Database.Database) => void)[] = [
   addUserScope,
   addConnections,
@@ -258,6 +268,7 @@ const MIGRATIONS: ((instance: Database.Database) => void)[] = [
   addPreferences,
   addMailboxToBodyCache,
   addNotes,
+  addNotesMarkdown,
 ];
 
 function migrate(instance: Database.Database): void {

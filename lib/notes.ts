@@ -23,6 +23,8 @@ interface Row {
   body: string;
   position: number;
   updated_at: string;
+  /** SQLite não tem booleano: a coluna é 0 ou 1. */
+  markdown: number;
 }
 
 function toNote(row: Row): Note {
@@ -32,13 +34,14 @@ function toNote(row: Row): Note {
     body: row.body,
     position: row.position,
     updatedAt: row.updated_at,
+    markdown: row.markdown === 1,
   };
 }
 
 export function listNotes(userId: string): Note[] {
   const rows = getDb()
     .prepare(
-      'SELECT id, title, body, position, updated_at FROM notes WHERE user_id = ? ORDER BY position, created_at',
+      'SELECT id, title, body, position, updated_at, markdown FROM notes WHERE user_id = ? ORDER BY position, created_at',
     )
     .all(userId) as Row[];
   return rows.map(toNote);
@@ -66,6 +69,9 @@ export function createNote(userId: string, title = ''): Note {
     body: '',
     position: row.last + 1,
     updatedAt: new Date().toISOString(),
+    // Nota nova abre crua. Quem quer Markdown liga no botão da própria nota, e
+    // ligar por padrão esconderia sinais de quem só quer escrever texto.
+    markdown: false,
   };
 
   getDb()
@@ -81,6 +87,7 @@ export function createNote(userId: string, title = ''): Note {
 export interface NotePatch {
   title?: string;
   body?: string;
+  markdown?: boolean;
 }
 
 /**
@@ -97,19 +104,24 @@ export function updateNote(userId: string, id: string, patch: NotePatch): Note |
   }
 
   const atual = getDb()
-    .prepare('SELECT id, title, body, position, updated_at FROM notes WHERE id = ? AND user_id = ?')
+    .prepare(
+      'SELECT id, title, body, position, updated_at, markdown FROM notes WHERE id = ? AND user_id = ?',
+    )
     .get(id, userId) as Row | undefined;
   if (!atual) return null;
 
   const title = patch.title ?? atual.title;
   const body = patch.body ?? atual.body;
+  const markdown = patch.markdown ?? atual.markdown === 1;
   const updatedAt = new Date().toISOString();
 
   getDb()
-    .prepare('UPDATE notes SET title = ?, body = ?, updated_at = ? WHERE id = ? AND user_id = ?')
-    .run(title, body, updatedAt, id, userId);
+    .prepare(
+      'UPDATE notes SET title = ?, body = ?, markdown = ?, updated_at = ? WHERE id = ? AND user_id = ?',
+    )
+    .run(title, body, markdown ? 1 : 0, updatedAt, id, userId);
 
-  return { id, title, body, position: atual.position, updatedAt };
+  return { id, title, body, position: atual.position, updatedAt, markdown };
 }
 
 export function deleteNote(userId: string, id: string): boolean {

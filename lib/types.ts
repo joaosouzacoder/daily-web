@@ -140,6 +140,10 @@ export interface Note {
   body: string;
   position: number;
   updatedAt: string;
+  /** A nota abre com o Markdown formatado. Escolha por nota: uma aba de
+   *  rascunho corrido e outra de anotação estruturada querem coisas
+   *  diferentes. */
+  markdown: boolean;
 }
 
 export type NotificationSource = 'jira_mention' | 'pull_request' | 'email';

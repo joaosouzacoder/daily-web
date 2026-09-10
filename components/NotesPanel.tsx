@@ -13,6 +13,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { EmptyState } from '@/components/data/EmptyState';
 import { focusRing } from '@/lib/theme';
 import { cn } from '@/lib/utils';
+import { Chip } from '@/components/ui/Chip';
+import { MarkdownEditor } from './MarkdownEditor';
 import { Section } from './ui/Section';
 
 /** Quanto o texto fica parado antes de subir. Curto o bastante para não se
@@ -38,26 +40,29 @@ export function NotesPanel() {
   // ar gravaria o texto na aba errada sem isto.
   const pendente = useRef<{ id: string; body: string } | null>(null);
 
-  const gravar = useCallback(async (id: string, patch: { title?: string; body?: string }) => {
-    setEstado('salvando');
-    const res = await fetch(`/api/notes/${encodeURIComponent(id)}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(patch),
-    });
+  const gravar = useCallback(
+    async (id: string, patch: { title?: string; body?: string; markdown?: boolean }) => {
+      setEstado('salvando');
+      const res = await fetch(`/api/notes/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
 
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setErro(data.error ?? 'Falha ao salvar a nota');
-      setEstado('erro');
-      return;
-    }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setErro(data.error ?? 'Falha ao salvar a nota');
+        setEstado('erro');
+        return;
+      }
 
-    const { note } = (await res.json()) as { note: Note };
-    setErro(null);
-    setEstado('salvo');
-    setNotes((prev) => prev.map((n) => (n.id === note.id ? { ...n, ...note } : n)));
-  }, []);
+      const { note } = (await res.json()) as { note: Note };
+      setErro(null);
+      setEstado('salvo');
+      setNotes((prev) => prev.map((n) => (n.id === note.id ? { ...n, ...note } : n)));
+    },
+    [],
+  );
 
   /** Sobe o que estiver pendente agora, cancelando a espera. */
   const gravarPendente = useCallback(async () => {
@@ -187,6 +192,15 @@ export function NotesPanel() {
 
   const notaAtiva = notes.find((n) => n.id === ativa) ?? null;
 
+  /** Liga e desliga a formatação desta nota. O texto pendente sobe antes: a
+   *  gravação do toggle devolve a nota do servidor, e ela viria com o corpo
+   *  anterior por cima do que ainda não subiu. */
+  const alternarMarkdown = async () => {
+    if (!notaAtiva) return;
+    await gravarPendente();
+    await gravar(notaAtiva.id, { markdown: !notaAtiva.markdown });
+  };
+
   return (
     <Section
       className="min-h-0"
@@ -270,14 +284,31 @@ export function NotesPanel() {
           </ul>
 
           <div className="flex min-h-0 flex-col gap-2">
-            <Textarea
-              className="min-h-40 flex-1 resize-none leading-relaxed [field-sizing:fixed]"
-              aria-label={`texto de ${notaAtiva?.title || 'sem título'}`}
-              placeholder="Escreva aqui. O que você digita é salvo sozinho."
-              value={rascunho}
-              onChange={(e) => digitar(e.target.value)}
-              onBlur={() => void gravarPendente()}
-            />
+            {/* O toggle é por nota, e o rótulo diz o estado atual, não o que o
+                clique faria: é a mesma leitura dos outros chips do painel. */}
+            <div className="flex shrink-0 justify-end">
+              <Chip active={notaAtiva?.markdown ?? false} onClick={() => void alternarMarkdown()}>
+                Markdown
+              </Chip>
+            </div>
+
+            {notaAtiva?.markdown ? (
+              <MarkdownEditor
+                value={rascunho}
+                onChange={digitar}
+                label={`texto de ${notaAtiva.title || 'sem título'}`}
+                placeholder="Escreva aqui. O que você digita é salvo sozinho."
+              />
+            ) : (
+              <Textarea
+                className="min-h-40 flex-1 resize-none leading-relaxed [field-sizing:fixed]"
+                aria-label={`texto de ${notaAtiva?.title || 'sem título'}`}
+                placeholder="Escreva aqui. O que você digita é salvo sozinho."
+                value={rascunho}
+                onChange={(e) => digitar(e.target.value)}
+                onBlur={() => void gravarPendente()}
+              />
+            )}
             <p className="type-caption text-right text-ink-dim" role="status">
               {estado === 'salvando' ? 'salvando…' : estado === 'erro' ? 'não salvo' : 'salvo'}
             </p>

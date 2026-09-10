@@ -10,6 +10,7 @@ function nota(over: Partial<Note>): Note {
     body: '',
     position: 0,
     updatedAt: '2026-08-27T12:00:00Z',
+    markdown: false,
     ...over,
   };
 }
@@ -220,5 +221,73 @@ describe('NotesPanel', () => {
     await vi.advanceTimersByTimeAsync(800);
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/100000 caracteres/);
+  });
+});
+
+// A nota guarda se abre formatada, e o toggle é dela, não do painel: uma aba
+// de rascunho corrido e outra de anotação estruturada querem coisas
+// diferentes.
+describe('Markdown na nota', () => {
+  it('a nota crua mostra os sinais no campo de texto', async () => {
+    responder([nota({ body: '# Título', markdown: false })]);
+    render(<NotesPanel />);
+
+    expect(await screen.findByLabelText('texto de Ideias')).toHaveValue('# Título');
+    expect(screen.queryByRole('heading', { name: 'Título' })).toBeNull();
+  });
+
+  it('a nota com Markdown ligado abre formatada', async () => {
+    // Duas linhas: o cursor começa na primeira, então é a segunda que mostra
+    // como fica uma linha sem o cursor.
+    responder([nota({ body: 'antes\n# Título', markdown: true })]);
+    render(<NotesPanel />);
+
+    const superficie = await screen.findByRole('textbox', { name: 'texto de Ideias' });
+    const titulo = superficie.querySelector('[data-linha="1"]');
+    // O sinal saiu da tela e o tamanho de título ficou.
+    expect(titulo?.textContent).toBe('Título');
+    expect(titulo?.querySelector('.md-h1')).toBeInTheDocument();
+  });
+
+  it('o chip diz o estado atual da nota', async () => {
+    responder([nota({ markdown: true })]);
+    render(<NotesPanel />);
+
+    expect(await screen.findByRole('button', { name: 'Markdown' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
+  it('clicar no chip grava a escolha no servidor', async () => {
+    responder([nota({ id: 'n1', markdown: false })]);
+    render(<NotesPanel />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Markdown' }));
+
+    await waitFor(() =>
+      expect(chamadas).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ method: 'PATCH', body: { markdown: true } }),
+        ]),
+      ),
+    );
+  });
+
+  // Desligar precisa devolver o texto cru, com os sinais à vista: é a forma de
+  // corrigir o que a formatação esconde.
+  it('desligar volta ao textarea, com os sinais à vista', async () => {
+    responder([nota({ id: 'n1', body: '# Título', markdown: true })]);
+    render(<NotesPanel />);
+    // Com Markdown ligado a superfície é editável, não é um textarea.
+    expect((await screen.findByLabelText('texto de Ideias')).tagName).toBe('DIV');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Markdown' }));
+
+    // A superfície e o textarea têm o mesmo rótulo, então esperar por "existe"
+    // devolveria a superfície antiga: o que se espera é a troca do elemento.
+    await waitFor(() =>
+      expect(screen.getByLabelText('texto de Ideias').tagName).toBe('TEXTAREA'),
+    );
+    expect(screen.getByLabelText('texto de Ideias')).toHaveValue('# Título');
   });
 });

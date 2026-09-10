@@ -99,6 +99,36 @@ Only `main` is maintained; there are no release branches.
   `systemctl restart` in `deploy/publish.sh` is unaffected.
 
 ### Added
+- **Notas rápidas** renders Markdown while you write it, the way Obsidian
+  does. The **Markdown** chip on the note turns it on, and the choice is
+  stored per note: a scratch tab and a structured one want different things.
+  With it on the note is one editing surface, not a stack of fields. The
+  cursor moves through it freely, with the arrows and with a click, and the
+  line it sits on reveals its own markers without losing its formatting: the
+  heading stays large, the bold stays bold, and the `#` shows up beside it,
+  dimmed. Leave the line and the markers hide again. Turning the chip off
+  gives back the plain textarea with every `#`, `**` and `>` visible, which is
+  how you fix what the formatting hides.
+  Recognized: the six heading levels, bold, italic, bold italic, strikethrough,
+  `==highlight==`, inline code, fenced code blocks, blockquotes, bulleted,
+  numbered and task lists with nesting, horizontal rules and links. Flanking
+  follows CommonMark, so `2 * 3 * 4` stays arithmetic and
+  `tb_gamification_rewards` keeps its underscores. Only `http`, `https` and
+  `mailto` become links; anything else stays as the text that was typed. The
+  parser is hand-written and adds no dependency, and it returns a tree that
+  React draws: the note never becomes HTML, so there is no path for injection
+  from what was typed. Editing is fully controlled, so the browser never
+  writes into the surface on its own, and undo and redo are kept here rather
+  than borrowed from the browser.
+  Selecting, copying and cutting carry the raw text, markers and line breaks
+  included, so copying a note and pasting it back gives the same note. Word
+  and line deletes (`Option` and `Cmd` with backspace) do what the system
+  does. `Tab` indents the line instead of leaving the field, and `Enter`
+  continues a list, numbering onward and starting a task unchecked; on an
+  empty list line it leaves the list. A fenced code block draws as one body
+  across its lines, with the fences themselves treated as markers: they hide
+  when the cursor is elsewhere, leaving a thin strip with the language name,
+  and come back raw when the cursor lands on them.
 - A third tab, **Aprovados**, listing what you approved. There is no JQL
   function for it: `myApproved()` and `myDecided()` do not exist,
   `approvedBy(currentUser())` is rejected because the `approvals` field takes no

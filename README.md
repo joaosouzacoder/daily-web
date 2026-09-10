@@ -52,6 +52,13 @@ empty panel — it does not render at all.
 with nothing configured. If you have the `mstodo` CLI installed you can point
 it at Microsoft To Do instead and keep phone sync.
 
+**Quick notes** write Markdown as you type, the way Obsidian does. The
+**Markdown** chip turns it on for that note. The note stays one editing
+surface: you move through it with the arrows and the mouse as usual, and the
+line the cursor is on reveals its own markers while keeping its formatting,
+so a heading stays a heading with a dimmed `#` beside it. Turn the chip off
+and the whole note goes back to plain text with every marker visible.
+
 ## Why no OAuth for email
 
 Email needs no OAuth application at all: an app password over IMAP works with

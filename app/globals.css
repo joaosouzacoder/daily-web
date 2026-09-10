@@ -714,3 +714,188 @@
 [data-density='compact'] [data-slot='table-head'] {
   height: 2.5rem;
 }
+
+.notes-bar {
+  display: flex;
+  justify-content: flex-end;
+  flex: none;
+}
+
+/* ---------- Markdown na nota ----------
+   O editor de nota é uma superfície contínua desenhada linha por linha, e a
+   linha onde está o cursor mostra os seus sinais. A superfície em si sai de
+   utilitários, como qualquer campo; o que fica aqui é o que utilitário não
+   alcança: o tom do sinal, a aparência de cada tipo de linha e os marcadores
+   desenhados em pseudo-elemento.
+
+   Nada aqui pode acrescentar texto ao DOM. O ponto da lista, o número e a
+   caixa de marcar são `::before` alimentados por atributo, porque um nó de
+   texto entraria na contagem de caracteres da linha e o cursor deixaria de
+   corresponder ao texto cru. */
+
+.md-superficie {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.md-superficie.is-vazia::before {
+  content: attr(data-placeholder);
+  color: var(--ink-dim);
+  pointer-events: none;
+}
+
+/* O sinal continua no texto, e o cursor anda por cima dele: fica apagado, não
+   escondido. Escondê-lo mudaria o que a seta atravessa. */
+.md-sinal {
+  color: var(--ink-dim);
+  opacity: 0.6;
+}
+
+.md-linha {
+  min-height: 1.6em;
+}
+
+/* Os títulos da nota são menores que os da página: dentro de um painel de
+   grade, um título no tamanho de página empurraria o resto para fora. */
+.md-h {
+  color: var(--ink);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.md-h1 {
+  font-size: 1.125rem;
+}
+
+.md-h2 {
+  font-size: 1rem;
+}
+
+.md-h3,
+.md-h4,
+.md-h5,
+.md-h6 {
+  font-size: 0.875rem;
+}
+
+.md-h4,
+.md-h5,
+.md-h6 {
+  color: var(--ink-mid);
+}
+
+.md-quote {
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--brand-edge);
+  color: var(--ink-mid);
+}
+
+.md-mono {
+  font-family: var(--font-code);
+  font-size: 0.8125rem;
+  color: var(--ink);
+}
+
+/* Item de lista: o espaço à esquerda é do marcador, e o nível de aninhamento
+   soma a ele. */
+.md-item {
+  position: relative;
+  padding-left: calc(1.5rem + var(--md-nivel, 0) * 1rem);
+}
+
+.md-item[data-marcador]::before {
+  content: attr(data-marcador);
+  position: absolute;
+  left: calc(var(--md-nivel, 0) * 1rem);
+  width: 1.5rem;
+  color: var(--ink-dim);
+}
+
+.md-item[data-marcada]::before {
+  color: var(--signal-success);
+}
+
+.md-rule-linha {
+  display: flex;
+  align-items: center;
+  min-height: 1.6em;
+}
+
+.md-rule {
+  flex: 1;
+  width: 100%;
+  height: 0;
+  border-top: 1px solid var(--line);
+}
+
+/* O bloco de código é um corpo só, embora as linhas sejam independentes: o
+   fundo atravessa todas, a primeira arredonda em cima e a última embaixo. */
+.md-bloco {
+  background: var(--surface-1);
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+}
+
+.md-bloco.is-topo {
+  padding-top: 0.5rem;
+  border-top-left-radius: var(--radius-sm);
+  border-top-right-radius: var(--radius-sm);
+}
+
+.md-bloco.is-base {
+  padding-bottom: 0.5rem;
+  border-bottom-left-radius: var(--radius-sm);
+  border-bottom-right-radius: var(--radius-sm);
+}
+
+/* A cerca escondida vira uma faixa fina, ainda clicável, com a linguagem à
+   direita. Some por completo deixaria o cursor sem onde pousar nela. */
+.md-cerca {
+  position: relative;
+  min-height: 0.9em;
+  font-family: var(--font-code);
+  font-size: 0.8125rem;
+  color: var(--ink-dim);
+}
+
+.md-cerca[data-lang]::after {
+  content: attr(data-lang);
+  position: absolute;
+  top: 0;
+  right: 0;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  pointer-events: none;
+}
+
+.md-superficie strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.md-superficie mark {
+  padding: 0 2px;
+  border-radius: 3px;
+  background: var(--signal-warning-tint);
+  color: var(--ink);
+}
+
+.md-superficie s {
+  color: var(--ink-dim);
+}
+
+.md-superficie a,
+.md-link-cru {
+  color: var(--brand);
+}
+
+.md-code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--surface-1);
+  color: var(--ink);
+  font-family: var(--font-code);
+  font-size: 0.9em;
+}

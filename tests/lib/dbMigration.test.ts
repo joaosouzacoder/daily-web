@@ -132,3 +132,35 @@ describe('migração para escopo por usuário', () => {
     expect(cols.map((c) => c.name)).toContain('user_id');
   });
 });
+
+// A coluna de Markdown chegou depois das notas: um banco que já tem notas
+// escritas precisa ganhá-la sem perder nada.
+describe('markdown nas notas já existentes', () => {
+  it('acrescenta a coluna e deixa as notas antigas cruas', async () => {
+    // Sobe o banco na versão anterior à coluna, com uma nota escrita.
+    const { getDb } = await import('@/lib/db');
+    const db = getDb();
+    const antes = db.pragma('user_version', { simple: true }) as number;
+    db.prepare(
+      `INSERT INTO notes (id, user_id, title, body, position, created_at, updated_at, markdown)
+       VALUES ('n1', 'u-1', 'Antiga', '# Título', 0, '2026-01-01', '2026-01-01', 0)`,
+    ).run();
+    db.close();
+
+    // Volta a versão e apaga a coluna, reproduzindo o banco de antes.
+    const cru = new Database(dbFile);
+    cru.exec('ALTER TABLE notes DROP COLUMN markdown');
+    cru.pragma(`user_version = ${antes - 1}`);
+    cru.close();
+
+    vi.resetModules();
+    const { getDb: reabrir } = await import('@/lib/db');
+    const migrado = reabrir();
+
+    const nota = migrado
+      .prepare('SELECT title, body, markdown FROM notes WHERE id = ?')
+      .get('n1') as { title: string; body: string; markdown: number };
+    expect(nota).toEqual({ title: 'Antiga', body: '# Título', markdown: 0 });
+    expect(migrado.pragma('user_version', { simple: true })).toBe(antes);
+  });
+});
