@@ -144,6 +144,21 @@ same whether your workflow ends in "Resolvido" or in "Done".
 [github.com/settings/tokens](https://github.com/settings/tokens). Scope `repo`
 for private repositories; for public ones, no scope is needed.
 
+## Choosing how it looks
+
+**Aparência**, on the settings screen, picks the visual style. **Vidro** is the
+default: translucent surfaces on an iridescent background. **Relevo** is the
+soft-UI alternative: opaque bodies rising from a flat field, delimited by a
+hairline of light rather than by a border.
+
+A style is a set of token overrides and nothing else, so both cover every
+screen, including screens added later. If you are adding a third, it is an
+entry in `lib/skins.ts` and a `[data-skin='<id>']` block in `app/globals.css`;
+the comment above that block says the rest.
+
+Light, dark and density are separate choices, in the account menu at the foot
+of the sidebar, and they compose with the style you pick here.
+
 ## Rearranging the dashboard
 
 Click **Organizar** to move panels by dragging and resize them by the

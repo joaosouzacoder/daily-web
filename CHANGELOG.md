@@ -8,6 +8,38 @@ Only `main` is maintained; there are no release branches.
 
 ## [Unreleased]
 
+### Added
+- **Skins**: the visual style is a choice, made under **Aparência** on the
+  settings screen. Two ship: **Vidro**, the translucent surfaces on an
+  iridescent mesh, which stays the default, and **Relevo**, opaque bodies
+  rising from a flat field, delimited by a hairline of light along the top and
+  left edge and a shadow falling to the opposite side.
+  A skin is **only** a block of token overrides in `globals.css`. No component,
+  screen or module knows which one is active, and nothing branches on it, so a
+  screen written tomorrow inherits every skin that exists, including the ones
+  added after it. Adding one is two steps: an entry in `lib/skins.ts` and a
+  `[data-skin='<id>']` block in the stylesheet. There is no third step, and a
+  test fails the build if any file outside the root layout and the picker ever
+  learns which skin is on.
+  Relief also steepens the surface ramp, which is what gives it the sense of
+  height: glass separates surfaces by translucency and wants short steps,
+  relief separates them by how much lighter the body is than the floor and
+  wants long ones. In dark both climb, the body further than the floor:
+  dropping the floor to widen the gap is the obvious move and the wrong one,
+  because it dims the whole app and, worse, it hides the shadow, which only
+  registers against something lighter than itself. In light the ceiling is
+  white, so the floor becomes a real grey and the white body rises off it.
+  The outer shadow is two dark layers, one tight to draw the corner and one
+  long to lift the body off the page, and the pale halo on the lit side exists
+  only in light, where it belongs: around a dark card it produces the opposite
+  of height. The card and the field become separate tokens in this skin,
+  though the default aliases one to the other, because a field the colour of
+  the body it sits in disappears.
+  The choice is a cookie read during render, like the theme and the density, so
+  the first paint is never the wrong skin. It can also be switched from the
+  command palette, under **Estilo**, where the theme and the density already
+  live.
+
 ### Changed
 - The front end is rebuilt on Tailwind v4 and shadcn/ui. The hand-written
   stylesheet is gone, replaced by a token layer in `oklch()`: a six-level

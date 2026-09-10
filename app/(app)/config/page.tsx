@@ -1,6 +1,7 @@
 import { UsersPanel } from '@/components/UsersPanel';
 import { LayoutPanel } from '@/components/LayoutPanel';
 import { IntegrationsPanel } from '@/components/IntegrationsPanel';
+import { AppearancePanel } from '@/components/AppearancePanel';
 import { PageHeader } from '@/components/data/PageHeader';
 
 /**
@@ -24,6 +25,7 @@ export default function ConfigPage() {
         </div>
         <div className="flex flex-col gap-4">
           <UsersPanel />
+          <AppearancePanel />
           <LayoutPanel />
         </div>
       </div>

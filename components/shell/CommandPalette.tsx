@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/command';
 import { NAV_ITEMS } from './nav-items';
 import { applyDensity, applyTheme, type Density, type ThemePreference } from '@/lib/theme';
+import { SKINS, applySkin } from '@/lib/skins';
 
 const THEMES: { value: ThemePreference; label: string }[] = [
   { value: 'system', label: 'Tema do sistema' },
@@ -86,6 +87,17 @@ export function CommandPalette({
                   onSelect={() => run(() => applyTheme(t.value))}
                 >
                   {t.label}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+            <CommandGroup heading="Estilo">
+              {SKINS.map((skin) => (
+                <CommandItem
+                  key={skin.id}
+                  value={`Estilo ${skin.label}`}
+                  onSelect={() => run(() => applySkin(skin.id))}
+                >
+                  {skin.label}
                 </CommandItem>
               ))}
             </CommandGroup>

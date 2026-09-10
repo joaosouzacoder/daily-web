@@ -309,6 +309,170 @@
   --chart-5: oklch(0.75 0.1 200);
 }
 
+/* ---------- skins ----------
+   Um skin é uma troca de tokens e nada mais. Nenhum componente sabe qual está
+   ativo, nenhuma tela existe duas vezes, e uma tela escrita amanhã herda todos
+   os skins, inclusive os acrescentados depois dela. É o que torna a lista
+   barata de crescer: o preço de um skin novo é um bloco como este.
+
+   Acrescentar um: uma entrada em `lib/skins.ts` e um bloco `[data-skin='<id>']`
+   aqui. Se um skin parecer precisar de um terceiro passo, é porque algum
+   componente está lendo um valor literal onde devia ler um token, e o defeito é
+   esse.
+
+   Só duas variáveis precisam existir por perna de tema; todo o resto deste
+   bloco deriva delas e dos tokens de ambiente, então o skin serve o claro e o
+   escuro de uma vez. */
+
+:root[data-skin='relief'] {
+  /* Em tema claro a profundidade vem da sombra, e a luz é branca. */
+  --relief-light: oklch(1 0 0);
+  --relief-dark: oklch(0.38 0.02 285 / 50%);
+  --relief-edge: oklch(1 0 0 / 70%);
+  /* O halo externo do lado da luz. No claro ele é branco e é metade do
+     efeito; no escuro é transparente, porque ali um halo claro em volta do
+     card produz o oposto de alto relevo. */
+  --relief-halo: oklch(1 0 0 / 90%);
+
+  /* A rampa fica íngreme. Vidro pede degraus curtos, porque quem separa as
+     superfícies é a translucidez; relevo pede degraus longos, porque quem
+     separa é a diferença de luz entre o corpo e o piso. No claro o teto é o
+     branco, então quem desce é o piso: um cinza de verdade embaixo é o que
+     deixa o corpo branco saltar. */
+  --surface-0: oklch(0.93 0.004 265);
+  --surface-1: oklch(0.91 0.004 265);
+  --surface-2: oklch(0.995 0.001 265);
+  --surface-3: oklch(1 0 0);
+  --surface-4: oklch(1 0 0);
+  --surface-5: oklch(1 0 0);
+  --mesh-base: oklch(0.93 0.004 265);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light)[data-skin='relief'] {
+    /* No escuro a sombra quase não registra contra o fundo, então quem
+       delimita é o fio de luz. Daí a luz cair e a sombra subir. */
+    --relief-light: oklch(1 0 0 / 20%);
+    --relief-dark: oklch(0 0 0 / 92%);
+    --relief-edge: oklch(1 0 0 / 8%);
+    /* Nada de halo claro aqui: em volta de um card escuro ele produz o oposto
+       de alto relevo, que foi o defeito da tentativa anterior. */
+    --relief-halo: oklch(0 0 0 / 0%);
+
+    /* A rampa inteira sobe. Escurecer o piso para ganhar contraste foi o erro
+       da tentativa anterior: deixou a app abafada e, pior, apagou a sombra,
+       porque sombra escura só se lê contra algo mais claro que ela. Com o piso
+       em 0.17 e o corpo em 0.30 sobram as duas coisas, o degrau grande e uma
+       sombra que aparece. */
+    --surface-0: oklch(0.17 0.006 285);
+    --surface-1: oklch(0.14 0.005 285);
+    --surface-2: oklch(0.3 0.011 285);
+    --surface-3: oklch(0.335 0.012 285);
+    --surface-4: oklch(0.365 0.013 285);
+    --surface-5: oklch(0.4 0.014 285);
+    --mesh-base: oklch(0.17 0.006 285);
+
+    /* Com o corpo em 0.30, a superfície de passagem do mouse e as linhas do
+       tema escuro ficariam do tom do próprio card e desapareceriam. */
+    --muted: oklch(0.375 0.015 250);
+    --accent: oklch(0.39 0.016 250);
+    --line: oklch(0.4 0.012 285);
+    --line-soft: oklch(0.245 0.008 285);
+    --line-strong: oklch(0.48 0.015 285);
+    --input: oklch(0.4 0.015 250);
+  }
+}
+
+:root.dark[data-skin='relief'] {
+  --relief-light: oklch(1 0 0 / 20%);
+  --relief-dark: oklch(0 0 0 / 92%);
+  --relief-edge: oklch(1 0 0 / 8%);
+  /* Nada de halo claro aqui: em volta de um card escuro ele produz o oposto
+     de alto relevo, que foi o defeito da tentativa anterior. */
+  --relief-halo: oklch(0 0 0 / 0%);
+
+  /* A rampa inteira sobe. Escurecer o piso para ganhar contraste foi o erro
+     da tentativa anterior: deixou a app abafada e, pior, apagou a sombra,
+     porque sombra escura só se lê contra algo mais claro que ela. Com o piso
+     em 0.17 e o corpo em 0.30 sobram as duas coisas, o degrau grande e uma
+     sombra que aparece. */
+  --surface-0: oklch(0.17 0.006 285);
+  --surface-1: oklch(0.14 0.005 285);
+  --surface-2: oklch(0.3 0.011 285);
+  --surface-3: oklch(0.335 0.012 285);
+  --surface-4: oklch(0.365 0.013 285);
+  --surface-5: oklch(0.4 0.014 285);
+  --mesh-base: oklch(0.17 0.006 285);
+
+  /* Com o corpo em 0.30, a superfície de passagem do mouse e as linhas do
+     tema escuro ficariam do tom do próprio card e desapareceriam. */
+  --muted: oklch(0.375 0.015 250);
+  --accent: oklch(0.39 0.016 250);
+  --line: oklch(0.4 0.012 285);
+  --line-soft: oklch(0.245 0.008 285);
+  --line-strong: oklch(0.48 0.015 285);
+  --input: oklch(0.4 0.015 250);
+}
+
+:root[data-skin='relief'] {
+  /* Relevo pede corpo opaco e mais claro que o fundo: é o que faz a peça
+     parecer sair da página. `--surface-1` seria o erro fácil aqui, porque é o
+     plano *rebaixado* (a sidebar) e no escuro fica mais escuro que o piso: o
+     painel viraria um buraco, e o efeito some. O nível do cartão é o 2. */
+  --card: var(--surface-2);
+  --popover: var(--surface-4);
+  /* `--card` e `--glass` viram tokens diferentes, embora o padrão faça um
+     apontar para o outro: o cartão é o corpo que sobe, o vidro é o que os
+     campos usam. Iguais, o campo desapareceria dentro do painel. */
+  --glass: var(--surface-0);
+  --glass-strong: var(--surface-3);
+  /* A linha para de delimitar, porque quem delimita é a luz. O que sobra é o
+     fio que impede duas superfícies de se encostarem sem transição. */
+  --glass-line: oklch(from var(--ink) l c h / 5%);
+
+  /* O brilho de vidro dá lugar ao fio de luz de 1px no alto e à esquerda. Ele
+     é o que faz o corpo parecer levantado, e por isso entra em toda elevação:
+     nunca pode ser `none`, que quebraria a lista inteira. */
+  --shiny-sm: inset 1px 1px 0 var(--relief-light);
+  --shiny: inset 1px 1px 0 var(--relief-light), inset 0 0 0 1px var(--relief-edge);
+  --shiny-lg: inset 2px 2px 0 var(--relief-light), inset 0 0 0 1px var(--relief-edge);
+
+  /* A luz vem de cima e da esquerda: a sombra clara fica desse lado, a escura
+     do oposto, e as duas juntas é que dão a borda. */
+  /* Duas camadas de sombra escura em vez de uma: a curta e fechada desenha a
+     quina do card, a longa e aberta o afasta da página. Uma só ou fica dura
+     ou fica difusa, e nenhuma das duas dá altura. */
+  --elevation-1:
+    var(--shiny-sm), 1px 2px 3px var(--relief-dark), 2px 4px 8px var(--relief-dark),
+    -2px -2px 5px var(--relief-halo);
+  --elevation-2:
+    var(--shiny), 3px 4px 8px var(--relief-dark), 12px 16px 32px var(--relief-dark),
+    -10px -10px 24px var(--relief-halo);
+  --elevation-3:
+    var(--shiny), 4px 5px 10px var(--relief-dark), 16px 22px 42px var(--relief-dark),
+    -10px -10px 26px var(--relief-halo);
+  --elevation-4:
+    var(--shiny-lg), 5px 6px 12px var(--relief-dark), 20px 28px 52px var(--relief-dark),
+    -12px -12px 28px var(--relief-halo);
+  --elevation-5:
+    var(--shiny-lg), 6px 8px 16px var(--relief-dark), 26px 36px 68px var(--relief-dark),
+    -14px -14px 32px var(--relief-halo);
+
+  --control-rim: inset 1px 1px 0 var(--relief-light);
+
+  /* O fundo fica liso. As cinco manchas do fundo iridescente competem com a
+     sombra e o relevo deixa de se ler; um campo uniforme é a condição para o
+     esquema funcionar. */
+  --mesh-1: var(--mesh-base);
+  --mesh-2: var(--mesh-base);
+  --mesh-3: var(--mesh-base);
+  --mesh-4: var(--mesh-base);
+  --mesh-5: var(--mesh-base);
+
+  /* Canto mais macio: é o que faz o corpo parecer moldado em vez de cortado. */
+  --radius: 1rem;
+}
+
 @theme inline {
   --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-code), ui-monospace, 'SF Mono', Menlo, monospace;

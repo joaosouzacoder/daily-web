@@ -4,6 +4,7 @@ import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
 import { ServiceWorker } from '@/components/ServiceWorker';
 import { DENSITY_COOKIE, THEME_COOKIE, parseDensity, parseTheme } from '@/lib/theme';
+import { SKIN_COOKIE, parseSkin } from '@/lib/skins';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -46,6 +47,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const jar = await cookies();
   const theme = parseTheme(jar.get(THEME_COOKIE)?.value);
   const density = parseDensity(jar.get(DENSITY_COOKIE)?.value);
+  const skin = parseSkin(jar.get(SKIN_COOKIE)?.value);
   const forced = theme === 'system' ? '' : theme;
 
   return (
@@ -54,6 +56,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       // The client changes both after hydration.
       suppressHydrationWarning
       data-density={density === 'compact' ? 'compact' : undefined}
+      // Lido aqui pela mesma razão do tema: um skin aplicado por efeito de
+      // cliente pintaria o primeiro quadro com o skin errado.
+      data-skin={skin === 'default' ? undefined : skin}
       className={`${GeistSans.variable} ${GeistMono.variable} ${forced}`.trim()}
     >
       <body className="min-h-screen bg-background text-foreground antialiased">
