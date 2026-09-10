@@ -1,2267 +1,661 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
 @import 'react-grid-layout/css/styles.css';
 @import 'react-resizable/css/styles.css';
 
-/* ============================================================
-   daily-web — sistema de design
-   Escuro por natureza: a tela fica aberta o dia inteiro num
-   segundo monitor. Hierarquia por espaço e linha, nunca por caixa.
-   ============================================================ */
+/* Two legs. No class on <html> means follow the system. An explicit choice stamps
+   .light or .dark, which must beat the media query in BOTH directions. :where()
+   keeps the variant at zero specificity so ordering alone decides. */
+@custom-variant dark {
+  &:where(.dark *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(html:not(.light) *) {
+      @slot;
+    }
+  }
+}
 
 :root {
-  /* superfícies */
-  --canvas: #0d0b14;
-  --surface: #17141f;
-  --surface-hover: #211c2e;
-  --hairline: #2c2740;
-  --hairline-strong: #3a3350;
+  /* The font tokens the type roles read. Geist exposes its own variable names, so
+     these are the bridge: without them every role falls through to ui-sans-serif
+     with no error and the scale only appears to work. */
+  --font-body: var(--font-geist-sans);
+  --font-code: var(--font-geist-mono);
 
-  /* texto */
-  --text: #f0edf7;
-  --text-muted: #9891ac;
-  --text-faint: #6b6480;
+  /* Surface ramp, 6 levels. Light: depth comes from SHADOW and surfaces climb to
+     white. Dark: depth comes from LUMINOSITY, because shadow barely reads on black. */
+  --surface-0: oklch(0.976 0.003 250); /* page floor */
+  --surface-1: oklch(0.992 0.002 250); /* panel, sidebar */
+  --surface-2: oklch(1 0 0); /* card */
+  --surface-3: oklch(1 0 0); /* sticky header, toolbar */
+  --surface-4: oklch(1 0 0); /* popover, dropdown */
+  --surface-5: oklch(1 0 0); /* modal */
 
-  /* acento e semântica */
-  --accent: #b48cff;
-  --accent-dim: #8b6bc7;
-  --success: #7fdbb0;
-  --warn: #ff9b7a;
-  --danger: #ff6b81;
+  /* shiny = large inset white glow falling from the top INSIDE the surface. It is
+     what makes a card read as glass instead of a painted rectangle. Never `none`:
+     the elevations compose it, and `none` breaks the whole shadow list. */
+  --shiny-sm: inset 0 20px 50px 0 oklch(1 0 0 / 5%);
+  --shiny: inset 0 30px 60px 0 oklch(1 0 0 / 6%);
+  --shiny-lg: inset 0 50px 100px 0 oklch(1 0 0 / 7%);
 
-  /* escala tipográfica */
-  --step--1: 0.8125rem;
-  --step-0: 0.9375rem;
-  --step-1: 1.125rem;
-  --step-2: 1.5rem;
-  --hero: clamp(3.25rem, 9vw, 6.5rem);
+  --elevation-1: var(--shiny-sm), 0 1px 0 oklch(0 0 0 / 5%);
+  --elevation-2: var(--shiny), 0 1px 0 oklch(0 0 0 / 5%), 0 4px 2px oklch(0 0 0 / 5%);
+  --elevation-3:
+    var(--shiny), 0 1px 0 oklch(0 0 0 / 5%), 0 4px 2px oklch(0 0 0 / 5%),
+    0 10px 5px oklch(0 0 0 / 10%);
+  --elevation-4: var(--shiny-lg), 0 2px 4px oklch(0 0 0 / 6%), 0 12px 24px oklch(0 0 0 / 12%);
+  --elevation-5: var(--shiny-lg), 0 4px 8px oklch(0 0 0 / 8%), 0 24px 48px oklch(0 0 0 / 18%);
+  --glow: 0 0 8px oklch(1 0 0 / 35%), 0 0 16px oklch(1 0 0 / 20%);
 
-  /* espaçamento (base 4px) */
-  --s1: 0.25rem;
-  --s2: 0.5rem;
-  --s3: 0.75rem;
-  --s4: 1rem;
-  --s5: 1.5rem;
-  --s6: 2rem;
-  --s7: 3rem;
-  --s8: 4rem;
+  --ink: oklch(0.145 0.01 285);
+  --ink-mid: oklch(0.145 0.01 285 / 72%); /* legible secondary text */
+  --ink-dim: oklch(0.145 0.01 285 / 52%); /* label and support only, not body copy */
 
-  /* relevo dos painéis
-     O painel é um corpo que sai do fundo, não uma caixa desenhada em cima
-     dele. A luz vem de cima e da esquerda: a sombra clara fica desse lado, a
-     escura do oposto, e as duas juntas é que dão a borda. */
-  --painel-alto: #1c1728;
-  --painel-baixo: #120e1b;
-  --relevo-claro: rgba(255, 255, 255, 0.07);
-  --relevo-escuro: rgba(0, 0, 0, 0.7);
-  /* A quina de luz. Num fundo desta escuridão a sombra escura quase não
-     aparece, e é este fio de 1px no alto e à esquerda que faz o corpo
-     parecer levantado. */
-  --relevo-quina: inset 1px 1px 0 rgba(255, 255, 255, 0.06);
-  --painel-raio: 16px;
+  --line: oklch(0.885 0.006 250);
+  --line-soft: oklch(0.935 0.005 250);
+  --line-strong: oklch(0.78 0.009 250);
 
-  /* barra de rolagem */
-  --scrollbar-thumb: #37314a;
-  --scrollbar-thumb-hover: var(--accent-dim);
+  /* --brand is the project's accent. These four are the ONLY tokens an accent is
+     allowed to change, and all four must be set together. */
+  --brand: oklch(0.5 0.128 155);
+  --brand-ink: oklch(0.985 0 0);
+  --brand-tint: oklch(from var(--brand) l c h / 10%);
+  --brand-edge: oklch(from var(--brand) l c h / 45%);
 
-  /* movimento */
-  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
-  --fast: 140ms;
-  --med: 220ms;
+  /* Signal. NEVER follows the accent. warning sits at hue 88 (olive) precisely to
+     hold distance from an orange accent around hue 50. */
+  --signal-success: oklch(0.48 0.125 152);
+  --signal-warning: oklch(0.5 0.105 88);
+  --signal-danger: oklch(0.52 0.19 26);
+  --signal-info: oklch(0.5 0.13 248);
+  --signal-neutral: var(--ink-dim);
+  --signal-success-tint: oklch(0.48 0.125 152 / 11%);
+  --signal-warning-tint: oklch(0.5 0.105 88 / 13%);
+  --signal-danger-tint: oklch(0.52 0.19 26 / 10%);
+  --signal-info-tint: oklch(0.5 0.13 248 / 10%);
+  --signal-neutral-tint: oklch(0.53 0.013 250 / 10%);
 
-  /* fundo ambiente (sobrescrito em runtime pela hora do dia) */
-  --ambient-top: hsl(258 70% 55% / 0.1);
-  --ambient-bottom: hsl(228 65% 45% / 0.06);
+  /* Background atmosphere. Iridescent and fixed on purpose: the accent stays the
+     color of action and of data. Background here is atmosphere, not signal. */
+  --mesh-base: oklch(0.986 0.004 265);
+  --mesh-1: oklch(0.957 0.017 255);
+  --mesh-2: oklch(0.957 0.019 305);
+  --mesh-3: oklch(0.97 0.013 25);
+  --mesh-4: oklch(0.97 0.013 200);
+  --mesh-5: oklch(0.992 0.006 95);
 
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+  --glass: oklch(1 0 0 / 70%);
+  --glass-strong: oklch(1 0 0 / 86%);
+  --glass-line: oklch(1 0 0 / 75%);
+
+  /* Dark in BOTH themes on purpose: it backs light artwork and white logos that
+     would disappear on a light plate. A theme-completeness linter will flag this
+     as a missing dark value. It is not. */
+  --plate: oklch(0.19 0.012 250);
+
+  /* Declared for documentation and deliberately NOT mapped into @theme: there is no
+     `duration-fast` utility. Every real duration here is stock Tailwind. */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 110ms;
+  --dur: 160ms;
+  --dur-slow: 240ms;
+
+  /* Container radius. Buttons, chips and status pills do NOT use this: they are
+     fully round (rounded-full). */
+  --radius: 0.75rem;
+
+  --button-face: linear-gradient(
+    145deg,
+    oklch(from var(--brand) calc(l + 0.055) c h),
+    oklch(from var(--brand) calc(l - 0.05) c h)
+  );
+  --button-rim:
+    inset 0 1px 0 oklch(from var(--brand) calc(l + 0.24) calc(c * 0.6) h),
+    inset 0 -1px 0 oklch(from var(--brand) calc(l + 0.15) calc(c * 0.8) h);
+  /* Neutral twin of button-rim, for a raised piece that is not an action. The accent
+     rim would tint it. */
+  --control-rim: inset 0 1px 0 oklch(1 0 0 / 85%);
+
+  /* Bridge to the names the shadcn primitives consume. No component reads
+     --surface-N directly; they all read these. */
+  --background: var(--surface-0);
+  --foreground: var(--ink);
+  --card: var(--glass);
+  --card-foreground: var(--ink);
+  --popover: var(--glass-strong);
+  --popover-foreground: var(--ink);
+  --primary: var(--brand);
+  --primary-foreground: var(--brand-ink);
+  --secondary: oklch(0.24 0.014 250); /* inverted on purpose: dark chip in light theme */
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.955 0.004 250);
+  --muted-foreground: var(--ink-dim);
+  --accent: oklch(0.945 0.006 250); /* neutral hover surface, never the brand */
+  --accent-foreground: var(--ink);
+  --destructive: var(--signal-danger);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: var(--glass-line); /* a WHITE hairline, not a gray one */
+  --input: var(--line-strong);
+  --ring: var(--brand);
+  --outline: var(--line-strong);
+  --outline-foreground: var(--ink-dim);
+  --border-primary: var(--brand-edge);
+  --border-secondary: var(--line-strong);
+
+  --chart-1: var(--brand); /* the only chart color that follows the accent */
+  --chart-2: oklch(0.55 0.13 248);
+  --chart-3: oklch(0.62 0.11 88);
+  --chart-4: oklch(0.5 0.16 320);
+  --chart-5: oklch(0.68 0.1 200);
+
+  --sidebar: var(--surface-1);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--brand);
+  --sidebar-primary-foreground: var(--brand-ink);
+  --sidebar-accent: var(--brand-tint);
+  --sidebar-accent-foreground: var(--brand);
+  --sidebar-border: var(--line);
+  --sidebar-ring: var(--brand);
 }
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
+/* DARK, leg 1: system preference, only when there is no explicit light choice. */
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    /* surface-1 (0.112) is DARKER than surface-0 (0.134). The sidebar is a recessed
+       plane, never elevated. Do not "fix" the ramp to be monotonic. */
+    --surface-0: oklch(0.134 0.005 285);
+    --surface-1: oklch(0.112 0.004 285);
+    --surface-2: oklch(0.185 0.007 285);
+    --surface-3: oklch(0.205 0.008 285);
+    --surface-4: oklch(0.225 0.009 285);
+    --surface-5: oklch(0.245 0.01 285);
+
+    --mesh-base: oklch(0.134 0.006 285);
+    --mesh-1: oklch(0.188 0.062 265);
+    --mesh-2: oklch(0.182 0.066 310);
+    --mesh-3: oklch(0.174 0.05 20);
+    --mesh-4: oklch(0.178 0.047 205);
+    --mesh-5: oklch(0.156 0.024 280);
+
+    --glass: oklch(1 0 0 / 2%);
+    --glass-strong: oklch(1 0 0 / 5%);
+    --glass-line: oklch(1 0 0 / 12%);
+
+    --control-rim: inset 0 1px 0 oklch(1 0 0 / 16%);
+
+    /* Same values as light on purpose. In light they are white on white, that is,
+       visually invisible, not absent. The elevations compose them. */
+    --shiny-sm: inset 0 20px 50px 0 oklch(1 0 0 / 5%);
+    --shiny: inset 0 30px 60px 0 oklch(1 0 0 / 6%);
+    --shiny-lg: inset 0 50px 100px 0 oklch(1 0 0 / 7%);
+
+    --elevation-1: var(--shiny-sm), 0 1px 0 oklch(0 0 0 / 35%);
+    --elevation-2: var(--shiny), 0 1px 0 oklch(0 0 0 / 35%), 0 4px 2px oklch(0 0 0 / 30%);
+    --elevation-3:
+      var(--shiny), 0 1px 0 oklch(0 0 0 / 40%), 0 4px 2px oklch(0 0 0 / 35%),
+      0 10px 5px oklch(0 0 0 / 45%);
+    --elevation-4: var(--shiny-lg), 0 2px 4px oklch(0 0 0 / 45%), 0 12px 24px oklch(0 0 0 / 55%);
+    --elevation-5: var(--shiny-lg), 0 4px 8px oklch(0 0 0 / 50%), 0 24px 48px oklch(0 0 0 / 65%);
+
+    --ink: oklch(1 0 0);
+    --ink-mid: oklch(1 0 0 / 72%);
+    --ink-dim: oklch(1 0 0 / 52%);
+
+    /* Deliberately low contrast in dark: the line delimits, the bevel is what shines. */
+    --line: oklch(0.305 0.01 285);
+    --line-soft: oklch(0.205 0.006 285);
+    --line-strong: oklch(0.4 0.013 285);
+
+    --brand: oklch(0.72 0.155 158);
+    --brand-ink: oklch(0.17 0.02 158);
+    --brand-tint: oklch(0.72 0.155 158 / 14%);
+    --brand-edge: oklch(0.72 0.155 158 / 45%);
+
+    --signal-success: oklch(0.75 0.15 155);
+    --signal-warning: oklch(0.8 0.13 90);
+    --signal-danger: oklch(0.7 0.17 24);
+    --signal-info: oklch(0.73 0.11 245);
+    --signal-success-tint: oklch(0.75 0.15 155 / 16%);
+    --signal-warning-tint: oklch(0.8 0.13 90 / 16%);
+    --signal-danger-tint: oklch(0.7 0.17 24 / 16%);
+    --signal-info-tint: oklch(0.73 0.11 245 / 16%);
+    --signal-neutral-tint: oklch(0.655 0.015 250 / 16%);
+
+    --secondary: oklch(0.945 0.006 250);
+    --secondary-foreground: oklch(0.2 0.014 250);
+    --muted: oklch(0.265 0.014 250);
+    --accent: oklch(0.3 0.016 250);
+    --destructive-foreground: oklch(0.17 0.02 24);
+    --input: oklch(0.29 0.015 250);
+
+    --chart-2: oklch(0.7 0.12 248);
+    --chart-3: oklch(0.78 0.12 90);
+    --chart-4: oklch(0.68 0.15 320);
+    --chart-5: oklch(0.75 0.1 200);
+  }
 }
 
-html {
-  -webkit-text-size-adjust: 100%;
+/* DARK, leg 2: explicit class. Byte identical to leg 1 above — this is a copy.
+   Edit leg 1, then copy the body here; a mechanical diff of the two must be clean. */
+:root.dark {
+  --surface-0: oklch(0.134 0.005 285);
+  --surface-1: oklch(0.112 0.004 285);
+  --surface-2: oklch(0.185 0.007 285);
+  --surface-3: oklch(0.205 0.008 285);
+  --surface-4: oklch(0.225 0.009 285);
+  --surface-5: oklch(0.245 0.01 285);
+
+  --mesh-base: oklch(0.134 0.006 285);
+  --mesh-1: oklch(0.188 0.062 265);
+  --mesh-2: oklch(0.182 0.066 310);
+  --mesh-3: oklch(0.174 0.05 20);
+  --mesh-4: oklch(0.178 0.047 205);
+  --mesh-5: oklch(0.156 0.024 280);
+
+  --glass: oklch(1 0 0 / 2%);
+  --glass-strong: oklch(1 0 0 / 5%);
+  --glass-line: oklch(1 0 0 / 12%);
+
+  --control-rim: inset 0 1px 0 oklch(1 0 0 / 16%);
+
+  --shiny-sm: inset 0 20px 50px 0 oklch(1 0 0 / 5%);
+  --shiny: inset 0 30px 60px 0 oklch(1 0 0 / 6%);
+  --shiny-lg: inset 0 50px 100px 0 oklch(1 0 0 / 7%);
+
+  --elevation-1: var(--shiny-sm), 0 1px 0 oklch(0 0 0 / 35%);
+  --elevation-2: var(--shiny), 0 1px 0 oklch(0 0 0 / 35%), 0 4px 2px oklch(0 0 0 / 30%);
+  --elevation-3:
+    var(--shiny), 0 1px 0 oklch(0 0 0 / 40%), 0 4px 2px oklch(0 0 0 / 35%),
+    0 10px 5px oklch(0 0 0 / 45%);
+  --elevation-4: var(--shiny-lg), 0 2px 4px oklch(0 0 0 / 45%), 0 12px 24px oklch(0 0 0 / 55%);
+  --elevation-5: var(--shiny-lg), 0 4px 8px oklch(0 0 0 / 50%), 0 24px 48px oklch(0 0 0 / 65%);
+
+  --ink: oklch(1 0 0);
+  --ink-mid: oklch(1 0 0 / 72%);
+  --ink-dim: oklch(1 0 0 / 52%);
+
+  --line: oklch(0.305 0.01 285);
+  --line-soft: oklch(0.205 0.006 285);
+  --line-strong: oklch(0.4 0.013 285);
+
+  --brand: oklch(0.72 0.155 158);
+  --brand-ink: oklch(0.17 0.02 158);
+  --brand-tint: oklch(0.72 0.155 158 / 14%);
+  --brand-edge: oklch(0.72 0.155 158 / 45%);
+
+  --signal-success: oklch(0.75 0.15 155);
+  --signal-warning: oklch(0.8 0.13 90);
+  --signal-danger: oklch(0.7 0.17 24);
+  --signal-info: oklch(0.73 0.11 245);
+  --signal-success-tint: oklch(0.75 0.15 155 / 16%);
+  --signal-warning-tint: oklch(0.8 0.13 90 / 16%);
+  --signal-danger-tint: oklch(0.7 0.17 24 / 16%);
+  --signal-info-tint: oklch(0.73 0.11 245 / 16%);
+  --signal-neutral-tint: oklch(0.655 0.015 250 / 16%);
+
+  --secondary: oklch(0.945 0.006 250);
+  --secondary-foreground: oklch(0.2 0.014 250);
+  --muted: oklch(0.265 0.014 250);
+  --accent: oklch(0.3 0.016 250);
+  --destructive-foreground: oklch(0.17 0.02 24);
+  --input: oklch(0.29 0.015 250);
+
+  --chart-2: oklch(0.7 0.12 248);
+  --chart-3: oklch(0.78 0.12 90);
+  --chart-4: oklch(0.68 0.15 320);
+  --chart-5: oklch(0.75 0.1 200);
 }
 
-body {
-  margin: 0;
-  min-height: 100dvh;
-  background: var(--canvas);
-  color: var(--text);
+@theme inline {
+  --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-code), ui-monospace, 'SF Mono', Menlo, monospace;
+  /* Display IS the sans. Title and body are the same family; what separates them is
+     size, weight and negative tracking. Do not add a second display face. */
+  --font-display: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-outline: var(--outline);
+  --color-outline-foreground: var(--outline-foreground);
+  --color-border-primary: var(--border-primary);
+  --color-border-secondary: var(--border-secondary);
+
+  --color-surface-0: var(--surface-0);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-surface-4: var(--surface-4);
+  --color-surface-5: var(--surface-5);
+  --color-ink: var(--ink);
+  --color-ink-mid: var(--ink-mid);
+  --color-ink-dim: var(--ink-dim);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-line-strong: var(--line-strong);
+
+  --color-brand: var(--brand);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-tint: var(--brand-tint);
+  --color-brand-edge: var(--brand-edge);
+
+  --color-success: var(--signal-success);
+  --color-warning: var(--signal-warning);
+  --color-danger: var(--signal-danger);
+  --color-info: var(--signal-info);
+  --color-success-tint: var(--signal-success-tint);
+  --color-warning-tint: var(--signal-warning-tint);
+  --color-danger-tint: var(--signal-danger-tint);
+  --color-info-tint: var(--signal-info-tint);
+  --color-neutral-tint: var(--signal-neutral-tint);
+  --color-plate: var(--plate);
+  --color-glass: var(--glass);
+  --color-glass-line: var(--glass-line);
+  --color-glass-strong: var(--glass-strong);
+
+  --radius-sm: calc(var(--radius) - 2px); /* 10px */
+  --radius-md: var(--radius); /* 12px */
+  --radius-lg: calc(var(--radius) + 2px); /* 14px */
+  --radius-xl: calc(var(--radius) + 5px); /* 17px */
+
+  --ease-brand: var(--ease);
+  --ease-brand-in-out: var(--ease-in-out);
+}
+
+/* Elevation as @utility, NOT as @theme --shadow-* keys.
+   Two failures had to be avoided here, and only this shape avoids both.
+
+   Registering these as `--shadow-*` theme keys produces nothing: Tailwind builds
+   the utility by substituting a shadow colour into the value, and its parser
+   cannot handle a value mixing the `inset` keyword with several comma-separated
+   shadows. --tw-shadow is left unset and the whole list computes to transparent,
+   with a green build and every elevated surface silently flat.
+
+   Setting `box-shadow` directly does paint, but then it collides with the ring:
+   box-shadow is one property, so on an element carrying both an elevation and a
+   focus ring whichever declaration comes last erases the other — an input loses
+   its elevation at rest, and a button loses it while focused.
+
+   So these feed Tailwind's own composition instead, exactly as its native shadow
+   utilities do. Elevation and ring then stack rather than fight.
+   tailwind-merge already knows this group through lib/utils.ts, so a className
+   override still resolves by argument order. */
+@utility shadow-e1 {
+  --tw-shadow: var(--elevation-1);
+  box-shadow:
+    var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow),
+    var(--tw-ring-shadow), var(--tw-shadow);
+}
+@utility shadow-e2 {
+  --tw-shadow: var(--elevation-2);
+  box-shadow:
+    var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow),
+    var(--tw-ring-shadow), var(--tw-shadow);
+}
+@utility shadow-e3 {
+  --tw-shadow: var(--elevation-3);
+  box-shadow:
+    var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow),
+    var(--tw-ring-shadow), var(--tw-shadow);
+}
+@utility shadow-e4 {
+  --tw-shadow: var(--elevation-4);
+  box-shadow:
+    var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow),
+    var(--tw-ring-shadow), var(--tw-shadow);
+}
+@utility shadow-e5 {
+  --tw-shadow: var(--elevation-5);
+  box-shadow:
+    var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow),
+    var(--tw-ring-shadow), var(--tw-shadow);
+}
+@utility shadow-glow {
+  --tw-shadow: var(--glow);
+  box-shadow:
+    var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow),
+    var(--tw-ring-shadow), var(--tw-shadow);
+}
+@utility shadow-button {
+  --tw-shadow: var(--button-rim), var(--elevation-2);
+  box-shadow:
+    var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow),
+    var(--tw-ring-shadow), var(--tw-shadow);
+}
+@utility shadow-control {
+  --tw-shadow: var(--control-rim), var(--elevation-2);
+  box-shadow:
+    var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow),
+    var(--tw-ring-shadow), var(--tw-shadow);
+}
+
+/* Seven type roles. Each carries family, size, line-height, weight and tracking
+   together. Asking only for a size and picking the rest at the call site is exactly
+   how a scale falls apart. type-display, type-body and type-data may have zero call
+   sites at first: they are the intended API, keep them. */
+@utility type-display {
+  font-family: var(--font-display);
+  font-size: 2.75rem;
+  line-height: 1.05;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  text-wrap: balance;
+}
+@utility type-title {
+  font-family: var(--font-display);
+  font-size: 2.125rem;
+  line-height: 1.1;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  text-wrap: balance;
+}
+@utility type-heading {
+  font-family: var(--font-display);
+  font-size: 1.875rem;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  text-wrap: balance;
+}
+@utility type-subhead {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+@utility type-body {
   font-family: var(--font-sans);
-  font-size: var(--step-0);
-  line-height: 1.55;
-  -webkit-font-smoothing: antialiased;
+  font-size: 1rem;
+  line-height: 1.5;
+  font-weight: 400;
+  letter-spacing: 0;
 }
-
-h1,
-h2,
-h3,
-p,
-ul,
-ol,
-figure {
-  margin: 0;
-}
-
-ul,
-ol {
-  padding: 0;
-  list-style: none;
-}
-
-a {
-  color: inherit;
-}
-
-button,
-input,
-select,
-textarea {
-  font: inherit;
-  color: inherit;
-}
-
-:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-
-.mono {
-  font-family: var(--font-mono);
+@utility type-data {
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  line-height: 1.45;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-/* ---------- assinatura: fundo ambiente ---------- */
-
-.ambient {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background:
-    radial-gradient(120% 75% at 50% -15%, var(--ambient-top), transparent 68%),
-    radial-gradient(100% 55% at 50% 115%, var(--ambient-bottom), transparent 70%);
-  transition: background 3s linear;
-}
-
-/* ---------- layout ---------- */
-
-.shell {
-  max-width: 1560px;
-  margin: 0 auto;
-  padding: 0 var(--s6) var(--s8);
-}
-
-.columns {
-  display: grid;
-  gap: var(--s7);
-  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
-  align-items: start;
-}
-
-/* Uma coluna só, quando a outra não tem nenhum módulo ligado. A largura fica
-   limitada para o texto não esticar pela tela toda de um monitor largo. */
-.columns.is-single {
-  grid-template-columns: minmax(0, 1fr);
-  max-width: 900px;
-}
-
-.col {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s7);
-  min-width: 0;
-}
-
-/* ---------- seções ---------- */
-
-.section-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--s4);
-  padding-bottom: var(--s3);
-  border-bottom: 1px solid var(--hairline);
-  margin-bottom: var(--s4);
-}
-
-.section-title {
-  display: flex;
-  align-items: baseline;
-  gap: var(--s3);
-  min-width: 0;
-}
-
-.eyebrow {
-  font-size: 0.6875rem;
+@utility type-caption {
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  line-height: 1.4;
   font-weight: 500;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.section-count {
-  font-size: var(--step--1);
-  color: var(--text-faint);
-}
-
-.section-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-  flex-wrap: wrap;
-}
-
-/* ---------- controles ---------- */
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--s2);
-  min-height: 32px;
-  padding: 0 var(--s3);
-  border: 1px solid var(--hairline);
-  border-radius: 7px;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: var(--step--1);
-  cursor: pointer;
-  transition:
-    background var(--fast) var(--ease),
-    color var(--fast) var(--ease),
-    border-color var(--fast) var(--ease);
-}
-
-.btn:hover:not(:disabled) {
-  background: var(--surface-hover);
-  color: var(--text);
-}
-
-.btn:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.btn-primary {
-  border-color: transparent;
-  background: var(--accent);
-  color: #16101f;
-  font-weight: 500;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: #c6a5ff;
-  color: #16101f;
-}
-
-.btn-ghost {
-  border-color: transparent;
-}
-
-.btn-ghost:hover:not(:disabled) {
-  background: var(--surface-hover);
-}
-
-.btn-danger:hover:not(:disabled) {
-  color: var(--danger);
-  border-color: var(--danger);
-}
-
-/* Se o painel sai do fundo, o campo entra nele: é o negativo do mesmo relevo.
-   Não é enfeite. O fundo do campo era `--surface`, que fica entre os dois tons
-   do gradiente do painel, então o campo desaparecia na metade de cima e
-   reaparecia na de baixo. Afundado, ele tem o mesmo contraste em qualquer
-   ponto do painel. */
-.field {
-  min-height: 32px;
-  padding: 0 var(--s3);
-  border: 1px solid transparent;
-  border-radius: 7px;
-  background: var(--canvas);
-  color: var(--text);
-  font-size: var(--step--1);
-  box-shadow:
-    inset 3px 3px 7px rgba(0, 0, 0, 0.5),
-    inset -2px -2px 6px var(--relevo-claro);
-  transition:
-    border-color var(--fast) var(--ease),
-    box-shadow var(--fast) var(--ease);
-}
-
-.field:focus-visible {
-  outline: none;
-  border-color: var(--accent-dim);
-  box-shadow:
-    inset 3px 3px 7px rgba(0, 0, 0, 0.5),
-    inset -2px -2px 6px var(--relevo-claro),
-    0 0 0 1px var(--accent-dim);
-}
-
-/* Selects nativos trazem uma seta do sistema que destoa do resto; desenhamos
-   a nossa em SVG inline para o controle ficar coerente com os chips. */
-select.field {
-  appearance: none;
-  padding-right: calc(var(--s3) + 14px);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239891ac' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right var(--s3) center;
-  cursor: pointer;
-}
-
-select.field option {
-  background: var(--surface);
-  color: var(--text);
-}
-
-/* O checkbox do sistema é a peça que mais destoa numa interface escura:
-   redesenhado do zero, com o check desenhado em SVG. */
-input[type='checkbox'] {
-  appearance: none;
-  flex: none;
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  border: 1px solid var(--hairline-strong);
-  border-radius: 5px;
-  background: transparent;
-  cursor: pointer;
-  transition:
-    background var(--fast) var(--ease),
-    border-color var(--fast) var(--ease);
-}
-
-input[type='checkbox']:hover {
-  border-color: var(--accent-dim);
-}
-
-input[type='checkbox']:checked {
-  background-color: var(--accent);
-  border-color: var(--accent);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='8' viewBox='0 0 10 8'%3E%3Cpath d='M1 4l2.5 2.5L9 1' fill='none' stroke='%2316101f' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: center;
-}
-
-.field::placeholder {
-  color: var(--text-faint);
-}
-
-.field:focus {
-  border-color: var(--accent-dim);
-}
-
-/* ---------- filtros ---------- */
-
-.filter-bar {
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-  flex-wrap: wrap;
-  margin-bottom: var(--s4);
-}
-
-.filter-search {
-  min-width: 180px;
-  flex: 1 1 180px;
-  max-width: 320px;
-}
-
-.filter-trigger {
-  display: none;
-}
-
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s2);
-  min-height: 28px;
-  padding: 0 var(--s3);
-  border: 1px solid var(--hairline);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: var(--step--1);
-  cursor: pointer;
-  white-space: nowrap;
-  transition:
-    background var(--fast) var(--ease),
-    color var(--fast) var(--ease),
-    border-color var(--fast) var(--ease);
-}
-
-.chip:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.chip:hover:not(:disabled) {
-  background: var(--surface-hover);
-  color: var(--text);
-}
-
-.chip-active {
-  border-color: var(--accent-dim);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--text);
-}
-
-/* ---------- abas ----------
-   Sublinhado em vez de pílula: um chip já quer dizer "filtro ligado" nesta
-   interface, e a aba precisa dizer outra coisa. */
-.tabs {
-  display: flex;
-  gap: var(--s4);
-  margin-bottom: var(--s4);
-  border-bottom: 1px solid var(--hairline);
-}
-
-.tab {
-  padding: 0 0 var(--s2);
-  border: 0;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  background: none;
-  color: var(--text-faint);
-  font-size: var(--step--1);
-  cursor: pointer;
-  white-space: nowrap;
-  transition:
-    color var(--fast) var(--ease),
-    border-color var(--fast) var(--ease);
-}
-
-.tab:hover {
-  color: var(--text);
-}
-
-.tab.is-active {
-  border-bottom-color: var(--accent);
-  color: var(--text);
-}
-
-.chip-removable {
-  cursor: default;
-  padding-right: var(--s2);
-}
-
-.chip-removable button {
-  border: 0;
-  background: none;
-  color: var(--text-faint);
-  cursor: pointer;
-  line-height: 1;
-  padding: 0 var(--s1);
-  font-size: 1rem;
-}
-
-.chip-removable button:hover {
-  color: var(--danger);
-}
-
-.active-filters {
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-  flex-wrap: wrap;
-  margin-bottom: var(--s4);
-}
-
-/* ---------- folha (mobile) ---------- */
-
-.sheet-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  background: rgba(6, 4, 12, 0.6);
-  backdrop-filter: blur(6px);
-  display: flex;
-  align-items: flex-end;
-}
-
-.sheet {
-  width: 100%;
-  max-height: 85dvh;
-  overflow-y: auto;
-  padding: var(--s5) var(--s5) calc(var(--s5) + env(safe-area-inset-bottom));
-  background: var(--surface);
-  border-top: 1px solid var(--hairline-strong);
-  border-radius: 18px 18px 0 0;
-  animation: sheet-in var(--med) var(--ease);
-}
-
-@keyframes sheet-in {
-  from {
-    transform: translateY(12px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-.sheet-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--s4);
-}
-
-.filter-sheet-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s3);
-  align-items: stretch;
-}
-
-/* ---------- faixa "agora" ---------- */
-
-.now {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--s5);
-  flex-wrap: wrap;
-  padding: var(--s8) 0 var(--s6);
-  border-bottom: 1px solid var(--hairline);
-  margin-bottom: var(--s7);
-}
-
-.now-main {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--s7);
-  flex-wrap: wrap;
-}
-
-.now-clock {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s1);
-}
-
-.now-time {
-  font-size: var(--hero);
-  font-weight: 300;
-  line-height: 0.92;
-  letter-spacing: -0.03em;
-  color: var(--text);
-}
-
-.now-date {
-  font-size: var(--step-0);
-  color: var(--text-muted);
-}
-
-.now-pomodoro {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s2);
-  padding-bottom: var(--s2);
-}
-
-.now-pomo-meter {
-  width: 168px;
-  height: 2px;
-  background: var(--hairline);
-  overflow: hidden;
-}
-
-.now-pomo-fill {
-  display: block;
-  height: 100%;
-  width: 100%;
-  transform-origin: left center;
-  transition: transform 1s linear;
-}
-
-.now-pomo-fill.is-focus {
-  background: var(--accent);
-}
-
-.now-pomo-fill.is-rest {
-  background: var(--success);
-}
-
-.now-pomo-info {
-  display: flex;
-  align-items: baseline;
-  gap: var(--s3);
-}
-
-.now-pomo-phase {
-  font-size: var(--step--1);
-  color: var(--text-muted);
-}
-
-.now-pomo-time {
-  font-size: var(--step-1);
-  color: var(--text);
-}
-
-.now-pomo-count {
-  font-size: var(--step--1);
-  color: var(--text-faint);
-}
-
-.now-pomo-actions {
-  display: flex;
-  gap: var(--s2);
-}
-
-.now-pomo-error {
-  font-size: var(--step--1);
-  color: var(--danger);
-}
-
-.now-aside {
-  display: flex;
-  align-items: center;
-  gap: var(--s3);
-}
-
-.now-sync {
-  font-size: var(--step--1);
-  color: var(--text-faint);
-}
-
-/* ---------- linhas de conteúdo ---------- */
-
-.row {
-  display: flex;
-  align-items: center;
-  gap: var(--s3);
-  padding: var(--s3) var(--s2);
-  border-bottom: 1px solid var(--hairline);
-  border-radius: 6px;
-  transition: background var(--fast) var(--ease);
-}
-
-.row:hover {
-  background: var(--surface-hover);
-}
-
-.row::before {
-  content: '';
-  width: 5px;
-  height: 5px;
-  flex: none;
-  border-radius: 50%;
-}
-
-.row-unread::before {
-  background: var(--accent);
-}
-
-.row-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  border: 0;
-  background: none;
-  text-align: left;
-  cursor: pointer;
-  padding: 0;
-}
-
-.row-title {
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.row-unread .row-title {
-  color: var(--text);
-  font-weight: 500;
-}
-
-.row-meta {
-  font-size: var(--step--1);
-  color: var(--text-faint);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* ---------- conversa ---------- */
-
-/* Quantas mensagens o fio tem. Fica ao lado do tempo, no lugar onde o olho
-   já procura o número da linha. */
-.row-count {
-  flex: none;
-  font-size: 0.6875rem;
-  color: var(--text-faint);
-  background: color-mix(in srgb, var(--surface) 70%, transparent);
-  border: 1px solid var(--hairline);
-  border-radius: 999px;
-  padding: 0 6px;
-  line-height: 1.6;
-}
-
-.row-unread .row-count {
-  color: var(--accent);
-  border-color: var(--accent-dim);
-}
-
-/* As mensagens do fio ficam recuadas sob a conversa, ligadas por uma linha:
-   o recuo é o que diz que elas pertencem àquela conversa e não à lista. */
-.thread-messages {
-  margin-left: calc(var(--s5) + var(--s2));
-  border-left: 1px solid var(--hairline);
-}
-
-.thread-row {
-  display: flex;
-  align-items: baseline;
-  gap: var(--s3);
-  width: 100%;
-  padding: var(--s2) var(--s3);
-  background: none;
-  border: 0;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-  font-size: var(--step--1);
-}
-
-.thread-row:hover {
-  background: color-mix(in srgb, var(--surface) 55%, transparent);
-}
-
-.thread-from {
-  flex: 1;
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.thread-row.row-unread .thread-from {
-  color: var(--text);
-  font-weight: 500;
-}
-
-/* A sua própria mensagem no meio do fio: mesma linha, marca discreta. Sem
-   isto, "você" e o remetente ficam indistinguíveis na lista da conversa. */
-.thread-sent {
-  flex: none;
-  font-size: 0.6875rem;
-  color: var(--text-faint);
-  border: 1px solid var(--hairline);
-  border-radius: 4px;
-  padding: 0 5px;
-}
-
-.thread-row.is-sent .thread-from {
-  color: var(--text-faint);
-}
-
-.thread-time {
-  flex: none;
-  color: var(--text-faint);
-}
-
-.thread-message.is-open > .thread-row {
-  color: var(--text);
-}
-
-/* ---------- e-mail aberto (inline) ---------- */
-
-.mail-item.is-open {
-  background: color-mix(in srgb, var(--surface) 60%, transparent);
-  border-radius: 8px;
-}
-
-.mail-item.is-open > .row {
-  border-bottom-color: var(--hairline-strong);
-}
-
-.mail-detail {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s3);
-  padding: var(--s4) var(--s4) var(--s4) calc(var(--s5) + var(--s2));
-  border-bottom: 1px solid var(--hairline);
-  animation: mail-open var(--med) var(--ease);
-}
-
-@keyframes mail-open {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.mail-body {
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-size: var(--step--1);
-  color: var(--text-muted);
-  line-height: 1.65;
-  max-height: 340px;
-  overflow-y: auto;
-  padding-right: var(--s3);
-}
-
-.mail-quoted-toggle {
-  align-self: flex-start;
-  padding: 0 var(--s3);
-  line-height: 1.2;
-  background: color-mix(in srgb, var(--surface) 70%, transparent);
-  border: 1px solid var(--hairline);
-  border-radius: 4px;
-  color: var(--text-faint);
-  cursor: pointer;
-  font-size: var(--step--1);
-  letter-spacing: 0.1em;
-}
-
-.mail-quoted-toggle:hover {
-  color: var(--text-muted);
-  border-color: var(--hairline-strong);
-}
-
-/* O histórico é o que já foi lido: fica mais apagado que a resposta e recuado
-   atrás de uma barra, como a citação que é. */
-.mail-quoted {
-  color: var(--text-faint);
-  border-left: 2px solid var(--hairline);
-  padding-left: var(--s3);
-}
-
-.mail-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s2);
-}
-
-.mail-reply {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s2);
-}
-
-/* `.field` é dimensionada para controles de uma linha; a caixa de resposta
-   precisa crescer em altura e respeitar a fonte do restante do painel. */
-textarea.mail-reply-input {
-  min-height: 88px;
-  padding: var(--s3);
-  font-family: inherit;
-  line-height: 1.6;
-  resize: vertical;
-}
-
-.mail-reply-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-  flex-wrap: wrap;
-}
-
-.mail-reply-sent {
-  font-size: var(--step--1);
-  color: var(--text-muted);
-}
-
-.row-time {
-  font-size: var(--step--1);
-  color: var(--text-faint);
-  flex: none;
-  min-width: 3.5ch;
-  text-align: right;
-}
-
-.row-tag {
-  font-size: 0.6875rem;
-  color: var(--text-faint);
-  border: 1px solid var(--hairline);
-  border-radius: 4px;
-  padding: 1px 5px;
-  flex: none;
-}
-
-/* ---------- etiqueta na linha ---------- */
-
-.row-actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex: none;
-}
-
-.row-tagger {
-  position: relative;
-  display: flex;
-}
-
-.icon-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: none;
-  color: var(--text-faint);
-  cursor: pointer;
-  transition:
-    color var(--fast) var(--ease),
-    background var(--fast) var(--ease),
-    border-color var(--fast) var(--ease);
-}
-
-.icon-btn:hover,
-.icon-btn[aria-expanded='true'] {
-  color: var(--text);
-  background: var(--surface);
-  border-color: var(--hairline);
-}
-
-.icon-btn.is-tagged {
-  color: var(--accent);
-}
-
-.icon-btn-danger:hover {
-  color: var(--danger);
-  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
-}
-
-/* Mesmo par scrim + popover do sino: o scrim fecha no clique fora e o menu
-   sobe acima das linhas seguintes. */
-.tag-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-}
-
-.tag-menu {
-  position: absolute;
-  top: calc(100% + var(--s2));
-  right: 0;
-  z-index: 41;
-  display: flex;
-  flex-direction: column;
-  min-width: 180px;
-  max-height: 320px;
-  overflow-y: auto;
-  padding: var(--s2);
-  background: var(--surface);
-  border: 1px solid var(--hairline-strong);
-  border-radius: 12px;
-  box-shadow: 0 24px 60px rgba(4, 2, 10, 0.55);
-  animation: modal-in var(--med) var(--ease);
-}
-
-.tag-menu-item {
-  padding: var(--s2) var(--s3);
-  border: 0;
-  border-radius: 7px;
-  background: none;
-  color: var(--text-muted);
-  font-size: var(--step--1);
-  text-align: left;
-  cursor: pointer;
-  transition:
-    color var(--fast) var(--ease),
-    background var(--fast) var(--ease);
-}
-
-.tag-menu-item:hover {
-  color: var(--text);
-  background: var(--surface-hover);
-}
-
-/* ---------- configuração ---------- */
-
-.config-form {
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-  flex-wrap: wrap;
-  margin-bottom: var(--s4);
-}
-
-.config-form-inline {
-  padding: var(--s3) var(--s4) var(--s3) calc(var(--s5) + var(--s2));
-  margin-bottom: 0;
-}
-
-.config-check {
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-  font-size: var(--step--1);
-  color: var(--text-muted);
-}
-
-/* ---------- tarefas ---------- */
-
-.task-group-label {
-  display: block;
-  margin: var(--s5) 0 var(--s2);
-}
-
-.task-group-label:first-child {
-  margin-top: 0;
-}
-
-.task-row.is-done .row-title {
-  color: var(--text-faint);
-  text-decoration: line-through;
-}
-
-.task-flag {
-  font-size: 0.6875rem;
-  padding: 1px 6px;
-  border-radius: 4px;
-  border: 1px solid currentColor;
-  flex: none;
-}
-
-.task-flag-high {
-  color: var(--warn);
-}
-
-.task-flag-low {
-  color: var(--text-faint);
-}
-
-.task-due {
-  font-size: var(--step--1);
-  color: var(--text-faint);
-  flex: none;
-}
-
-.task-item {
-  border-bottom: 1px solid var(--hairline);
-}
-
-.task-item .row {
-  border-bottom: 0;
-}
-
-/* A subtarefa é filha da tarefa: o recuo e o filete à esquerda dizem isso
-   sem precisar de rótulo. O filete começa alinhado ao checkbox do pai. */
-.subtasks {
-  margin: 0 0 0 calc(var(--s6) + var(--s4));
-  padding-left: var(--s4);
-  border-left: 1px solid var(--hairline);
-  display: flex;
-  flex-direction: column;
-  gap: var(--s1);
-}
-
-/* Só reserva respiro embaixo quando há de fato subtarefas listadas —
-   senão uma tarefa simples ganharia um vão sem conteúdo. */
-.subtasks:has(.subtask) {
-  margin-bottom: var(--s3);
-}
-
-.subtask {
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-  font-size: var(--step--1);
-  color: var(--text-muted);
-}
-
-.subtask.is-done {
-  color: var(--text-faint);
-  text-decoration: line-through;
-}
-
-.subtask-title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.subtask-add {
-  display: flex;
-  gap: var(--s2);
-  margin-top: var(--s1);
-}
-
-.subtask-add .field {
-  flex: 1;
-  min-width: 0;
-}
-
-/* Um campo "nova subtarefa" sob cada tarefa polui a lista inteira. Onde há
-   ponteiro, ele só aparece na tarefa sob o cursor ou com foco de teclado;
-   em telas de toque (sem hover) ele fica sempre visível, senão não haveria
-   como alcançá-lo. */
-/* Um "+" discreto antes do checkbox abre o campo de subtarefa só quando
-   pedido — economiza uma linha inteira por tarefa na lista. */
-.subtask-toggle {
-  flex: none;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--text-faint);
-  font-size: 0.9rem;
-  line-height: 1;
-  cursor: pointer;
-  transition:
-    background var(--fast) var(--ease),
-    color var(--fast) var(--ease);
-}
-
-.subtask-toggle:hover {
-  background: var(--surface-hover);
-  color: var(--accent);
-}
-
-.subtask-toggle[aria-expanded='true'] {
-  color: var(--accent);
-}
-
-/* A seta de revelar as subtarefas. Quando a tarefa não tem nenhuma, o mesmo
-   espaço fica vago em vez de sumir: sem isso os checkboxes da lista
-   desalinhariam entre tarefas com e sem subtarefa. */
-.subtask-caret {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--text-faint);
-  cursor: pointer;
-  transition:
-    transform var(--fast) var(--ease),
-    background var(--fast) var(--ease),
-    color var(--fast) var(--ease);
-}
-
-.subtask-caret.is-empty {
-  cursor: default;
-}
-
-.subtask-caret:hover:not(.is-empty) {
-  background: var(--surface-hover);
-  color: var(--accent);
-}
-
-.subtask-caret[aria-expanded='true'] {
-  transform: rotate(90deg);
-  color: var(--accent);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .subtask-caret {
-    transition: none;
-  }
-}
-
-/* ---------- jira ---------- */
-
-/* A linha passou a ter duas alturas: o título em cima, a situação embaixo.
-   O alinhamento sai de `center` para o topo, senão o marcador de tipo flutua
-   no meio de uma linha que agora é mais alta. */
-.jira-main {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 1;
-  min-width: 0;
-}
-
-.jira-line {
-  display: flex;
-  align-items: baseline;
-  gap: var(--s3);
-  min-width: 0;
-}
-
-.jira-meta {
-  display: flex;
-  align-items: center;
-  gap: var(--s3);
-  font-size: 0.75rem;
-  color: var(--text-faint);
-}
-
-/* A situação é o que muda de linha para linha; a cor separa "já comecei" de
-   "ainda não" sem precisar ler. */
-.jira-status {
-  color: var(--text-muted);
-}
-
-.jira-status-indeterminate {
-  color: var(--accent);
-}
-
-/* Entregue é a única situação que não pede nada de você: verde, e a aba
-   "Entregues" fica legível de relance, sem ler status por status. */
-.jira-status-done {
-  color: var(--success);
-}
-
-/* Esquecido e atrasado são os dois avisos do painel: ficam quentes, e são
-   raros o bastante para a cor continuar significando alguma coisa. */
-.jira-stale {
-  color: var(--warn);
-}
-
-.jira-due.is-overdue {
-  color: var(--danger);
-}
-
-.jira-row {
-  display: flex;
-  /* `baseline` alinhava pela primeira linha de texto; com a linha agora em
-     dois níveis, o marcador de tipo precisa acompanhar o topo. */
-  align-items: flex-start;
-  gap: var(--s3);
-  padding: var(--s3) 0;
-  border-bottom: 1px solid var(--hairline);
-}
-
-.jira-kind {
-  line-height: 1.55;
-  font-size: 0.6875rem;
-  color: var(--text-faint);
-  flex: none;
-}
-
-.jira-key {
-  font-size: var(--step--1);
-  color: var(--accent);
-  text-decoration: none;
-  flex: none;
-}
-
-.jira-key:hover {
-  text-decoration: underline;
-}
-
-.jira-summary {
-  flex: 1;
-  min-width: 0;
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.jira-role {
-  font-size: 0.625rem;
-  letter-spacing: 0.08em;
-  padding: 1px 5px;
-  border-radius: 4px;
-  border: 1px solid currentColor;
-  flex: none;
-}
-
-.jira-role-rel {
-  color: var(--success);
-}
-
-.jira-role-res {
-  color: var(--warn);
-}
-
-/* Decisão pendente é a única marca que pede ação de quem olha, e por isso é a
-   que puxa mais atenção que os selos de papel. */
-.jira-role-aprov {
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.jira-group-label {
-  display: block;
-  margin: var(--s4) 0 var(--s2);
-}
-
-.jira-project:first-child .jira-group-label {
-  margin-top: 0;
-}
-
-/* Marca de ramo: dá a leitura de hierarquia sem desenhar uma árvore
-   inteira de linhas guia. */
-.jira-branch {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  margin-right: calc(var(--s2) * -1);
-  border-left: 1px solid var(--hairline-strong);
-  border-bottom: 1px solid var(--hairline-strong);
-  border-bottom-left-radius: 3px;
-  transform: translateY(-2px);
-}
-
-/* ---------- agenda ---------- */
-
-.agenda-day {
-  margin-bottom: var(--s4);
-}
-
-.agenda-day:last-child {
-  margin-bottom: 0;
-}
-
-.agenda-day-label {
-  display: block;
-  margin-bottom: var(--s2);
-}
-
-.agenda-item {
-  display: flex;
-  align-items: baseline;
-  gap: var(--s3);
-  padding: var(--s2) 0;
-  border-bottom: 1px solid var(--hairline);
-}
-
-.agenda-time {
-  font-size: var(--step--1);
-  color: var(--text);
-  min-width: 5ch;
-  flex: none;
-}
-
-.agenda-title {
-  flex: 1;
-  min-width: 0;
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* ---------- prs ---------- */
-
-.pulls-line {
-  font-size: var(--step--1);
-  color: var(--text-muted);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.pulls-line a {
-  color: var(--accent);
-}
-
-.pulls-repos {
-  margin-top: var(--s5);
-  padding-top: var(--s3);
-  border-top: 1px solid var(--hairline);
-}
-
-.pulls-repos summary {
-  font-size: var(--step--1);
-  color: var(--text-faint);
-  cursor: pointer;
-}
-
-.pulls-repos summary:hover {
-  color: var(--text-muted);
-}
-
-.pulls-repo-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s2);
-  margin: var(--s3) 0;
-}
-
-.pulls-repo-add {
-  display: flex;
-  gap: var(--s2);
-}
-
-.pulls-repo-add .field {
-  flex: 1;
-  min-width: 0;
-}
-
-/* ---------- sino de notificações ---------- */
-
-.bell {
-  position: relative;
-}
-
-.bell-badge {
-  position: absolute;
-  top: -5px;
-  right: -5px;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #16101f;
-  font-size: 0.625rem;
-  font-weight: 600;
-  line-height: 16px;
-  text-align: center;
-}
-
-.bell-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-}
-
-.bell-popover {
-  position: absolute;
-  top: calc(100% + var(--s2));
-  right: 0;
-  z-index: 41;
-  width: min(460px, calc(100vw - var(--s5)));
-  max-height: 70vh;
-  overflow-y: auto;
-  padding: var(--s4);
-  background: var(--surface);
-  border: 1px solid var(--hairline-strong);
-  border-radius: 14px;
-  box-shadow: 0 24px 60px rgba(4, 2, 10, 0.55);
-  animation: modal-in var(--med) var(--ease);
-}
-
-/* A contagem à esquerda e a ação à direita, acima da lista: quem abre o sino
-   para limpá-lo não precisa procurar o botão dentro dela. */
-.bell-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--s3);
-  padding-bottom: var(--s3);
-  margin-bottom: var(--s2);
-  border-bottom: 1px solid var(--hairline);
-}
-
-.bell-item {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s2);
-  padding: var(--s3) 0;
-  border-bottom: 1px solid var(--hairline);
-}
-
-/* Títulos de menção do Jira são longos: precisam quebrar em várias linhas
-   em vez de esticar a caixa ou passar por cima do que vem depois. */
-.bell-item a {
-  display: block;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-
-.bell-item:last-child {
-  border-bottom: 0;
-}
-
-.bell-item.is-read {
-  color: var(--text-faint);
-}
-
-.bell-item a {
-  color: var(--text);
-  text-decoration: none;
-}
-
-.bell-item.is-read a {
-  color: var(--text-faint);
-}
-
-.bell-item a:hover {
-  text-decoration: underline;
-}
-
-.bell-item-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--s2);
-}
-
-.bell-source {
-  font-size: 0.625rem;
-  letter-spacing: 0.08em;
-  color: var(--text-faint);
-}
-
-/* ---------- modal ---------- */
-
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--s5);
-  background: rgba(6, 4, 12, 0.62);
-  backdrop-filter: blur(8px);
-  animation: fade-in var(--med) var(--ease);
-}
-
-.modal {
-  width: min(460px, 100%);
-  max-height: 88dvh;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: var(--s4);
-  padding: var(--s6);
-  background: var(--surface);
-  border: 1px solid var(--hairline-strong);
-  border-radius: 16px;
-  animation: modal-in var(--med) var(--ease);
-}
-
-.modal-title {
-  font-size: var(--step-1);
-  font-weight: 500;
-}
-
-.modal label {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s2);
-  font-size: var(--step--1);
-  color: var(--text-muted);
-}
-
-.modal .field {
-  min-height: 38px;
-}
-
-.modal-hint {
-  font-size: 0.75rem;
-  color: var(--text-faint);
-}
-
-.modal-row {
-  display: flex;
-  gap: var(--s2);
-  flex-wrap: wrap;
-}
-
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--s2);
-  margin-top: var(--s2);
-}
-
-.modal-body {
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-size: var(--step--1);
-  color: var(--text-muted);
-  line-height: 1.65;
-  max-height: 46vh;
-  overflow-y: auto;
-  padding-right: var(--s2);
-}
-
-@keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes modal-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px) scale(0.99);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-/* ---------- estados ---------- */
-
-.skeleton-row {
-  padding: var(--s3) 0;
-  border-bottom: 1px solid var(--hairline);
-}
-
-.skeleton {
-  display: block;
-  height: 12px;
-  border-radius: 4px;
-  background: linear-gradient(90deg, var(--surface) 25%, var(--surface-hover) 50%, var(--surface) 75%);
-  background-size: 200% 100%;
-  animation: skeleton-sweep 1.4s linear infinite;
-}
-
-@keyframes skeleton-sweep {
-  from {
-    background-position: 200% 0;
-  }
-  to {
-    background-position: -200% 0;
-  }
-}
-
-.empty {
-  padding: var(--s6) 0;
-  color: var(--text-faint);
-  font-size: var(--step--1);
-}
-
-/* Um painel sem credencial é informação, não alarme: o erro fica contido
-   num bloco discreto com marcador lateral, em vez de texto vermelho solto
-   competindo com o conteúdo real das outras seções. */
-.panel-error {
-  margin: var(--s2) 0;
-  padding: var(--s3);
-  border-left: 2px solid var(--warn);
-  border-radius: 0 6px 6px 0;
-  background: color-mix(in srgb, var(--warn) 7%, transparent);
-  color: var(--text-muted);
-  font-size: var(--step--1);
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
-/* ---------- login ---------- */
-
-.login {
-  min-height: 100dvh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--s5);
-}
-
-.login-form {
-  width: min(360px, 100%);
-  display: flex;
-  flex-direction: column;
-  gap: var(--s4);
-}
-
-.login-brand {
-  display: flex;
-  align-items: center;
-  gap: var(--s3);
-}
-
-.login-mark {
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* The mesh is written twice, here and on body, with identical gradient stacks and
+   both background-attachment: fixed. Change one and you must change the other. */
+@utility bg-mesh {
+  background-color: var(--mesh-base);
+  background-image:
+    radial-gradient(at 10% 4%, var(--mesh-1) 0px, transparent 55%),
+    radial-gradient(at 82% 0%, var(--mesh-2) 0px, transparent 50%),
+    radial-gradient(at 92% 58%, var(--mesh-3) 0px, transparent 48%),
+    radial-gradient(at 16% 84%, var(--mesh-4) 0px, transparent 52%),
+    radial-gradient(at 58% 38%, var(--mesh-5) 0px, transparent 58%);
+  background-attachment: fixed;
+  background-size: cover;
+}
+@utility glass {
+  background-color: var(--glass);
+  backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid var(--glass-line);
+}
+@utility glass-strong {
+  background-color: var(--glass-strong);
+  backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid var(--glass-line);
+}
+
+/* Thin scrollbar, global on `*`, deliberately NOT a utility: a utility version gets
+   remembered in three scroll areas and forgotten in thirteen. Unlayered on purpose. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+*::-webkit-scrollbar {
   width: 10px;
   height: 10px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 22px 4px color-mix(in srgb, var(--accent) 45%, transparent);
 }
-
-.login-title {
-  font-size: var(--step-2);
-  font-weight: 500;
-  letter-spacing: -0.01em;
-}
-
-.login-sub {
-  color: var(--text-muted);
-  font-size: var(--step--1);
-  margin-bottom: var(--s3);
-}
-
-.login-field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s2);
-  font-size: var(--step--1);
-  color: var(--text-muted);
-}
-
-.login-field .field {
-  min-height: 40px;
-}
-
-.login-error {
-  color: var(--danger);
-  font-size: var(--step--1);
-}
-
-.login-submit {
-  min-height: 40px;
-  margin-top: var(--s2);
-}
-
-/* ---------- entrada coordenada ---------- */
-
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* `backwards` em vez de `both`: o transform vale só até a animação acabar.
-   Com `both` ele fica grudado, cada bloco vira contexto de empilhamento e
-   o popover do sino some atrás da coluna seguinte (e o scrim `fixed` passa
-   a se ancorar no cabeçalho em vez da viewport). */
-.now {
-  animation: rise 420ms var(--ease) backwards;
-}
-
-.columns > .col:first-child {
-  animation: rise 420ms var(--ease) 60ms backwards;
-}
-
-.columns > .col:last-child {
-  animation: rise 420ms var(--ease) 120ms backwards;
-}
-
-/* ---------- responsivo ---------- */
-
-@media (max-width: 1023px) {
-  .columns {
-    grid-template-columns: 1fr;
-    gap: var(--s6);
-  }
-
-  .shell {
-    padding: 0 var(--s5) var(--s7);
-  }
-
-  .now {
-    padding: var(--s7) 0 var(--s5);
-  }
-}
-
-@media (max-width: 639px) {
-  .shell {
-    padding: 0 var(--s4) calc(var(--s7) + env(safe-area-inset-bottom));
-  }
-
-  .now {
-    padding: var(--s5) 0 var(--s4);
-    align-items: flex-start;
-    flex-direction: column;
-    gap: var(--s4);
-    margin-bottom: var(--s6);
-  }
-
-  .now-main {
-    gap: var(--s4);
-    width: 100%;
-  }
-
-  /* No celular a altura é o recurso escasso: o pomodoro vira uma linha só,
-     com medidor, tempo e ações lado a lado. */
-  .now-pomodoro {
-    flex-direction: row;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--s3);
-    padding-bottom: 0;
-    width: 100%;
-  }
-
-  .now-pomo-meter {
-    width: 100%;
-    order: -1;
-  }
-
-  .now-pomo-info {
-    flex: 1;
-  }
-
-  .now-aside {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .now-sync {
-    flex: 1;
-  }
-
-  .btn,
-  .field {
-    min-height: 44px;
-  }
-
-  .chip {
-    min-height: 40px;
-  }
-
-  .filter-bar {
-    display: none;
-  }
-
-  /* O gatilho de filtro não merece uma linha inteira num celular: fica
-     compacto e alinhado à direita, encostado no topo da lista. */
-  .filter-trigger {
-    display: inline-flex;
-    min-height: 36px;
-    margin: calc(var(--s3) * -1) 0 var(--s2) auto;
-  }
-
-  .col {
-    gap: var(--s6);
-  }
-
-  .modal-backdrop {
-    align-items: flex-end;
-    padding: 0;
-  }
-
-  .modal {
-    width: 100%;
-    border-radius: 18px 18px 0 0;
-    padding: var(--s5) var(--s5) calc(var(--s5) + env(safe-area-inset-bottom));
-  }
-
-  .subtasks {
-    margin-left: var(--s5);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-
-  .now,
-  .columns > .col {
-    animation: none;
-  }
-}
-
-/* ---------- integrações (tela de configuração) ---------- */
-
-.conn-intro {
-  margin-bottom: var(--s5);
-  color: var(--text-muted);
-  font-size: var(--step--1);
-  max-width: 60ch;
-}
-
-.conn-card {
-  padding: var(--s4) 0 var(--s5);
-  border-bottom: 1px solid var(--hairline);
-}
-
-.conn-card:last-child {
-  border-bottom: 0;
-}
-
-.conn-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--s4);
-  margin-bottom: var(--s3);
-}
-
-.conn-title h3 {
-  font-size: var(--step-1);
-  font-weight: 500;
-}
-
-.conn-summary {
-  color: var(--text-muted);
-  font-size: var(--step--1);
-}
-
-/* O estado do módulo precisa ser legível de relance na lista inteira, então
-   o interruptor carrega o rótulo em vez de depender só da caixa marcada. */
-.conn-switch {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s2);
-  flex: none;
-  font-size: var(--step--1);
-  color: var(--text-muted);
-  cursor: pointer;
-}
-
-.conn-card.is-on .conn-switch {
-  color: var(--accent);
-}
-
-.conn-google {
-  margin-top: var(--s3);
-}
-
-.conn-note {
-  margin-top: var(--s3);
-  padding: var(--s3);
-  border: 1px dashed var(--hairline-strong);
-  border-radius: 8px;
-  color: var(--text-muted);
-  font-size: var(--step--1);
-  max-width: 70ch;
-}
-
-.conn-note code {
-  font-family: var(--font-mono);
-  color: var(--text);
-}
-
-/* A URI é longa e precisa ser copiada inteira: quebra em qualquer ponto em
-   vez de estourar a caixa. */
-.conn-uri {
-  display: inline-block;
-  margin-top: var(--s1);
-  overflow-wrap: anywhere;
-}
-
-.conn-calendars {
-  flex-basis: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: var(--s2);
-  margin-top: var(--s3);
-  padding: var(--s3);
-  border: 1px solid var(--hairline);
-  border-radius: 8px;
-}
-
-.conn-calendars legend {
-  padding: 0 var(--s2);
-  font-size: var(--step--1);
-  color: var(--text-muted);
-}
-
-.conn-calendar {
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-  font-size: var(--step--1);
-  cursor: pointer;
-}
-
-.conn-calendars .btn {
-  align-self: flex-start;
-  margin-top: var(--s2);
-}
-
-.conn-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--s3);
-  flex-wrap: wrap;
-  margin-top: var(--s3);
-}
-
-/* Botão de ajuda é secundário: fica com sublinhado pontilhado em vez de
-   borda, para não competir com o "Conectar" ao lado. */
-.conn-help-toggle {
-  border: 0;
-  padding-left: 0;
-  padding-right: 0;
-  text-decoration: underline;
-  text-decoration-style: dotted;
-  text-underline-offset: 3px;
-}
-
-.conn-help-toggle:hover:not(:disabled) {
+*::-webkit-scrollbar-track {
   background: transparent;
-  color: var(--accent);
+}
+*::-webkit-scrollbar-thumb {
+  background-color: var(--line-strong);
+  background-clip: content-box;
+  border: 3px solid transparent;
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--ink-dim);
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
-.conn-instructions {
-  margin: var(--s2) 0 var(--s3);
-  padding-left: var(--s4);
-  border-left: 1px solid var(--hairline);
-  display: flex;
-  flex-direction: column;
-  gap: var(--s2);
-  color: var(--text-muted);
-  font-size: var(--step--1);
-  max-width: 70ch;
+@layer base {
+  * {
+    border-color: var(--border);
+    outline-color: var(--ring);
+  }
+  body {
+    background-color: var(--mesh-base);
+    background-image:
+      radial-gradient(at 10% 4%, var(--mesh-1) 0px, transparent 55%),
+      radial-gradient(at 82% 0%, var(--mesh-2) 0px, transparent 50%),
+      radial-gradient(at 92% 58%, var(--mesh-3) 0px, transparent 48%),
+      radial-gradient(at 16% 84%, var(--mesh-4) 0px, transparent 52%),
+      radial-gradient(at 58% 38%, var(--mesh-5) 0px, transparent 58%);
+    background-attachment: fixed;
+    color: var(--foreground);
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+    font-size: 1rem;
+    line-height: 1.6;
+  }
+  /* Numbers in a table align by digit everywhere, without every cell asking. */
+  th,
+  td {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Tailwind v4's preflight leaves buttons on the arrow cursor, unlike v3. On a
+     dashboard where nearly every control is a button, that reads as "not
+     clickable" on almost everything. Fixed here rather than per component, so a
+     control added tomorrow cannot forget it — and in @layer base, so a call site
+     that genuinely wants another cursor can still say so with a utility. */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  [role='checkbox'],
+  [role='radio'],
+  [role='switch'],
+  [role='tab'],
+  [role='option'],
+  select:not(:disabled),
+  summary,
+  input[type='checkbox']:not(:disabled),
+  input[type='radio']:not(:disabled),
+  label:has(> input[type='checkbox']:not(:disabled)),
+  label:has(> input[type='radio']:not(:disabled)) {
+    cursor: pointer;
+  }
+
+  /* A disabled control that keeps the arrow gives no reason for the click that
+     did nothing. */
+  button:disabled,
+  select:disabled,
+  textarea:disabled,
+  input:disabled,
+  [aria-disabled='true'] {
+    cursor: not-allowed;
+  }
+
+  /* One cut for the whole product, in one place, instead of every component
+     remembering its own fallback. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
-.conn-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s3);
-  margin: var(--s3) 0;
-}
-
-.conn-item {
-  display: flex;
-  align-items: center;
-  gap: var(--s3);
-  flex-wrap: wrap;
-  padding: var(--s3);
-  border: 1px solid var(--hairline);
-  border-radius: 10px;
-  background: var(--surface);
-}
-
-.conn-item-main {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 1;
-  min-width: 0;
-}
-
-.conn-item-label {
-  font-weight: 500;
-}
-
-.conn-item-detail {
-  font-size: var(--step--1);
-  color: var(--text-faint);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.conn-warn {
-  font-size: var(--step--1);
-  color: var(--warn);
-}
-
-.conn-item-actions {
-  display: flex;
-  gap: var(--s2);
-  flex-wrap: wrap;
-}
-
-.conn-result {
-  flex-basis: 100%;
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-  font-size: var(--step--1);
-}
-
-.conn-result.is-ok {
-  color: var(--success);
-}
-
-.conn-result.is-bad {
-  color: var(--danger);
-}
-
-.conn-form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s3);
-  margin-top: var(--s3);
-  padding: var(--s4);
-  border: 1px solid var(--hairline-strong);
-  border-radius: 10px;
-  background: var(--surface);
-  max-width: 44rem;
-}
-
-.conn-field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s1);
-}
-
-.conn-label {
-  font-size: var(--step--1);
-  color: var(--text-muted);
-}
-
-.conn-field .field {
-  min-height: 38px;
-}
-
-.conn-help {
-  font-size: 0.75rem;
-  color: var(--text-faint);
-}
-
-.conn-form-actions {
-  display: flex;
-  gap: var(--s2);
-  margin-top: var(--s2);
-}
-
-/* ---------- boas-vindas (nenhum módulo ligado) ---------- */
-
-.welcome {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--s4);
-  padding: var(--s8) var(--s4);
-  text-align: center;
-}
-
-.welcome-text {
-  max-width: 46ch;
-  color: var(--text-muted);
-}
-
-/* ---------- pull requests ---------- */
-
-.pull-row {
-  display: flex;
-  align-items: baseline;
-  gap: var(--s3);
-  padding: var(--s3) 0;
-  border-bottom: 1px solid var(--hairline);
-}
-
-.pull-row:last-child {
-  border-bottom: 0;
-}
-
-.pull-title {
-  flex: 1;
-  min-width: 0;
-  text-decoration: none;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pull-title:hover {
-  text-decoration: underline;
-}
-
-.pull-meta {
-  flex: none;
-  font-size: var(--step--1);
-  color: var(--text-faint);
-}
-
-.row-tag-accent {
-  color: var(--accent);
-  border-color: var(--accent-dim);
-}
-
-/* ---------- grade arrastável ---------- */
-
-/* A grade só entra em modo de arrastar pelo botão "Organizar". Fora dele o
-   painel é conteúdo comum: clicar num e-mail, marcar uma tarefa e selecionar
-   texto continuam funcionando. */
-
-.grid-hint {
-  margin-bottom: var(--s4);
-  font-size: var(--step--1);
-  color: var(--text-faint);
-  opacity: 0;
-  transition: opacity var(--med) var(--ease);
-}
-
-/* A dica só existe dentro do modo, mas ocupa o espaço o tempo todo: aparecer
-   empurraria a grade inteira para baixo no meio do arrasto. */
-.grid-hint.is-on {
-  opacity: 1;
-  color: var(--accent);
-}
-
-/* Sem fundo e sem borda, o painel era conteúdo solto sobre a tela e não dava
-   para dizer onde um módulo terminava e o outro começava. O relevo resolve
-   isso sem desenhar uma moldura: o que delimita é a luz.
-
-   A superfície é uma classe à parte porque a coluna única das telas estreitas
-   não usa a grade, e sem isso os módulos voltariam a ficar soltos ali. */
-.painel,
-.grid-panel {
-  /* Contido: a altura do painel é fixa na grade, então cada pixel de recheio
-     sai do conteúdo que cabe. */
-  padding: var(--s4);
-  border-radius: var(--painel-raio);
-  /* O gradiente é o que faz o corpo parecer curvo: mais claro do lado da luz,
-     mais escuro do lado oposto. */
-  background: linear-gradient(145deg, var(--painel-alto), var(--painel-baixo));
-  /* A borda de 1px não é a delimitação; ela só impede que as duas superfícies
-     se encostem sem transição nas telas que achatam a sombra. */
-  border: 1px solid rgba(255, 255, 255, 0.03);
-  box-shadow:
-    var(--relevo-quina),
-    10px 12px 28px var(--relevo-escuro),
-    -8px -8px 20px var(--relevo-claro);
-  transition: box-shadow var(--med) var(--ease);
-}
-
-/* Só a grade impõe altura ao painel; na coluna o conteúdo é que manda. */
-.grid-panel {
-  min-width: 0;
-  overflow: hidden;
-}
-
-/* O painel tem altura definida pela grade, então o conteúdo rola por dentro.
-   Sem isto, redimensionar não teria efeito visível: a lista continuaria
-   crescendo para fora do quadro. */
-.grid-panel-body {
-  height: 100%;
-  overflow-y: auto;
-  overflow-x: hidden;
-  /* O espaço da barra fica reservado mesmo quando ela não está lá. Sem isto o
-     conteúdo pula de lado no exato momento em que o painel encolhe o
-     suficiente para transbordar — que é o instante em que se está
-     redimensionando e olhando para ele. */
-  scrollbar-gutter: stable;
-  padding-right: var(--s1);
-}
-
-/* Em modo de organizar o painel sobe mais um degrau e ganha um anel: já é uma
-   peça solta na tela, e precisa parecer que pode ser pega. */
-.dashboard-grid.is-arranging .grid-panel {
+/* ---------- grade arrastável ----------
+   Estas regras miram nomes de classe gerados pela react-grid-layout, que nenhum
+   utilitário alcança. É o único lugar do sistema que precisa de CSS escrito à mão,
+   e mesmo aqui a cor sai só dos tokens. */
+.dashboard-grid.is-arranging [data-slot='grid-panel'] {
+  outline: 1px dashed var(--line-strong);
+  outline-offset: 0.5rem;
   cursor: grab;
-  box-shadow:
-    var(--relevo-quina),
-    16px 18px 38px var(--relevo-escuro),
-    -10px -10px 26px var(--relevo-claro),
-    0 0 0 1px var(--accent-dim);
 }
 
-.dashboard-grid.is-arranging .grid-panel:hover {
-  box-shadow:
-    var(--relevo-quina),
-    16px 18px 38px var(--relevo-escuro),
-    -10px -10px 26px var(--relevo-claro),
-    0 0 0 1px var(--accent);
+.dashboard-grid.is-arranging [data-slot='grid-panel']:hover {
+  outline-color: var(--brand-edge);
 }
 
 /* Enquanto arrasta, o conteúdo não deve capturar o ponteiro nem rolar. */
-.dashboard-grid.is-arranging .grid-panel-body {
+.dashboard-grid.is-arranging [data-slot='grid-panel'] > * {
   pointer-events: none;
   overflow: hidden;
 }
@@ -2271,23 +665,16 @@ textarea.mail-reply-input {
   z-index: 3;
 }
 
-.react-grid-item.react-draggable-dragging .grid-panel {
-  box-shadow:
-    0 26px 60px rgba(4, 2, 10, 0.62),
-    -10px -10px 28px var(--relevo-claro),
-    0 0 0 1px var(--accent);
+.react-grid-item.react-draggable-dragging [data-slot='grid-panel'] {
+  outline-color: var(--brand);
+  box-shadow: var(--elevation-5);
 }
 
-/* O retângulo que mostra onde o painel vai cair. É o negativo do relevo: um
-   encaixe afundado, com a luz e a sombra trocadas de lado. */
+/* O retângulo que mostra onde o painel vai cair. */
 .react-grid-item.react-grid-placeholder {
-  background: var(--canvas);
-  border-radius: var(--painel-raio);
+  background: var(--brand-tint);
+  border-radius: var(--radius-xl);
   opacity: 1;
-  box-shadow:
-    inset 7px 7px 16px var(--relevo-escuro),
-    inset -5px -5px 14px var(--relevo-claro),
-    0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
 /* A alça de redimensionar vem da biblioteca com uma seta cinza em PNG; esta é
@@ -2299,7 +686,7 @@ textarea.mail-reply-input {
   right: 2px;
   bottom: 2px;
   opacity: 0;
-  transition: opacity var(--fast) var(--ease);
+  transition: opacity 150ms var(--ease);
 }
 
 .dashboard-grid.is-arranging .react-resizable-handle {
@@ -2313,288 +700,17 @@ textarea.mail-reply-input {
   bottom: 3px;
   width: 9px;
   height: 9px;
-  border-right: 2px solid var(--accent);
-  border-bottom: 2px solid var(--accent);
+  border-right: 2px solid var(--brand);
+  border-bottom: 2px solid var(--brand);
   border-bottom-right-radius: 2px;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .grid-hint,
-  .painel,
-  .grid-panel,
-  .dashboard-grid .react-resizable-handle {
-    transition: none;
-  }
-
-  .react-grid-item.cssTransforms {
-    transition: none;
-  }
+/* Compact density. OUTSIDE any @layer, on purpose: the cells carry utilities and a
+   utility beats @layer by LAYER ORDER, not specificity. Inside any layer these rules
+   apply nothing. Keep them last in the file. */
+[data-density='compact'] [data-slot='table-cell'] {
+  padding-block: 0.5rem;
 }
-
-/* Relevo é delimitação de baixo contraste por natureza. Para quem pede mais
-   contraste, a borda deixa de ser acessório e passa a ser a delimitação. */
-@media (prefers-contrast: more) {
-  .painel,
-  .grid-panel {
-    border-color: var(--hairline-strong);
-  }
-
-  .dashboard-grid.is-arranging .grid-panel {
-    border-color: var(--accent-dim);
-  }
-}
-
-.grid-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--s4);
-  margin-bottom: var(--s4);
-}
-
-.grid-bar .grid-hint {
-  margin-bottom: 0;
-}
-
-.grid-bar-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-  flex: none;
-}
-
-/* ---------- barra de rolagem ---------- */
-
-/* A barra padrão do navegador é clara e destoa de tudo — aparece assim que um
-   painel fica pequeno demais para o conteúdo, que é justamente o caso comum
-   depois que a grade passou a ser redimensionável.
-
-   O tamanho e o raio só são controláveis pelos pseudoelementos -webkit-, então
-   é por eles que a barra é desenhada. O Chrome 121+ também entende
-   `scrollbar-color`, mas quando ela está presente ele ignora os
-   pseudoelementos e perde o arredondamento — por isso a versão padrão fica
-   restrita ao Firefox, que é quem não tem a outra. */
-
-*::-webkit-scrollbar {
-  width: 12px;
-  height: 12px;
-}
-
-/* Trilho transparente: a barra flutua sobre o fundo do painel em vez de
-   desenhar uma faixa que divide a caixa em duas. */
-*::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-*::-webkit-scrollbar-thumb {
-  background-color: var(--scrollbar-thumb);
-  border-radius: 999px;
-  /* A borda transparente com recorte no padding afina o polegar sem reduzir
-     a área de clique, que continua sendo os 12px inteiros. */
-  border: 3px solid transparent;
-  background-clip: padding-box;
-  transition: background-color var(--fast) var(--ease);
-}
-
-*::-webkit-scrollbar-thumb:hover {
-  background-color: var(--scrollbar-thumb-hover);
-}
-
-*::-webkit-scrollbar-thumb:active {
-  background-color: var(--accent);
-}
-
-/* O quadradinho onde a barra vertical encontra a horizontal. */
-*::-webkit-scrollbar-corner {
-  background: transparent;
-}
-
-@supports not selector(::-webkit-scrollbar) {
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: var(--scrollbar-thumb) transparent;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *::-webkit-scrollbar-thumb {
-    transition: none;
-  }
-}
-
-/* ---------- github: repositório, issues, pull requests ---------- */
-
-.pull-repo {
-  margin-bottom: var(--s5);
-}
-
-.pull-repo:last-child {
-  margin-bottom: 0;
-}
-
-.pull-repo-name {
-  font-size: var(--step-0);
-  font-weight: 500;
-  padding-bottom: var(--s2);
-  border-bottom: 1px solid var(--hairline);
-  margin-bottom: var(--s2);
-}
-
-/* Issues e pull requests recuados sob o repositório: o recuo é o que diz que
-   pertencem a ele, sem repetir o nome em cada linha. */
-.pull-kind {
-  margin: var(--s3) 0 var(--s3) var(--s4);
-}
-
-.pull-kind-label {
-  margin-bottom: var(--s1);
-}
-
-.pull-number {
-  flex: none;
-  color: var(--text-faint);
-  font-size: var(--step--1);
-}
-
-/* ---------- jira: acompanhando ---------- */
-
-.jira-watch {
-  padding-bottom: var(--s4);
-  margin-bottom: var(--s4);
-  border-bottom: 1px solid var(--hairline);
-}
-
-.jira-watch-add {
-  display: flex;
-  gap: var(--s2);
-  margin: var(--s2) 0;
-}
-
-.jira-watch-add .field {
-  flex: 1;
-  min-width: 0;
-  max-width: 12rem;
-}
-
-/* ---------- notas rápidas ---------- */
-
-/* A coluna de abas só rola se tiver altura definida, e altura definida só
-   existe se toda a cadeia até a célula da grade tiver. Sem estas duas regras
-   a coluna cresce com o número de notas e empurra o painel para fora. */
-.grid-panel-body:has(> .notes-section) {
-  display: flex;
-  flex-direction: column;
-}
-
-.notes-section {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-}
-
-/* Abas na vertical à esquerda, editor à direita. A altura vem da grade, e as
-   duas colunas rolam por dentro — o painel em si nunca cresce. */
-.notes {
-  display: grid;
-  grid-template-columns: minmax(120px, 26%) 1fr;
-  gap: var(--s4);
-  min-height: 0;
-  flex: 1;
-}
-
-/* Fora da grade — na coluna única das telas estreitas — não há altura vinda
-   de cima, então o teto é da própria coluna. */
-@media (max-width: 1023px) {
-  .notes-tabs {
-    max-height: 40vh;
-  }
-}
-
-/* É a coluna de abas que rola quando há muitas notas, não o painel. */
-.notes-tabs {
-  overflow-y: auto;
-  min-height: 0;
-  max-height: 100%;
-  border-right: 1px solid var(--hairline);
-  padding-right: var(--s2);
-}
-
-.notes-tab {
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-  border-radius: 6px;
-}
-
-.notes-tab:hover {
-  background: color-mix(in srgb, var(--surface) 55%, transparent);
-}
-
-/* A aba ativa é marcada por uma barra na borda interna, do lado do editor:
-   é para lá que ela aponta. */
-.notes-tab.is-active {
-  background: color-mix(in srgb, var(--surface) 75%, transparent);
-  box-shadow: inset -2px 0 0 var(--accent);
-}
-
-.notes-tab-name {
-  flex: 1;
-  min-width: 0;
-  padding: var(--s2) var(--s3);
-  background: none;
-  border: 0;
-  color: var(--text-muted);
-  font-size: var(--step--1);
-  text-align: left;
-  cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.notes-tab.is-active .notes-tab-name {
-  color: var(--text);
-}
-
-.notes-tab-input {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--step--1);
-  padding: var(--s1) var(--s2);
-}
-
-/* O botão de apagar só aparece na aba sob o cursor ou na ativa: uma coluna de
-   lixeiras é ruído, e um alvo permanente convida ao clique errado. */
-.notes-tab-remove {
-  opacity: 0;
-  flex: none;
-  transition: opacity var(--fast) var(--ease);
-}
-
-.notes-tab:hover .notes-tab-remove,
-.notes-tab.is-active .notes-tab-remove,
-.notes-tab-remove:focus-visible {
-  opacity: 1;
-}
-
-.notes-editor {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s2);
-  min-height: 0;
-}
-
-.notes-text {
-  flex: 1;
-  min-height: 120px;
-  resize: none;
-  line-height: 1.65;
-  font-size: var(--step--1);
-}
-
-.notes-status {
-  font-size: 0.6875rem;
-  color: var(--text-faint);
-  text-align: right;
+[data-density='compact'] [data-slot='table-head'] {
+  height: 2.5rem;
 }

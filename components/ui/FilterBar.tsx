@@ -1,23 +1,19 @@
 'use client';
 
-import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { Sheet } from './Sheet';
 
-// No desktop os controles ficam inline. Em telas pequenas colapsam num
-// botão que abre a mesma coleção de controles numa folha de tela cheia,
-// com ação explícita para aplicar.
+/**
+ * Controls float on the background; a card is for content. In a shell, two short
+ * fields inside a card become a nearly empty rectangle bigger than the fields.
+ *
+ * Every control inside is h-8, the gap is 2, and the row wraps rather than
+ * collapsing into a sheet — at 375px two wrapped rows read better than a modal
+ * that hides what is filtering the list behind it.
+ */
 export function FilterBar({ label, children }: { label: string; children: ReactNode }) {
-  const [sheetOpen, setSheetOpen] = useState(false);
   return (
-    <>
-      <div className="filter-bar">{children}</div>
-      <button type="button" className="btn filter-trigger" onClick={() => setSheetOpen(true)}>
-        Filtrar
-      </button>
-      <Sheet open={sheetOpen} title={label} onClose={() => setSheetOpen(false)}>
-        <div className="filter-sheet-body">{children}</div>
-      </Sheet>
-    </>
+    <div role="search" aria-label={label} className="flex flex-wrap items-center gap-2 pb-3">
+      {children}
+    </div>
   );
 }

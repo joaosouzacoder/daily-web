@@ -1,8 +1,11 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { Plus } from 'lucide-react';
+import { IconAction } from '@/components/data/IconAction';
 import { NavArrowRight } from 'iconoir-react';
 import type { PanelResult, TaskPriority, TodoTask } from '@/lib/types';
+import { PanelError } from '@/components/data/PanelError';
 import type { ActiveFilter } from '@/lib/filters';
 import { matchesQuery } from '@/lib/filters';
 import { groupTasksByDueWindow } from '@/lib/taskGrouping';
@@ -13,8 +16,38 @@ import { FilterBar } from './ui/FilterBar';
 import { SearchInput } from './ui/SearchInput';
 import { Chip } from './ui/Chip';
 import { ActiveFilters } from './ui/ActiveFilters';
-import { EmptyState } from './ui/EmptyState';
-import { SkeletonRows } from './ui/Skeleton';
+import { EmptyState } from '@/components/data/EmptyState';
+import { SkeletonRows } from './ui/legacy-skeleton';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { GLYPH } from './data/Status';
+import { cn } from '@/lib/utils';
+import { focusRing, tabular } from '@/lib/theme';
+
+/** A failing integration is information, not an alarm: contained block, side marker. */
+
+const caret =
+  'inline-flex size-[18px] shrink-0 items-center justify-center rounded-md text-ink-dim transition-transform duration-100 ease-brand hover:bg-muted hover:text-ink aria-expanded:rotate-90 motion-reduce:transition-none';
+
+const addToggle =
+  'inline-flex size-[18px] shrink-0 items-center justify-center rounded-md leading-none text-ink-dim transition-colors duration-100 ease-brand hover:bg-muted hover:text-ink aria-expanded:text-brand motion-reduce:transition-none';
+
+const flagPill =
+  'inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 type-caption';
+const neutralFlag = 'border-line-strong bg-neutral-tint text-ink-dim';
+
+/**
+ * Priority is a state, so it carries a glyph and a word beside the hue and never
+ * the accent: an accent-tinted flag would change colour with the theme while the
+ * task's urgency stayed exactly the same.
+ */
+const PRIORITY_TONE: Record<TaskPriority, { glyph: string; tone: string }> = {
+  high: { glyph: GLYPH.alert, tone: 'border-warning/45 bg-warning-tint text-warning' },
+  normal: { glyph: GLYPH.idle, tone: neutralFlag },
+  low: { glyph: GLYPH.idle, tone: neutralFlag },
+};
+
+const checkbox = 'size-4 shrink-0 cursor-pointer accent-brand';
 
 interface Props {
   tasks: PanelResult<TodoTask[]>;
@@ -72,11 +105,14 @@ function SubtaskList({
   const toggleSubtask = async (subtaskId: string, completed: boolean) => {
     onSubtaskChanged(task.id, subtaskId, completed);
 
-    const res = await fetch(`/api/tasks/${encodeURIComponent(task.id)}/subtasks/${encodeURIComponent(subtaskId)}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ completed }),
-    });
+    const res = await fetch(
+      `/api/tasks/${encodeURIComponent(task.id)}/subtasks/${encodeURIComponent(subtaskId)}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ completed }),
+      },
+    );
     if (!res.ok) {
       onError(await readErrorMessage(res, 'Falha ao atualizar subtarefa'));
       onChanged();
@@ -100,7 +136,10 @@ function SubtaskList({
   };
 
   const removeSubtask = async (subtaskId: string) => {
-    const res = await fetch(`/api/tasks/${encodeURIComponent(task.id)}/subtasks/${encodeURIComponent(subtaskId)}`, { method: 'DELETE' });
+    const res = await fetch(
+      `/api/tasks/${encodeURIComponent(task.id)}/subtasks/${encodeURIComponent(subtaskId)}`,
+      { method: 'DELETE' },
+    );
     if (!res.ok) {
       onError(await readErrorMessage(res, 'Falha ao apagar subtarefa'));
       return;
@@ -109,30 +148,41 @@ function SubtaskList({
   };
 
   return (
-    <div className="subtasks">
+    /* A subtask is the parent's child: the indent and the left hairline say so
+       without a label. The rule starts aligned with the parent's checkbox. */
+    <div className="mb-3 ml-14 flex flex-col gap-1 border-l border-line-soft pl-4">
       {task.subtasks.map((subtask) => (
-        <div key={subtask.id} className={`subtask${subtask.completed ? ' is-done' : ''}`}>
+        <div
+          key={subtask.id}
+          className={cn(
+            'flex items-center gap-2 text-sm',
+            subtask.completed ? 'text-ink-dim line-through' : 'text-ink-mid',
+          )}
+        >
           <input
             type="checkbox"
+            className={checkbox}
             checked={subtask.completed}
             onChange={() => void toggleSubtask(subtask.id, !subtask.completed)}
             aria-label={`concluir subtarefa ${subtask.title}`}
           />
-          <span className="subtask-title">{subtask.title}</span>
-          <button
+          <span className="min-w-0 flex-1 truncate">{subtask.title}</span>
+          <Button
             type="button"
-            className="btn btn-ghost btn-danger"
+            variant="ghost"
+            size="icon-xs"
+            className="shrink-0 text-ink-dim hover:bg-danger-tint hover:text-danger"
             onClick={() => void removeSubtask(subtask.id)}
             aria-label={`apagar subtarefa ${subtask.title}`}
           >
             ×
-          </button>
+          </Button>
         </div>
       ))}
       {adding && (
-        <div className="subtask-add">
-          <input
-            className="field"
+        <div className="mt-1 flex gap-2">
+          <Input
+            className="min-w-0 flex-1"
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
             onKeyDown={(e) => {
@@ -143,9 +193,12 @@ function SubtaskList({
             aria-label={`nova subtarefa de ${task.title}`}
             autoFocus
           />
-          <button type="button" className="btn" onClick={() => void addSubtask()}>
-            Adicionar
-          </button>
+          <IconAction
+            variant="outline"
+            label="Adicionar subtarefa"
+            onClick={() => void addSubtask()}
+            icon={<Plus className="size-4" />}
+          />
         </div>
       )}
     </div>
@@ -276,17 +329,31 @@ export function TasksPanel({
       eyebrow="Tarefas"
       count={activeFilters.length > 0 ? `${visibleCount} de ${all.length}` : undefined}
       actions={
-        <button type="button" className="btn btn-primary" onClick={() => setEditing('new')}>
-          Nova tarefa
-        </button>
+        <IconAction
+          variant="default"
+          label="Nova tarefa"
+          onClick={() => setEditing('new')}
+          icon={<Plus className="size-4" />}
+        />
       }
     >
       <FilterBar label="Filtrar tarefas">
-        <SearchInput value={query} onChange={setQuery} label="buscar tarefas" placeholder="título" />
-        <Chip active={priority === 'high'} onClick={() => setPriority(priority === 'high' ? 'all' : 'high')}>
+        <SearchInput
+          value={query}
+          onChange={setQuery}
+          label="buscar tarefas"
+          placeholder="título"
+        />
+        <Chip
+          active={priority === 'high'}
+          onClick={() => setPriority(priority === 'high' ? 'all' : 'high')}
+        >
           Alta
         </Chip>
-        <Chip active={priority === 'low'} onClick={() => setPriority(priority === 'low' ? 'all' : 'low')}>
+        <Chip
+          active={priority === 'low'}
+          onClick={() => setPriority(priority === 'low' ? 'all' : 'low')}
+        >
           Baixa
         </Chip>
         <Chip active={showCompleted} onClick={() => setShowCompleted((v) => !v)}>
@@ -305,40 +372,32 @@ export function TasksPanel({
 
       <ActiveFilters filters={activeFilters} onRemove={clearFilter} onClearAll={clearAll} />
 
-      {tasks.error && (
-        <p role="alert" className="panel-error">
-          {tasks.error}
-        </p>
-      )}
-      {actionError && (
-        <p role="alert" className="panel-error">
-          {actionError}
-        </p>
-      )}
+      {tasks.error && <PanelError>{tasks.error}</PanelError>}
+      {actionError && <PanelError>{actionError}</PanelError>}
 
       {loading && all.length === 0 && <SkeletonRows count={5} />}
 
       {!loading && all.length === 0 && !tasks.error && (
-        <EmptyState message="Nenhuma tarefa por aqui. Crie a primeira." />
+        <EmptyState title="Nenhuma tarefa por aqui. Crie a primeira." />
       )}
 
       {all.length > 0 && visibleCount === 0 && (
-        <EmptyState message="Nenhuma tarefa com esses filtros." />
+        <EmptyState title="Nenhuma tarefa com esses filtros." />
       )}
 
       {groups.map((group) => (
-        <div key={group.key}>
-          <h3 className="task-group-label eyebrow">{group.label}</h3>
+        <div key={group.key} className="mt-5 first:mt-0">
+          <h3 className="mb-2 block type-caption text-ink-dim">{group.label}</h3>
           <ul>
             {group.tasks.map((task) => (
-              <li key={task.id} className="task-item">
-                <div className={`row task-row${task.completed ? ' is-done' : ''}`}>
+              <li key={task.id} className="border-b border-line-soft even:bg-muted/25">
+                <div className="flex items-center gap-3 rounded-md px-2 py-3 transition-colors duration-100 ease-brand hover:bg-brand-tint motion-reduce:transition-none">
                   {/* A seta só existe onde há o que revelar. Numa tarefa sem
                       subtarefa ela seria um controle que não faz nada. */}
                   {task.subtasks.length > 0 ? (
                     <button
                       type="button"
-                      className="subtask-caret"
+                      className={cn(caret, focusRing)}
                       aria-label={`${expanded.has(task.id) ? 'recolher' : 'expandir'} subtarefas de ${task.title}`}
                       aria-expanded={expanded.has(task.id)}
                       onClick={() => toggleExpanded(task.id)}
@@ -346,11 +405,11 @@ export function TasksPanel({
                       <NavArrowRight width={14} height={14} />
                     </button>
                   ) : (
-                    <span className="subtask-caret is-empty" aria-hidden="true" />
+                    <span className="inline-block size-[18px] shrink-0" aria-hidden="true" />
                   )}
                   <button
                     type="button"
-                    className="subtask-toggle"
+                    className={cn(addToggle, focusRing)}
                     aria-label={`adicionar subtarefa em ${task.title}`}
                     aria-expanded={addingSubtaskFor === task.id}
                     onClick={() => startAddingSubtask(task.id)}
@@ -359,40 +418,65 @@ export function TasksPanel({
                   </button>
                   <input
                     type="checkbox"
+                    className={checkbox}
                     checked={task.completed}
                     onChange={() => void toggleComplete(task)}
                     aria-label={`concluir ${task.title}`}
                   />
-                  <button type="button" className="row-main" onClick={() => setEditing(task)}>
-                    <span className="row-title">{task.title}</span>
+                  <button
+                    type="button"
+                    className={cn(
+                      'flex min-w-0 flex-1 flex-col items-start gap-0.5 rounded-sm text-left',
+                      focusRing,
+                    )}
+                    onClick={() => setEditing(task)}
+                  >
+                    <span
+                      className={cn(
+                        'w-full truncate',
+                        task.completed ? 'text-ink-dim line-through' : 'text-ink',
+                      )}
+                    >
+                      {task.title}
+                    </span>
                   </button>
                   {task.priority !== 'normal' && (
-                    <span className={`task-flag task-flag-${task.priority}`}>
-                      {PRIORITY_LABEL[task.priority]}
+                    <span className={cn(flagPill, PRIORITY_TONE[task.priority].tone)}>
+                      <span aria-hidden>{PRIORITY_TONE[task.priority].glyph}</span>
+                      <span>{PRIORITY_LABEL[task.priority]}</span>
                     </span>
                   )}
                   {task.recur !== '' && (
-                    <span className="task-flag" title="tarefa recorrente">
+                    <span className={cn(flagPill, neutralFlag)} title="tarefa recorrente">
                       repete
                     </span>
                   )}
-                  {task.due && <span className="task-due mono">{formatDue(task.due, task.time)}</span>}
+                  {task.due && (
+                    <span className={cn('shrink-0 type-caption text-ink-dim', tabular)}>
+                      {formatDue(task.due, task.time)}
+                    </span>
+                  )}
                   {task.subtasks.length > 0 && (
-                    <span className="task-due mono" title="subtarefas concluídas">
+                    <span
+                      className={cn('shrink-0 type-caption text-ink-dim', tabular)}
+                      title="subtarefas concluídas"
+                    >
                       {task.subtasks.filter((s) => s.completed).length}/{task.subtasks.length}
                     </span>
                   )}
                   {/* O contador acima é o que faz a subtarefa escondida ainda
                       ser visível como informação: dá para ver que existe e
                       quanto falta sem abrir. */}
-                  <button
+                  <Button
                     type="button"
-                    className="btn btn-ghost btn-danger"
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0 text-danger hover:bg-danger-tint hover:text-danger"
                     onClick={() => void remove(task)}
                     aria-label={`apagar ${task.title}`}
                   >
                     Apagar
-                  </button>
+                  </Button>
                 </div>
                 {(expanded.has(task.id) || addingSubtaskFor === task.id) && (
                   <SubtaskList

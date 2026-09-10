@@ -147,25 +147,49 @@ describe('NotesPanel', () => {
     await waitFor(() => expect(screen.getByLabelText('texto de Nota 2')).toBeInTheDocument());
   });
 
-  it('apaga a aba depois de confirmar', async () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+  it('apaga a aba depois de confirmar no diálogo', async () => {
     responder([nota({ id: '1', title: 'Ideias' }), nota({ id: '2', title: 'Compras' })]);
     render(<NotesPanel />);
 
     fireEvent.click(await screen.findByLabelText('apagar Ideias'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Apagar' }));
+
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Ideias' })).toBeNull());
     expect(screen.getByRole('button', { name: 'Compras' })).toBeInTheDocument();
-    confirm.mockRestore();
   });
 
-  it('não apaga se você desistir', async () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  it('não apaga se você cancelar no diálogo', async () => {
     responder([nota({ id: '1', title: 'Ideias' })]);
     render(<NotesPanel />);
 
     fireEvent.click(await screen.findByLabelText('apagar Ideias'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancelar' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(chamadas.some((c) => c.method === 'DELETE')).toBe(false);
-    confirm.mockRestore();
+  });
+
+  it('Enter no diálogo confirma sem precisar do mouse', async () => {
+    responder([nota({ id: '1', title: 'Ideias' }), nota({ id: '2', title: 'Compras' })]);
+    render(<NotesPanel />);
+
+    fireEvent.click(await screen.findByLabelText('apagar Ideias'));
+    fireEvent.keyDown(await screen.findByRole('dialog'), { key: 'Enter' });
+
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Ideias' })).toBeNull());
+    expect(screen.getByRole('button', { name: 'Compras' })).toBeInTheDocument();
+  });
+
+  it('Escape no diálogo desiste sem apagar', async () => {
+    responder([nota({ id: '1', title: 'Ideias' })]);
+    render(<NotesPanel />);
+
+    fireEvent.click(await screen.findByLabelText('apagar Ideias'));
+    const dialogo = await screen.findByRole('dialog');
+    fireEvent.keyDown(dialogo, { key: 'Escape' });
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(chamadas.some((c) => c.method === 'DELETE')).toBe(false);
   });
 
   it('renomeia com clique duplo', async () => {

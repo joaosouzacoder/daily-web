@@ -1,8 +1,11 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
+import { Plus, X } from 'lucide-react';
+import { IconAction } from '@/components/data/IconAction';
 import { NavArrowRight } from 'iconoir-react';
-import type { JiraDatedItem, JiraItem, PanelResult } from '@/lib/types';
+import type { JiraDatedItem, JiraItem, JiraStatusCategory, PanelResult } from '@/lib/types';
+import { PanelError } from '@/components/data/PanelError';
 import type { ActiveFilter } from '@/lib/filters';
 import { matchesQuery } from '@/lib/filters';
 import {
@@ -16,13 +19,65 @@ import {
 } from '@/lib/parsers/jira';
 import type { JiraNode, JiraProjectGroup } from '@/lib/parsers/jira';
 import { Section } from './ui/Section';
-import { Tabs } from './ui/Tabs';
+import { Tabs } from './ui/legacy-tabs';
 import { FilterBar } from './ui/FilterBar';
 import { SearchInput } from './ui/SearchInput';
 import { Chip } from './ui/Chip';
 import { ActiveFilters } from './ui/ActiveFilters';
-import { EmptyState } from './ui/EmptyState';
-import { SkeletonRows } from './ui/Skeleton';
+import { EmptyState } from '@/components/data/EmptyState';
+import { SkeletonRows } from './ui/legacy-skeleton';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { GLYPH } from './data/Status';
+import { cn } from '@/lib/utils';
+import { focusRing, tabular } from '@/lib/theme';
+
+/**
+ * A panel that cannot reach its integration is information, not an alarm: the
+ * message stays inside a quiet block with a side marker instead of loose red text
+ * competing with the sections that did load.
+ */
+
+const emptyNote = 'py-8 text-sm text-ink-dim';
+
+/** The group heading above a project or a situation bucket. */
+const groupLabel = 'mb-2 block type-caption text-ink-dim';
+
+const rowShell =
+  'flex items-start gap-3 border-b border-line-soft py-3 transition-colors duration-100 ease-brand even:bg-muted/25 hover:bg-brand-tint motion-reduce:transition-none';
+
+const caret =
+  'inline-flex size-[18px] shrink-0 items-center justify-center rounded-md text-ink-dim transition-transform duration-100 ease-brand hover:bg-muted hover:text-ink aria-expanded:rotate-90 motion-reduce:transition-none';
+
+const roleBadge =
+  'inline-flex shrink-0 items-center rounded-full border px-1.5 py-0.5 type-caption';
+
+/**
+ * A situation never borrows the accent: it would change hue whenever the accent
+ * changes, with nothing about the issue having changed. The glyph carries the
+ * state alongside the tone so the reading survives a grayscale print.
+ */
+const STATUS_TONE: Record<JiraStatusCategory, { glyph: string; tone: string }> = {
+  new: { glyph: GLYPH.idle, tone: 'text-ink-dim' },
+  indeterminate: { glyph: GLYPH.moving, tone: 'text-info' },
+  done: { glyph: GLYPH.live, tone: 'text-success' },
+};
+
+/** The legacy `jira-status-<category>` class rides along: it is what the panel's
+ *  tests reach for when they check which situation a row is showing. */
+function JiraStatus({ issue }: { issue: JiraItem }) {
+  const { glyph, tone } = STATUS_TONE[issue.statusCategory];
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap">
+      <span aria-hidden className={tone}>
+        {glyph}
+      </span>
+      <span className={cn(tone, `jira-status-${issue.statusCategory}`)}>
+        {normalizeStatus(issue.status)}
+      </span>
+    </span>
+  );
+}
 
 type Filter = 'both' | 'assignee' | 'reporter';
 
@@ -224,17 +279,13 @@ export function JiraPanel({
 
       {aba === 'entregues' && (
         <div id="jira-panel-entregues" role="tabpanel" aria-labelledby="jira-tab-entregues">
-          {delivered.error && (
-            <p role="alert" className="panel-error">
-              {delivered.error}
-            </p>
-          )}
+          {delivered.error && <PanelError>{delivered.error}</PanelError>}
 
           {loading && entregues.length === 0 && <SkeletonRows count={3} />}
 
           {!loading && entregues.length === 0 && !delivered.error && (
             <EmptyState
-              message={
+              title={
                 periodo === 'hoje'
                   ? 'Nenhuma issue entregue hoje.'
                   : 'Nenhuma issue entregue nos últimos 7 dias.'
@@ -252,17 +303,13 @@ export function JiraPanel({
 
       {aba === 'aprovados' && (
         <div id="jira-panel-aprovados" role="tabpanel" aria-labelledby="jira-tab-aprovados">
-          {approved.error && (
-            <p role="alert" className="panel-error">
-              {approved.error}
-            </p>
-          )}
+          {approved.error && <PanelError>{approved.error}</PanelError>}
 
           {loading && aprovados.length === 0 && <SkeletonRows count={3} />}
 
           {!loading && aprovados.length === 0 && !approved.error && (
             <EmptyState
-              message={
+              title={
                 periodo === 'hoje'
                   ? 'Nenhuma issue aprovada hoje.'
                   : 'Nenhuma issue aprovada nos últimos 7 dias.'
@@ -281,7 +328,12 @@ export function JiraPanel({
       {aba === 'abertas' && (
         <div id="jira-panel-abertas" role="tabpanel" aria-labelledby="jira-tab-abertas">
           <FilterBar label="Filtrar issues">
-            <SearchInput value={query} onChange={setQuery} label="buscar issues" placeholder="chave ou resumo" />
+            <SearchInput
+              value={query}
+              onChange={setQuery}
+              label="buscar issues"
+              placeholder="chave ou resumo"
+            />
             {(Object.keys(FILTER_LABEL) as Filter[]).map((f) => (
               <Chip key={f} active={filter === f} onClick={() => setFilter(f)}>
                 {FILTER_LABEL[f]}
@@ -296,17 +348,20 @@ export function JiraPanel({
 
           {/* Acompanhar uma issue que não é sua: o Jira do time vizinho que trava
               o seu, ou o que você abriu para outra pessoa. */}
-          <div className="jira-watch">
-            <h3 className="jira-group-label eyebrow">
+          <div className="mb-4 border-b border-line-soft pb-4">
+            <h3 className={groupLabel}>
               Acompanhando
               {acompanhadas.length > 0 && (
-                <span className="section-count mono"> {acompanhadas.length}</span>
+                <span className={cn('font-normal text-ink-dim', tabular)}>
+                  {' '}
+                  {acompanhadas.length}
+                </span>
               )}
             </h3>
 
-            <div className="jira-watch-add">
-              <input
-                className="field"
+            <div className="my-2 flex gap-2">
+              <Input
+                className="max-w-48"
                 aria-label="acompanhar issue do Jira"
                 placeholder="ABC-123"
                 value={novaChave}
@@ -315,90 +370,96 @@ export function JiraPanel({
                   if (e.key === 'Enter') void acompanhar();
                 }}
               />
-              <button
-                type="button"
-                className="btn"
+              <IconAction
+                variant="outline"
+                size="icon"
+                label={salvando ? 'Buscando…' : 'Acompanhar issue'}
                 disabled={salvando || novaChave.trim().length === 0}
                 onClick={() => void acompanhar()}
-              >
-                {salvando ? 'Buscando…' : 'Acompanhar'}
-              </button>
+                icon={<Plus className={cn('size-4', salvando && 'animate-pulse')} />}
+              />
             </div>
 
-            {watchError && (
-              <p role="alert" className="panel-error">
-                {watchError}
-              </p>
-            )}
-            {watched.error && (
-              <p role="alert" className="panel-error">
-                {watched.error}
-              </p>
-            )}
+            {watchError && <PanelError>{watchError}</PanelError>}
+            {watched.error && <PanelError>{watched.error}</PanelError>}
 
             {acompanhadas.length === 0 && !watchError && (
-              <p className="empty">Nenhuma issue acompanhada.</p>
+              <p className={emptyNote}>Nenhuma issue acompanhada.</p>
             )}
 
             <ul>
               {acompanhadas.map((issue) => (
-                <li key={issue.key} className="jira-row">
-                  <span className="jira-kind mono">{issueMarker(issue)}</span>
-                  <div className="jira-main">
-                    <div className="jira-line">
-                      <a className="jira-key mono" href={issue.url} target="_blank" rel="noreferrer">
+                <li key={issue.key} className={rowShell}>
+                  <span className="shrink-0 type-caption leading-6 text-ink-dim">
+                    {issueMarker(issue)}
+                  </span>
+                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <div className="flex min-w-0 items-baseline gap-3">
+                      <a
+                        className={cn(
+                          'shrink-0 font-mono text-sm text-brand hover:underline',
+                          focusRing,
+                        )}
+                        href={issue.url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
                         {issue.key}
                       </a>
-                      <span className="jira-summary">{issue.summary}</span>
+                      <span className="min-w-0 flex-1 truncate text-ink">{issue.summary}</span>
                     </div>
-                    <div className="jira-meta">
-                      <span className={`jira-status jira-status-${issue.statusCategory}`}>
-                        {normalizeStatus(issue.status)}
-                      </span>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 type-caption text-ink-dim">
+                      <JiraStatus issue={issue} />
                       {stalenessLabel(issue) && (
-                        <span className="jira-stale">{stalenessLabel(issue)}</span>
+                        <span className="whitespace-nowrap text-warning">
+                          {stalenessLabel(issue)}
+                        </span>
                       )}
                       {issue.dueDate && dueLabel(issue.dueDate) && (
-                        <span className={isOverdue(issue.dueDate) ? 'jira-due is-overdue' : 'jira-due'}>
+                        <span
+                          className={cn(
+                            'whitespace-nowrap',
+                            isOverdue(issue.dueDate) ? 'is-overdue text-danger' : 'text-ink-dim',
+                          )}
+                        >
                           {dueLabel(issue.dueDate)}
                         </span>
                       )}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className="icon-btn icon-btn-danger"
-                    aria-label={`parar de acompanhar ${issue.key}`}
+                  <IconAction
+                    className="shrink-0 text-ink-dim hover:bg-danger-tint hover:text-danger"
+                    label={`parar de acompanhar ${issue.key}`}
                     onClick={() => void parar(issue.key)}
-                  >
-                    ×
-                  </button>
+                    icon={<X className="size-4" />}
+                  />
                 </li>
               ))}
             </ul>
           </div>
 
-          {jira.error && (
-            <p role="alert" className="panel-error">
-              {jira.error}
-            </p>
-          )}
+          {jira.error && <PanelError>{jira.error}</PanelError>}
 
           {loading && all.length === 0 && <SkeletonRows count={5} />}
 
-          {!loading && all.length === 0 && !jira.error && <EmptyState message="Nenhuma issue atribuída." />}
+          {!loading && all.length === 0 && !jira.error && (
+            <EmptyState title="Nenhuma issue atribuída." />
+          )}
 
           {all.length > 0 && visible.length === 0 && (
-            <EmptyState message="Nenhuma issue com esses filtros." />
+            <EmptyState title="Nenhuma issue com esses filtros." />
           )}
 
           {grouped &&
             visible.length > 0 &&
             situations.map((group) => (
-              <div key={group.category} className="jira-project">
-                <h3 className="jira-group-label eyebrow">
+              <div key={group.category} className="mt-5 first:mt-0">
+                <h3 className={groupLabel}>
                   {group.label}
-                  <span className="section-count mono"> {group.issues.length}</span>
+                  <span className={cn('font-normal text-ink-dim', tabular)}>
+                    {' '}
+                    {group.issues.length}
+                  </span>
                 </h3>
                 <ul>
                   {group.issues.map((issue) => (
@@ -438,10 +499,10 @@ function JiraProjects({
   return (
     <>
       {groups.map((group) => (
-        <div key={group.project} className="jira-project">
-          <h3 className="jira-group-label eyebrow">
+        <div key={group.project} className="mt-5 first:mt-0">
+          <h3 className={groupLabel}>
             {group.project}
-            <span className="section-count mono"> {group.count}</span>
+            <span className={cn('font-normal text-ink-dim', tabular)}> {group.count}</span>
           </h3>
           <ul>
             {group.roots.map((node) => (
@@ -529,17 +590,23 @@ function JiraRow({
 
   return (
     <li
-      className="jira-row"
+      className={rowShell}
       style={{ paddingLeft: depth > 0 ? `calc(${depth} * var(--s4))` : undefined }}
     >
-      {depth > 0 && <span className="jira-branch" aria-hidden="true" />}
+      {/* A branch tick reads as hierarchy without drawing a full tree of guides. */}
+      {depth > 0 && (
+        <span
+          className="-mr-2 size-2 shrink-0 -translate-y-0.5 rounded-bl-[3px] border-b border-l border-line-strong"
+          aria-hidden="true"
+        />
+      )}
       {/* A seta só existe onde há o que revelar. Numa issue sem filha ela
           seria um controle que não faz nada — o espaçador mantém o
           alinhamento da coluna. */}
       {filhos > 0 && onAlternar ? (
         <button
           type="button"
-          className="subtask-caret"
+          className={cn(caret, focusRing)}
           aria-label={`${aberto ? 'recolher' : 'expandir'} ${filhos === 1 ? 'a issue' : `as ${filhos} issues`} sob ${issue.key}`}
           aria-expanded={aberto}
           onClick={onAlternar}
@@ -547,28 +614,52 @@ function JiraRow({
           <NavArrowRight width={14} height={14} />
         </button>
       ) : (
-        <span className="subtask-caret is-empty" aria-hidden="true" />
+        <span className="inline-block size-[18px] shrink-0" aria-hidden="true" />
       )}
-      <span className="jira-kind mono">{issueMarker(issue)}</span>
-      <div className="jira-main">
-        <div className="jira-line">
-          <a className="jira-key mono" href={issue.url} target="_blank" rel="noreferrer">
+      <span className="shrink-0 type-caption leading-6 text-ink-dim">{issueMarker(issue)}</span>
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <div className="flex min-w-0 items-baseline gap-3">
+          <a
+            className={cn('shrink-0 font-mono text-sm text-brand hover:underline', focusRing)}
+            href={issue.url}
+            target="_blank"
+            rel="noreferrer"
+          >
             {issue.key}
           </a>
-          <span className="jira-summary">{issue.summary}</span>
-          {showRole && eRelator && <span className="jira-role jira-role-rel">REL</span>}
+          <span className="min-w-0 flex-1 truncate text-ink">{issue.summary}</span>
+          {showRole && eRelator && (
+            <span className={cn(roleBadge, 'border-line-strong bg-neutral-tint text-ink-dim')}>
+              REL
+            </span>
+          )}
+          {/* A pending decision is the only mark that asks something of the reader,
+              so it is the one that pulls more attention than the role badge. */}
           {issue.awaitingApproval && (
-            <span className="jira-role jira-role-aprov" title="aguardando a sua aprovação">
+            <span
+              className={cn(
+                roleBadge,
+                'border-warning/45 bg-warning-tint font-semibold text-warning',
+              )}
+              title="aguardando a sua aprovação"
+            >
               APROV
             </span>
           )}
         </div>
-        <div className="jira-meta">
-          <span className={`jira-status jira-status-${issue.statusCategory}`}>
-            {normalizeStatus(issue.status)}
-          </span>
-          {parado && <span className="jira-stale">{parado}</span>}
-          {prazo && <span className={atrasado ? 'jira-due is-overdue' : 'jira-due'}>{prazo}</span>}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 type-caption text-ink-dim">
+          <JiraStatus issue={issue} />
+          {parado && <span className="whitespace-nowrap text-warning">{parado}</span>}
+          {prazo && (
+            <span
+              className={cn(
+                'whitespace-nowrap',
+                atrasado ? 'is-overdue text-danger' : 'text-ink-dim',
+              )}
+            >
+              {prazo}
+            </span>
+          )}
         </div>
       </div>
     </li>

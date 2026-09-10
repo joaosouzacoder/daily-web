@@ -202,7 +202,7 @@ describe('TasksPanel', () => {
     fireEvent.change(screen.getByLabelText('nova subtarefa de Tarefa'), {
       target: { value: 'Etapa nova' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Adicionar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar subtarefa' }));
     await waitFor(() =>
       expect(fetchSpy).toHaveBeenCalledWith(
         '/api/tasks/1/subtasks',

@@ -9,21 +9,94 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Changed
-- Modules on the dashboard are drawn as raised surfaces, so it is clear where
-  one ends and the next begins. There was no background and no border before:
-  a panel was content loose on the page, and on a full dashboard the eye had
-  to guess the boundaries from the spacing alone. What delimits them is light,
-  not a frame: a gradient body, a hairline of light along the top and left
-  edge, and a shadow falling to the bottom right. The single column of narrow
-  screens gets the same surface, which it did not have at all. Entering
-  **Organizar** lifts the panel a step further and rings it, and the slot a
-  dragged panel will drop into is the negative of the same relief, pressed
-  into the page. Under `prefers-contrast: more` the border stops being an
-  accessory and becomes the boundary, since relief is low contrast by nature.
-- Text fields are pressed into the surface, the negative of the same relief.
-  Their background was the same tone that now sits between the two ends of the
-  panel gradient, so a field would fade out against the top of a panel and
-  reappear against the bottom.
+- The front end is rebuilt on Tailwind v4 and shadcn/ui. The hand-written
+  stylesheet is gone, replaced by a token layer in `oklch()`: a six-level
+  surface ramp, five elevations that each open with a large inset highlight,
+  fixed signal colours independent of the accent, and an iridescent mesh the
+  whole page floats on. Panels, dialogs and popovers are translucent surfaces;
+  buttons, chips and status pills are round; containers follow a radius ladder.
+- Type is seven roles, each carrying family, size, leading, weight and tracking
+  together, so a size is never chosen alone at a call site. Every stray size
+  below the 13px caption floor was routed to the role it wanted, uppercase
+  micro-labels with wide tracking are gone, and numbers use the text face with
+  tabular figures rather than the mono face.
+- Status is never hue alone: each state carries a glyph and a label beside the
+  colour, so the reading survives a grayscale print. No status follows the
+  accent, since a status that did would change colour when the accent changed
+  with nothing about the status having changed.
+- The screens gain an app shell: a recessed sidebar whose active item is a band
+  with a 3px bar rather than a pill, a command palette on Cmd+K over routes and
+  settings, and an account block. The frame is pinned to the viewport, so the
+  mesh stays still while only the content column scrolls.
+- The hour-driven ambient background is removed along with its module and test.
+  The system paints a fixed mesh instead, on the ground that the accent stays
+  the colour of action while the background is atmosphere.
+
+### Added
+- Theme is three states — system, light and dark — where system is the absence
+  of both a class and a cookie. Both legs of the dark palette are written out,
+  so an explicit light choice wins on a dark machine and an explicit dark choice
+  wins on a light one. The choice is stamped during server render, so there is
+  no wrong-theme flash on first paint.
+- A display density setting beside it, comfortable or compact, changing vertical
+  rhythm only: a dense screen needs more visible lines, not smaller type.
+- Screens use the full width of the display. The content column was capped at
+  1280px, which on a wide monitor was empty margin on both sides of a panel
+  that is dense on purpose. Frame padding and vertical rhythm tighten with it.
+- Controls whose glyph says it all drop their label: the bell with its count in
+  a round badge, refresh as a spinner that actually spins while it works, the
+  pomodoro's play and pause, a broom to reset it, the mail batch bar's mark,
+  move and delete, a plus for every add (note, task, subtask, repository,
+  watched issue), a pencil and a bin on a connection, a key to change a
+  password, checks to mark notifications read, and the grid's arrange and
+  discard. Dropping a label is a space decision and must not become a
+  meaning one, so every one of them keeps its words in a tooltip and in its
+  accessible name — a shared component makes that the only way to build one.
+- The sidebar collapses to a 56px icon rail on Cmd+B or from its own control,
+  which gives a vertical monitor back 184px of width. The choice rides a cookie
+  the server reads during render, so a collapsed rail never expands for a frame
+  on reload, and each item keeps its label in a tooltip and for screen readers.
+
+### Fixed
+- The pointer cursor is back on everything clickable. Tailwind v4's preflight
+  leaves buttons on the arrow, unlike v3, and on a dashboard where nearly every
+  control is a button that reads as "not clickable" on almost everything. It is
+  set once in the base layer rather than per component, so a control added
+  tomorrow cannot forget it, and a disabled control now shows `not-allowed`
+  instead of giving no reason for the click that did nothing.
+- Deleting anything asks in an app dialog instead of the browser's own. The
+  native one cannot be styled, cannot be reached from the keyboard beyond its
+  two buttons, blocks the whole tab, and on some platforms is suppressed
+  outright — a destructive action that silently never asks is worse than one
+  that asks badly. Escape cancels, Enter confirms, focus lands on the confirm
+  button, and cancel comes first so the destructive button is never the one a
+  hand lands on by habit.
+- A focused control on a panel's first row no longer has its ring sliced off.
+  The ring reaches 4px past its control and that row sat flush against the
+  scroll container's clipping edge.
+- A panel's frame no longer scrolls away with its rows. The card sat inside the
+  scroll container, so scrolling a long list carried the border and the rounded
+  corners off the top and the module stopped reading as a box. The card is now
+  the grid item itself, pinned to the module bounds, with the header fixed and
+  only the content moving under it.
+- The notification menu no longer paints under the page. It was positioned
+  inside `<main>`, which scrolls and sits among panels that carry a
+  backdrop-filter, and a backdrop-filter creates a stacking context no z-index
+  can climb out of. The panel is portalled to the body and positioned against
+  the trigger.
+- The Jira "Em aberto" tab stops breaking in a narrow module. Its meta line
+  wrapped mid-phrase, splitting "Em andamento" across two lines and stranding
+  the status glyph on its own. Each meta item is now indivisible and the row
+  wraps between them.
+- `.gitignore` anchors its SQLite pattern to `/data/`. Unanchored, `data/`
+  matched any directory of that name at any depth, which silently kept
+  `components/data/` out of both git and the CSS content scan — its utilities
+  never reached the stylesheet and its files were in no commit.
+- The systemd unit restarts on any exit, not only on failure. An external
+  SIGTERM exits cleanly, and a clean exit is not a failure, so the service
+  stayed down until somebody noticed rather than coming back on its own. A
+  deliberate `systemctl stop` still stops it for good, and the
+  `systemctl restart` in `deploy/publish.sh` is unaffected.
 
 ### Added
 - A third tab, **Aprovados**, listing what you approved. There is no JQL

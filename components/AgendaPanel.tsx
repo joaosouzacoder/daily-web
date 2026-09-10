@@ -6,8 +6,11 @@ import { AGENDA_RANGES, agendaRange } from '@/lib/agendaWindow';
 import { Section } from './ui/Section';
 import { FilterBar } from './ui/FilterBar';
 import { Chip } from './ui/Chip';
-import { EmptyState } from './ui/EmptyState';
-import { SkeletonRows } from './ui/Skeleton';
+import { EmptyState } from '@/components/data/EmptyState';
+import { PanelError } from '@/components/data/PanelError';
+import { SkeletonRows } from './ui/legacy-skeleton';
+import { EM_DASH } from '@/lib/format';
+import { tabular } from '@/lib/theme';
 
 const WEEKDAYS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 const MONTHS = [
@@ -114,33 +117,32 @@ export function AgendaPanel({ agenda, days, onChanged, loading = false }: Props)
         ))}
       </FilterBar>
 
-      {agenda.error && (
-        <p role="alert" className="panel-error">
-          {agenda.error}
-        </p>
-      )}
-      {error && (
-        <p role="alert" className="panel-error">
-          {error}
-        </p>
-      )}
+      {agenda.error && <PanelError>{agenda.error}</PanelError>}
+      {error && <PanelError>{error}</PanelError>}
 
       {loading && all.length === 0 && <SkeletonRows count={3} />}
 
       {!loading && all.length === 0 && !agenda.error && (
-        <EmptyState message={`Nada agendado ${agendaRange(days).emptyLabel}.`} />
+        <EmptyState title={`Nada agendado ${agendaRange(days).emptyLabel}.`} />
       )}
 
       {[...groups.entries()].map(([date, items]) => (
-        <div key={date} className="agenda-day">
-          <h3 className="agenda-day-label eyebrow">{relativeDayLabel(date)}</h3>
-          <ul>
+        <div key={date} className="mb-5 last:mb-0">
+          <h3 className="type-caption mb-2 block text-ink-dim">{relativeDayLabel(date)}</h3>
+          <ul className="text-sm">
             {items.map((item, i) => (
-              <li key={`${date}-${i}`} className="agenda-item">
-                <span className="agenda-time mono">{item.time || 'dia'}</span>
-                <span className="agenda-title">{item.title}</span>
+              <li
+                key={`${date}-${i}`}
+                className="flex items-baseline gap-3 border-b border-line-soft px-2 py-2 transition-colors duration-100 ease-brand even:bg-muted/25 last:border-b-0 hover:bg-brand-tint motion-reduce:transition-none"
+              >
+                <span className={`w-[5ch] shrink-0 text-ink ${tabular}`}>{item.time || 'dia'}</span>
+                <span className="min-w-0 flex-1 truncate text-ink-mid">
+                  {item.title || EM_DASH}
+                </span>
                 {multiplasAgendas && item.accountLabel && (
-                  <span className="row-tag">{item.accountLabel}</span>
+                  <span className="shrink-0 rounded-full border border-line-strong bg-neutral-tint px-2 py-0.5 type-caption text-ink-dim">
+                    {item.accountLabel}
+                  </span>
                 )}
               </li>
             ))}

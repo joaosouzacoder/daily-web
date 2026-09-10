@@ -1,5 +1,8 @@
 'use client';
 
+import { cn } from '@/lib/utils';
+import { tabular } from '@/lib/theme';
+
 export interface TabItem {
   id: string;
   label: string;
@@ -28,7 +31,11 @@ export function Tabs({ label, id, tabs, active, onChange }: Props) {
   };
 
   return (
-    <div className="tabs" role="tablist" aria-label={label}>
+    <div
+      role="tablist"
+      aria-label={label}
+      className="group/tabs-list mb-4 inline-flex w-fit max-w-full items-center justify-start gap-1 overflow-x-auto rounded-full border bg-muted/70 p-[3px] shadow-e1"
+    >
       {tabs.map((tab, indice) => {
         const selecionada = tab.id === active;
         return (
@@ -46,7 +53,15 @@ export function Tabs({ label, id, tabs, active, onChange }: Props) {
             // Só a aba ativa entra na ordem do Tab; entre as abas, o
             // deslocamento é pelas setas, como manda o padrão.
             tabIndex={selecionada ? 0 : -1}
-            className={`tab${selecionada ? ' is-active' : ''}`}
+            className={cn(
+              'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-transparent px-3.5 text-sm font-medium whitespace-nowrap transition-colors duration-100 ease-brand motion-reduce:transition-none',
+              'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none',
+              selecionada
+                // Aro NEUTRO: uma aba acesa é um controle, não uma ação — o aro
+                // do acento tingiria a peça inteira.
+                ? 'bg-glass-strong text-ink shadow-control'
+                : 'text-ink-mid hover:text-foreground',
+            )}
             onClick={() => onChange(tab.id)}
             onKeyDown={(e) => {
               if (e.key === 'ArrowRight') mover(indice, 1);
@@ -55,7 +70,7 @@ export function Tabs({ label, id, tabs, active, onChange }: Props) {
           >
             {tab.label}
             {tab.count !== undefined && tab.count > 0 && (
-              <span className="section-count mono"> {tab.count}</span>
+              <span className={`text-ink-dim ${tabular}`}>{tab.count}</span>
             )}
           </button>
         );

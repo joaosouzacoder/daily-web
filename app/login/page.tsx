@@ -2,6 +2,9 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -32,44 +35,53 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="login">
-      <form className="login-form" onSubmit={(e) => void submit(e)}>
-        <div className="login-brand">
-          <span className="login-mark" aria-hidden="true" />
-          <h1 className="login-title">daily-web</h1>
+    <main className="flex min-h-dvh items-center justify-center p-6">
+      <form
+        className="flex w-full max-w-sm flex-col gap-4 rounded-xl border bg-card p-8 shadow-e3 backdrop-blur-xl backdrop-saturate-150"
+        onSubmit={(e) => void submit(e)}
+      >
+        <div className="flex items-center gap-3">
+          <span
+            aria-hidden="true"
+            className="flex size-10 shrink-0 items-center justify-center rounded-full border bg-glass-strong shadow-e1"
+          >
+            <span className="size-2 rounded-full bg-brand" />
+          </span>
+          <h1 className="type-title">daily-web</h1>
         </div>
-        <p className="login-sub">Seu dia, num relance.</p>
+        <p className="text-sm text-ink-mid">Seu dia, num relance.</p>
 
-        <label className="login-field">
-          Usuário
-          <input
-            className="field"
+        <div className="grid gap-2">
+          <Label htmlFor="login-username">Usuário</Label>
+          <Input
+            id="login-username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             autoComplete="username"
             autoFocus
           />
-        </label>
-        <label className="login-field">
-          Senha
-          <input
-            className="field"
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="login-password">Senha</Label>
+          <Input
+            id="login-password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="current-password"
           />
-        </label>
+        </div>
 
         {error && (
-          <p role="alert" className="login-error">
+          <p role="alert" className="text-sm text-danger">
             {error}
           </p>
         )}
 
-        <button type="submit" className="btn btn-primary login-submit" disabled={submitting}>
+        {/* The one action on the screen, so it gets the single glow budget. */}
+        <Button type="submit" variant="glow" disabled={submitting}>
           {submitting ? 'Entrando' : 'Entrar'}
-        </button>
+        </Button>
       </form>
     </main>
   );

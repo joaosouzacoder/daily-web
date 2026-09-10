@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { cn } from '@/lib/utils';
+import { tabular } from '@/lib/theme';
 
 const WEEKDAYS = [
   'domingo',
@@ -26,6 +28,9 @@ const MONTHS = [
   'dezembro',
 ];
 
+const TIME_CLASS = cn('type-display leading-none tracking-tight text-ink', tabular);
+const DATE_CLASS = 'type-body text-ink-mid';
+
 function pad(value: number): string {
   return value.toString().padStart(2, '0');
 }
@@ -43,11 +48,11 @@ export function Clock() {
   // layout quando o relógio começa a marcar.
   if (!now) {
     return (
-      <div className="now-clock">
-        <span className="now-time mono" data-testid="clock-time">
+      <div className="flex flex-col gap-1">
+        <span className={TIME_CLASS} data-testid="clock-time">
           &nbsp;
         </span>
-        <span className="now-date" data-testid="clock-date">
+        <span className={DATE_CLASS} data-testid="clock-date">
           &nbsp;
         </span>
       </div>
@@ -55,11 +60,11 @@ export function Clock() {
   }
 
   return (
-    <div className="now-clock">
-      <time className="now-time mono" data-testid="clock-time">
+    <div className="flex flex-col gap-1">
+      <time className={TIME_CLASS} data-testid="clock-time">
         {pad(now.getHours())}:{pad(now.getMinutes())}:{pad(now.getSeconds())}
       </time>
-      <span className="now-date" data-testid="clock-date">
+      <span className={DATE_CLASS} data-testid="clock-date">
         {WEEKDAYS[now.getDay()]}, {now.getDate()} de {MONTHS[now.getMonth()]}
       </span>
     </div>

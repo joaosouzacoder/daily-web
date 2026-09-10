@@ -1,8 +1,9 @@
 import type { Metadata, Viewport } from 'next';
+import { cookies } from 'next/headers';
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
-import { AmbientBackground } from '@/components/AmbientBackground';
 import { ServiceWorker } from '@/components/ServiceWorker';
+import { DENSITY_COOKIE, THEME_COOKIE, parseDensity, parseTheme } from '@/lib/theme';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -21,7 +22,13 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#0d0b14',
+  // The one place a literal colour is unavoidable: this is a meta tag the browser
+  // chrome reads, and a custom property cannot reach it. Both values are the
+  // computed --mesh-base of their theme; change them when that token changes.
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#f9fafd' },
+    { media: '(prefers-color-scheme: dark)', color: '#08080a' },
+  ],
   // A app é um painel, não um documento: dar zoom horizontal só quebraria as
   // colunas, mas o zoom de acessibilidade continua liberado.
   width: 'device-width',
@@ -29,11 +36,27 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+/**
+ * Reading the cookies here, rather than stamping from a client effect or a blocking
+ * inline script, is what prevents the wrong-theme flash on first paint. It costs
+ * static rendering for the whole route tree — a cost this dashboard never paid
+ * anyway, since every screen is authenticated and polled.
+ */
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const jar = await cookies();
+  const theme = parseTheme(jar.get(THEME_COOKIE)?.value);
+  const density = parseDensity(jar.get(DENSITY_COOKIE)?.value);
+  const forced = theme === 'system' ? '' : theme;
+
   return (
-    <html lang="pt-BR" className={`${GeistSans.variable} ${GeistMono.variable}`}>
-      <body>
-        <AmbientBackground />
+    <html
+      lang="pt-BR"
+      // The client changes both after hydration.
+      suppressHydrationWarning
+      data-density={density === 'compact' ? 'compact' : undefined}
+      className={`${GeistSans.variable} ${GeistMono.variable} ${forced}`.trim()}
+    >
+      <body className="min-h-screen bg-background text-foreground antialiased">
         <ServiceWorker />
         {children}
       </body>

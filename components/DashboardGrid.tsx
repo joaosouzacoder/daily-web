@@ -1,8 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { LayoutGrid, X } from 'lucide-react';
+import { IconAction } from '@/components/data/IconAction';
 import type { ReactNode } from 'react';
 import GridLayout, { useContainerWidth, type Layout } from 'react-grid-layout';
+import { Button } from '@/components/ui/button';
+import { PanelFrame, cardSurface } from '@/components/data/Panel';
+import { cn } from '@/lib/utils';
 import {
   GRID_COLUMNS,
   GRID_ROW_HEIGHT,
@@ -149,82 +154,88 @@ export function DashboardGrid({ layout, panels, onSave }: Props) {
     // coluna, na ordem em que estão dispostos.
     const ordenados = [...visible].sort((a, b) => a.y - b.y || a.x - b.x);
     return (
-      <div className="col">
-        {ordenados.map((p) => (
-          // A mesma superfície da grade: sem ela, os módulos voltariam a
-          // ficar soltos na tela estreita, que é justamente onde a lista
-          // longa mais precisa de onde começa e onde termina.
-          <div key={p.i} className="painel">
-            {panels.find((painel) => painel.id === p.i)?.node}
-          </div>
-        ))}
+      <div className="flex flex-col gap-4">
+        {ordenados.map((p) => panels.find((painel) => painel.id === p.i)?.node)}
       </div>
     );
   }
 
   return (
     <div ref={containerRef}>
-      <div className="grid-bar">
-        <p className={`grid-hint${arranging ? ' is-on' : ''}`} role="status">
+      {/* A control bar floats on the background: a card is for content. */}
+      <div className="flex items-center justify-between gap-4 pb-3">
+        <p
+          role="status"
+          className={cn(
+            'min-w-0 text-sm text-ink-dim transition-opacity duration-150 motion-reduce:transition-none',
+            arranging ? 'opacity-100' : 'opacity-0',
+          )}
+        >
           {arranging
             ? `Arraste para mover, puxe o canto para redimensionar. Salvar guarda para ${janela.largura} × ${janela.altura}.`
             : ''}
         </p>
         {arranging ? (
-          <div className="grid-bar-actions">
-            <button
+          <div className="flex shrink-0 items-center gap-2">
+            <Button
               type="button"
-              className="btn btn-primary"
+              variant="default"
+              size="sm"
               disabled={salvando}
               onClick={() => void salvar()}
             >
               {salvando ? 'Salvando…' : 'Salvar para esta tela'}
-            </button>
-            <button type="button" className="btn" onClick={descartar}>
-              Descartar
-            </button>
+            </Button>
+            <IconAction
+              variant="outline"
+              label="Descartar"
+              onClick={descartar}
+              icon={<X className="size-4" />}
+            />
           </div>
         ) : (
-          <button type="button" className="btn" onClick={() => setPinned(true)}>
-            Organizar
-          </button>
+          <IconAction
+            variant="outline"
+            label="Organizar"
+            onClick={() => setPinned(true)}
+            icon={<LayoutGrid className="size-4" />}
+          />
         )}
       </div>
 
       {mounted && (
-      <GridLayout
-        className={`dashboard-grid${arranging ? ' is-arranging' : ''}`}
-        width={width}
-        layout={visible}
-        gridConfig={gridConfig}
-        // Fora do modo de organizar, o painel é conteúdo comum: clicar num
-        // e-mail, marcar uma tarefa e selecionar texto continuam funcionando.
-        dragConfig={dragConfig}
-        resizeConfig={resizeConfig}
-        onLayoutChange={handleChange}
-        onDragStart={() => setDragging(true)}
-        // `onDrag` e `onResize` precisam existir mesmo sem fazer nada: com o
-        // limiar de 3px, a grade adia o início do arrasto para dentro deles
-        // (`if (!onDragProp || !dragging) return`). Sem passá-los, o limiar
-        // nunca é ultrapassado e o painel não sai do lugar.
-        onDrag={naoFazNada}
-        onDragStop={() => setDragging(false)}
-        onResizeStart={() => setDragging(true)}
-        onResize={naoFazNada}
-        onResizeStop={() => setDragging(false)}
-      >
-        {visible.map((p) => (
-          <div
-            key={p.i}
-            className="grid-panel"
-            data-grid={{ ...p, minW: MIN_PANEL_WIDTH, minH: MIN_PANEL_HEIGHT }}
-          >
-            <div className="grid-panel-body">
-              {panels.find((painel) => painel.id === p.i)?.node}
+        <GridLayout
+          className={`dashboard-grid${arranging ? ' is-arranging' : ''}`}
+          width={width}
+          layout={visible}
+          gridConfig={gridConfig}
+          // Fora do modo de organizar, o painel é conteúdo comum: clicar num
+          // e-mail, marcar uma tarefa e selecionar texto continuam funcionando.
+          dragConfig={dragConfig}
+          resizeConfig={resizeConfig}
+          onLayoutChange={handleChange}
+          onDragStart={() => setDragging(true)}
+          // `onDrag` e `onResize` precisam existir mesmo sem fazer nada: com o
+          // limiar de 3px, a grade adia o início do arrasto para dentro deles
+          // (`if (!onDragProp || !dragging) return`). Sem passá-los, o limiar
+          // nunca é ultrapassado e o painel não sai do lugar.
+          onDrag={naoFazNada}
+          onDragStop={() => setDragging(false)}
+          onResizeStart={() => setDragging(true)}
+          onResize={naoFazNada}
+          onResizeStop={() => setDragging(false)}
+        >
+          {visible.map((p) => (
+            <div
+              key={p.i}
+              data-slot="grid-panel"
+              className={cn(cardSurface, 'flex min-w-0 flex-col overflow-hidden')}
+              data-grid={{ ...p, minW: MIN_PANEL_WIDTH, minH: MIN_PANEL_HEIGHT }}
+            >
+              <PanelFrame>{panels.find((painel) => painel.id === p.i)?.node}</PanelFrame>
             </div>
-          </div>
-        ))}
-      </GridLayout>
+          ))}
+        </GridLayout>
       )}
     </div>
   );

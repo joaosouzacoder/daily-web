@@ -223,7 +223,6 @@ describe('EmailPanel', () => {
       }
       return new Response(JSON.stringify({ folders: [] }));
     });
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const onRemoved = vi.fn();
     render(
       <EmailPanel
@@ -236,23 +235,24 @@ describe('EmailPanel', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'excluir Revisão do PR' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Excluir' }));
 
     // A linha sai da tela antes de a ida ao IMAP terminar.
-    expect(onRemoved).toHaveBeenCalledWith([{ account: 'mail-1', id: '1' }]);
+    await waitFor(() => expect(onRemoved).toHaveBeenCalledWith([{ account: 'mail-1', id: '1' }]));
 
     await waitFor(() => expect(bodies).toHaveLength(1));
     expect(JSON.parse(bodies[0])).toEqual({
       targets: [{ account: 'mail-1', id: '1' }],
       action: 'delete',
     });
-    expect(confirmSpy).toHaveBeenCalled();
   });
 
-  it('cancelar a confirmação não exclui nada', () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
+  it('cancelar no diálogo não exclui nada', async () => {
     render(<EmailPanel onSeenChanged={() => {}} onRemoved={() => {}} mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={() => {}} />);
     const before = vi.mocked(global.fetch).mock.calls.length;
     fireEvent.click(screen.getByRole('button', { name: 'excluir Revisão do PR' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancelar' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(vi.mocked(global.fetch).mock.calls.length).toBe(before);
   });
 });
@@ -485,21 +485,19 @@ describe('conversas', () => {
     expect(linha?.className).toContain('row-unread');
   });
 
-  it('excluir a conversa avisa quantas mensagens vão junto', () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  it('excluir a conversa avisa quantas mensagens vão junto', async () => {
     montar();
     fireEvent.click(screen.getByLabelText('excluir teste assunto'));
     // Duas recebidas; a enviada não é lixo da caixa de entrada.
-    expect(confirm).toHaveBeenCalledWith('Excluir esta conversa (2 mensagens recebidas)?');
-    confirm.mockRestore();
+    expect(
+      await screen.findByText('Excluir esta conversa (2 mensagens recebidas)?'),
+    ).toBeInTheDocument();
   });
 
-  it('excluir uma conversa de uma mensagem pergunta no singular', () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  it('excluir uma conversa de uma mensagem pergunta no singular', async () => {
     montar();
     fireEvent.click(screen.getByLabelText('excluir Cobranças recorrentes'));
-    expect(confirm).toHaveBeenCalledWith('Excluir este e-mail?');
-    confirm.mockRestore();
+    expect(await screen.findByText('Excluir este e-mail?')).toBeInTheDocument();
   });
 
   // A busca filtra mensagens; a conversa se remonta com o que sobrou, em vez

@@ -80,21 +80,24 @@ describe('UsersPanel', () => {
       }
       return null;
     });
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(<UsersPanel />);
     await screen.findByText('maria');
 
     fireEvent.click(screen.getByRole('button', { name: 'remover maria' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Remover' }));
     await waitFor(() => expect(deleted).toEqual(['/api/users/maria']));
   });
 
-  it('cancelar a confirmação não remove', async () => {
+  it('cancelar no diálogo não remove', async () => {
     mockFetch();
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
     render(<UsersPanel />);
     await screen.findByText('maria');
     const before = vi.mocked(global.fetch).mock.calls.length;
+
     fireEvent.click(screen.getByRole('button', { name: 'remover maria' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancelar' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(vi.mocked(global.fetch).mock.calls.length).toBe(before);
   });
 

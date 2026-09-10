@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { TaskPriority, TodoTask } from '@/lib/types';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
 
 interface Props {
   task: TodoTask | null;
@@ -95,68 +97,68 @@ export function TaskFormModal({ task, onClose, onSaved }: Props) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-5 backdrop-blur-sm"
+      onClick={onClose}
+    >
       <div
-        className="modal"
+        className="flex max-h-[88dvh] w-[min(460px,100%)] flex-col gap-4 overflow-y-auto rounded-xl border bg-glass-strong p-6 shadow-e5 backdrop-blur-2xl"
         role="dialog"
         aria-modal="true"
         aria-label="formulário de tarefa"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="modal-title">{task ? 'Editar tarefa' : 'Nova tarefa'}</h3>
+        <h3 className="type-subhead">{task ? 'Editar tarefa' : 'Nova tarefa'}</h3>
 
-        <label>
+        <label className="flex flex-col gap-2 text-sm text-ink-mid">
           Título
-          <input
-            className="field"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            autoFocus
-          />
+          <Input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
         </label>
 
-        <label>
+        <label className="flex flex-col gap-2 text-sm text-ink-mid">
           Vencimento
-          <input
-            className="field"
-            value={due}
-            onChange={(e) => setDue(e.target.value)}
-            placeholder="hoje 14:30"
-          />
-          <span className="modal-hint">hoje, amanhã, +3d, AAAA-MM-DD — hora opcional no fim</span>
+          <Input value={due} onChange={(e) => setDue(e.target.value)} placeholder="hoje 14:30" />
+          <span className="type-caption text-ink-dim">
+            hoje, amanhã, +3d, AAAA-MM-DD — hora opcional no fim
+          </span>
         </label>
 
-        <div className="modal-row">
-          <button
+        <div className="flex flex-wrap gap-2">
+          <Button
             type="button"
-            className="btn"
+            variant="outline"
+            size="sm"
             onClick={() => setPriority(cycle(PRIORITY_CYCLE, priority))}
           >
             prioridade: {PRIORITY_LABEL[priority]}
-          </button>
-          <button type="button" className="btn" onClick={() => setRecur(cycle(RECUR_CYCLE, recur))}>
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setRecur(cycle(RECUR_CYCLE, recur))}
+          >
             repetição: {RECUR_LABEL[recur]}
-          </button>
+          </Button>
         </div>
 
         {error && (
-          <p role="alert" className="login-error">
+          <p role="alert" className="text-sm text-danger">
             {error}
           </p>
         )}
 
-        <div className="modal-actions">
-          <button type="button" className="btn" onClick={onClose} disabled={saving}>
+        <div className="mt-2 flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
             Cancelar
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            className="btn btn-primary"
             onClick={() => void save()}
             disabled={saving || title.trim().length === 0}
           >
             {saving ? 'Salvando…' : 'Salvar'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

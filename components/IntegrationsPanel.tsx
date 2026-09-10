@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { Pencil, Trash2 } from 'lucide-react';
+import { IconAction } from '@/components/data/IconAction';
 import { CheckCircle, WarningCircle } from 'iconoir-react';
 import {
   MODULES,
@@ -10,6 +12,12 @@ import {
   type FieldSpec,
   type ModuleId,
 } from '@/lib/modules';
+import { Button } from '@/components/ui/button';
+import { useConfirm } from '@/components/data/ConfirmDialog';
+import { PanelError } from '@/components/data/PanelError';
+import { Input, inputClass } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
 import { Section } from './ui/Section';
 
 interface ConnectionSummary {
@@ -80,16 +88,16 @@ function Field({
   );
 
   return (
-    <div className="conn-field">
-      <label className="conn-label" htmlFor={id}>
+    <div className="flex flex-col gap-1.5">
+      <Label className="text-ink-mid" htmlFor={id}>
         {spec.label}
         {spec.required && <span aria-hidden="true"> *</span>}
-      </label>
+      </Label>
 
       {spec.type === 'select' ? (
         <select
           id={id}
-          className="field"
+          className={cn(inputClass, 'cursor-pointer')}
           value={value}
           onChange={(e) => onChange(e.target.value)}
         >
@@ -100,27 +108,29 @@ function Field({
           ))}
         </select>
       ) : (
-        <input
+        <Input
           id={id}
-          className="field"
           type={spec.type === 'password' ? 'password' : spec.type === 'number' ? 'number' : 'text'}
           value={value}
           placeholder={
             // Um segredo já gravado nunca volta para a tela. O placeholder é
             // o que diferencia "está vazio" de "está guardado e não mostro".
-            alreadySet && spec.secret ? '•••••••• (guardado — deixe em branco para manter)' : spec.placeholder
+            alreadySet && spec.secret
+              ? '•••••••• (guardado — deixe em branco para manter)'
+              : spec.placeholder
           }
           onChange={(e) => onChange(e.target.value)}
           autoComplete={spec.secret ? 'new-password' : 'off'}
         />
       )}
 
-      {spec.help && <p className="conn-help">{spec.help}</p>}
+      {spec.help && <p className="type-caption text-ink-dim">{spec.help}</p>}
     </div>
   );
 }
 
 export function IntegrationsPanel() {
+  const { confirm, dialog } = useConfirm();
   const [payload, setPayload] = useState<Payload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Editing | null>(null);
@@ -128,7 +138,9 @@ export function IntegrationsPanel() {
   const [label, setLabel] = useState('');
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState<string | null>(null);
-  const [testResult, setTestResult] = useState<Record<string, { ok: boolean; message: string }>>({});
+  const [testResult, setTestResult] = useState<Record<string, { ok: boolean; message: string }>>(
+    {},
+  );
   const [openHelp, setOpenHelp] = useState<ModuleId | null>(null);
   const [flash, setFlash] = useState<{ ok: boolean; message: string } | null>(null);
   const [calendars, setCalendars] = useState<Record<string, CalendarRef[]>>({});
@@ -166,9 +178,10 @@ export function IntegrationsPanel() {
       setCalendars((prev) => ({ ...prev, [connId]: data.calendars }));
       setChosenCalendars((prev) => ({
         ...prev,
-        [connId]: data.selected.length > 0
-          ? data.selected
-          : data.calendars.filter((c: CalendarRef) => c.primary).map((c: CalendarRef) => c.id),
+        [connId]:
+          data.selected.length > 0
+            ? data.selected
+            : data.calendars.filter((c: CalendarRef) => c.primary).map((c: CalendarRef) => c.id),
       }));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -239,12 +252,15 @@ export function IntegrationsPanel() {
   };
 
   const remove = async (conn: ConnectionSummary) => {
-    if (!window.confirm(`Remover "${conn.label}"? A credencial é apagada.`)) return;
+    const ok = await confirm({
+      title: 'Remover a conexão?',
+      description: `A credencial de "${conn.label}" é apagada junto e precisa ser cadastrada de novo.`,
+      confirmLabel: 'Remover',
+      destructive: true,
+    });
+    if (!ok) return;
     try {
-      const data = await send(
-        `/api/integrations/${conn.module}/connections/${conn.id}`,
-        'DELETE',
-      );
+      const data = await send(`/api/integrations/${conn.module}/connections/${conn.id}`, 'DELETE');
       setPayload((prev) => (prev ? { ...prev, modules: data.modules } : prev));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -287,11 +303,9 @@ export function IntegrationsPanel() {
     return (
       <Section eyebrow="Integrações">
         {error ? (
-          <p role="alert" className="panel-error">
-            {error}
-          </p>
+          <PanelError>{error}</PanelError>
         ) : (
-          <p className="empty">Carregando…</p>
+          <p className="type-caption py-6 text-ink-dim">Carregando…</p>
         )}
       </Section>
     );
@@ -300,24 +314,30 @@ export function IntegrationsPanel() {
   return (
     <Section eyebrow="Integrações">
       {!payload.vaultReady && (
-        <p role="alert" className="panel-error">
+        <PanelError>
           DAILY_WEB_SECRET_KEY não está configurada no servidor. Sem ela nenhuma credencial pode ser
-          guardada. Gere com <code>openssl rand -base64 32</code>.
-        </p>
+          guardada. Gere com <code className="font-mono text-ink">openssl rand -base64 32</code>.
+        </PanelError>
       )}
-      {error && (
-        <p role="alert" className="panel-error">
-          {error}
-        </p>
-      )}
+      {error && <PanelError>{error}</PanelError>}
       {flash && (
-        <p role="status" className={`conn-result${flash.ok ? ' is-ok' : ' is-bad'}`}>
-          {flash.ok ? <CheckCircle width={14} height={14} /> : <WarningCircle width={14} height={14} />}
+        <p
+          role="status"
+          className={cn(
+            'type-caption flex basis-full items-center gap-2',
+            flash.ok ? 'text-success' : 'text-danger',
+          )}
+        >
+          {flash.ok ? (
+            <CheckCircle width={14} height={14} />
+          ) : (
+            <WarningCircle width={14} height={14} />
+          )}
           {flash.message}
         </p>
       )}
 
-      <p className="conn-intro">
+      <p className="max-w-[60ch] text-sm text-ink-mid">
         Cada módulo é independente e opcional. Conecte só o que você usa — o painel mostra apenas os
         que estiverem ligados.
       </p>
@@ -327,15 +347,24 @@ export function IntegrationsPanel() {
         const isEditing = editing?.module === mod.module;
 
         return (
-          <article key={mod.module} className={`conn-card${mod.enabled ? ' is-on' : ''}`}>
-            <header className="conn-head">
-              <div className="conn-title">
-                <h3>{mod.label}</h3>
-                <p className="conn-summary">{mod.summary}</p>
+          <article
+            key={mod.module}
+            className="flex flex-col gap-3 border-b border-line-soft py-4 last:border-b-0 last:pb-0"
+          >
+            <header className="flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h3 className="type-subhead">{mod.label}</h3>
+                <p className="text-sm text-ink-mid">{mod.summary}</p>
               </div>
-              <label className="conn-switch">
+              <label
+                className={cn(
+                  'type-caption inline-flex shrink-0 cursor-pointer items-center gap-2',
+                  mod.enabled ? 'text-brand' : 'text-ink-mid',
+                )}
+              >
                 <input
                   type="checkbox"
+                  className="size-4 shrink-0 cursor-pointer accent-brand"
                   checked={mod.enabled}
                   onChange={(e) => void toggleModule(mod.module, e.target.checked)}
                   aria-label={`${mod.enabled ? 'desligar' : 'ligar'} ${mod.label}`}
@@ -345,7 +374,7 @@ export function IntegrationsPanel() {
             </header>
 
             {openHelp === mod.module && (
-              <ul className="conn-instructions">
+              <ul className="type-caption flex max-w-[70ch] flex-col gap-2 border-l border-line-soft pl-4 text-ink-mid">
                 {spec.instructions.map((line) => (
                   <li key={line}>{line}</li>
                 ))}
@@ -356,80 +385,97 @@ export function IntegrationsPanel() {
                 quebra quando o administrador bloqueia compartilhamento
                 externo, e é fácil colar o link errado. */}
             {mod.module === 'agenda' && payload.googleConfigured && !isEditing && (
-              <a className="btn btn-primary conn-google" href="/api/integrations/agenda/google/start">
-                Conectar com Google
-              </a>
+              <Button asChild size="sm" className="w-fit">
+                <a href="/api/integrations/agenda/google/start">Conectar com Google</a>
+              </Button>
             )}
 
             {/* Sem client no servidor, quem administra a instância precisa
                 saber o que falta — e principalmente qual URI registrar, que é
                 onde o setup costuma falhar. */}
             {mod.module === 'agenda' && !payload.googleConfigured && (
-              <p className="conn-note">
+              <p className="type-caption max-w-[70ch] rounded-md border border-dashed border-line-strong p-3 text-ink-mid">
                 Para conectar contas Google, quem administra este servidor precisa definir{' '}
-                <code>GOOGLE_CLIENT_ID</code> e <code>GOOGLE_CLIENT_SECRET</code>. Criar o client é
+                <code className="font-mono text-ink">GOOGLE_CLIENT_ID</code> e{' '}
+                <code className="font-mono text-ink">GOOGLE_CLIENT_SECRET</code>. Criar o client é
                 gratuito; registre esta URI de redirecionamento:{' '}
-                <code className="conn-uri">{payload.googleRedirectUri}</code>
+                <code className="mt-1 inline-block font-mono text-ink [overflow-wrap:anywhere]">
+                  {payload.googleRedirectUri}
+                </code>
               </p>
             )}
 
             {mod.connections.length > 0 && (
-              <ul className="conn-list">
+              <ul className="flex flex-col gap-3">
                 {mod.connections.map((conn) => {
                   const result = testResult[conn.id];
                   return (
-                    <li key={conn.id} className="conn-item">
-                      <div className="conn-item-main">
-                        <span className="conn-item-label">{conn.label}</span>
+                    <li
+                      key={conn.id}
+                      className="flex flex-wrap items-center gap-3 rounded-lg border bg-surface-1 p-3"
+                    >
+                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <span className="text-sm font-medium text-ink">{conn.label}</span>
                         {conn.unreadable ? (
-                          <span className="conn-warn">
+                          <span className="type-caption text-warning">
                             ilegível com a chave atual — grave de novo
                           </span>
                         ) : (
-                          <span className="conn-item-detail mono">
+                          <span className="type-caption truncate text-ink-dim">
                             {Object.values(conn.visible)[0] ?? 'configurado'}
                           </span>
                         )}
                       </div>
-                      <div className="conn-item-actions">
-                        <button
+                      <div className="flex flex-wrap gap-2">
+                        <Button
                           type="button"
-                          className="btn"
+                          variant="outline"
+                          size="sm"
                           disabled={testing === conn.id}
                           onClick={() => void test(conn)}
                         >
                           {testing === conn.id ? 'Testando…' : 'Testar'}
-                        </button>
+                        </Button>
                         {conn.visible.provider !== 'google' && (
-                          <button type="button" className="btn" onClick={() => startEdit(conn)}>
-                            Editar
-                          </button>
+                          <IconAction
+                            variant="outline"
+                            label="Editar"
+                            onClick={() => startEdit(conn)}
+                            icon={<Pencil className="size-4" />}
+                          />
                         )}
                         {conn.visible.provider === 'google' && (
-                          <button
+                          <Button
                             type="button"
-                            className="btn"
+                            variant="outline"
+                            size="sm"
                             onClick={() => void loadCalendars(conn.id)}
                           >
                             Escolher agendas
-                          </button>
+                          </Button>
                         )}
-                        <button
-                          type="button"
-                          className="btn btn-danger"
+                        <IconAction
+                          variant="outline"
+                          label="Remover"
+                          className="text-danger hover:border-danger/40 hover:text-danger"
                           onClick={() => void remove(conn)}
-                        >
-                          Remover
-                        </button>
+                          icon={<Trash2 className="size-4" />}
+                        />
                       </div>
 
                       {calendars[conn.id] && (
-                        <fieldset className="conn-calendars">
-                          <legend>Quais agendas mostrar</legend>
+                        <fieldset className="flex basis-full flex-col gap-2 rounded-md border p-3">
+                          <legend className="type-caption px-2 text-ink-mid">
+                            Quais agendas mostrar
+                          </legend>
                           {calendars[conn.id].map((cal) => (
-                            <label key={cal.id} className="conn-calendar">
+                            <label
+                              key={cal.id}
+                              className="type-caption flex cursor-pointer items-center gap-2"
+                            >
                               <input
                                 type="checkbox"
+                                className="size-4 shrink-0 cursor-pointer accent-brand"
                                 checked={(chosenCalendars[conn.id] ?? []).includes(cal.id)}
                                 onChange={(e) =>
                                   setChosenCalendars((prev) => {
@@ -446,17 +492,24 @@ export function IntegrationsPanel() {
                               <span>{cal.label}</span>
                             </label>
                           ))}
-                          <button
+                          <Button
                             type="button"
-                            className="btn btn-primary"
+                            size="sm"
+                            className="mt-2 self-start"
                             onClick={() => void saveCalendars(conn.id)}
                           >
                             Salvar seleção
-                          </button>
+                          </Button>
                         </fieldset>
                       )}
                       {result && (
-                        <p className={`conn-result${result.ok ? ' is-ok' : ' is-bad'}`} role="status">
+                        <p
+                          className={cn(
+                            'type-caption flex basis-full items-center gap-2',
+                            result.ok ? 'text-success' : 'text-danger',
+                          )}
+                          role="status"
+                        >
                           {result.ok ? (
                             <CheckCircle width={14} height={14} />
                           ) : (
@@ -473,20 +526,19 @@ export function IntegrationsPanel() {
 
             {isEditing ? (
               <form
-                className="conn-form"
+                className="flex max-w-3xl flex-col gap-3 rounded-lg border border-line-strong bg-surface-1 p-4"
                 onSubmit={(e) => {
                   e.preventDefault();
                   void save();
                 }}
               >
                 {spec.multi && (
-                  <div className="conn-field">
-                    <label className="conn-label" htmlFor="conn-label-input">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-ink-mid" htmlFor="conn-label-input">
                       Nome desta conexão
-                    </label>
-                    <input
+                    </Label>
+                    <Input
                       id="conn-label-input"
-                      className="field"
                       value={label}
                       placeholder="Trabalho, Pessoal…"
                       onChange={(e) => setLabel(e.target.value)}
@@ -518,39 +570,47 @@ export function IntegrationsPanel() {
                   />
                 ))}
 
-                <div className="conn-form-actions">
-                  <button type="submit" className="btn btn-primary" disabled={saving}>
+                <div className="mt-2 flex gap-2">
+                  <Button type="submit" size="sm" disabled={saving}>
                     {saving ? 'Salvando…' : 'Salvar'}
-                  </button>
-                  <button type="button" className="btn" onClick={cancel}>
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={cancel}>
                     Cancelar
-                  </button>
+                  </Button>
                 </div>
               </form>
             ) : (
               // Ajuda e ação na mesma linha, com separação: soltas no fluxo
               // elas encostavam uma na outra e liam como uma frase só.
-              <div className="conn-actions">
+              <div className="flex flex-wrap items-center gap-3">
                 {/* Um módulo sem campo nenhum não tem o que conectar: o
                     botão abriria um formulário vazio. */}
                 {spec.fields.length > 0 && (spec.multi || mod.connections.length === 0) && (
-                  <button type="button" className="btn" onClick={() => startNew(mod.module)}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => startNew(mod.module)}
+                  >
                     {mod.connections.length === 0 ? 'Conectar' : 'Adicionar outra'}
-                  </button>
+                  </Button>
                 )}
-                <button
+                <Button
                   type="button"
-                  className="btn btn-ghost conn-help-toggle"
+                  variant="link"
+                  size="sm"
+                  className="px-0 text-ink-mid underline decoration-dotted underline-offset-[3px] hover:text-brand"
                   aria-expanded={openHelp === mod.module}
                   onClick={() => setOpenHelp(openHelp === mod.module ? null : mod.module)}
                 >
                   {openHelp === mod.module ? 'Esconder ajuda' : 'Como conseguir isso'}
-                </button>
+                </Button>
               </div>
             )}
           </article>
         );
       })}
+      {dialog}
     </Section>
   );
 }

@@ -13,7 +13,10 @@ import { JiraPanel } from '@/components/JiraPanel';
 import { TasksPanel } from '@/components/TasksPanel';
 import { DashboardGrid } from '@/components/DashboardGrid';
 import { NotesPanel } from '@/components/NotesPanel';
-import { EmptyState } from '@/components/ui/EmptyState';
+import { EmptyState } from '@/components/data/EmptyState';
+import { ErrorState } from '@/components/data/ErrorState';
+import { Button } from '@/components/ui/button';
+import { Plug } from 'lucide-react';
 import { DEFAULT_AGENDA_DAYS } from '@/lib/agendaWindow';
 import {
   defaultLayout,
@@ -154,7 +157,7 @@ export default function DashboardPage() {
   ].filter((p) => p !== false) as { id: string; node: ReactNode }[];
 
   return (
-    <main className="shell">
+    <div className="flex flex-col gap-4">
       <NowBand
         pomodoro={state?.pomodoro ?? null}
         loading={loading}
@@ -173,26 +176,22 @@ export default function DashboardPage() {
         }
       />
 
-      {layoutError && (
-        <p role="alert" className="panel-error">
-          {layoutError}
-        </p>
-      )}
+      {layoutError && <ErrorState title="Não deu para guardar a disposição" description={layoutError} />}
 
       {nothingOn ? (
-        <div className="welcome">
-          <EmptyState message="Nenhum módulo ligado ainda." />
-          <p className="welcome-text">
-            Conecte seu e-mail, agenda, Jira ou GitHub para o painel começar a mostrar alguma coisa.
-            Cada um é opcional e leva menos de um minuto.
-          </p>
-          <Link className="btn btn-primary" href="/config">
-            Conectar minhas contas
-          </Link>
-        </div>
+        <EmptyState
+          icon={<Plug />}
+          title="Nenhum módulo ligado ainda"
+          description="Conecte seu e-mail, agenda, Jira ou GitHub para o painel começar a mostrar alguma coisa. Cada um é opcional e leva menos de um minuto."
+          action={
+            <Button asChild variant="glow">
+              <Link href="/config">Conectar minhas contas</Link>
+            </Button>
+          }
+        />
       ) : (
         <DashboardGrid layout={layout} panels={panels} onSave={saveLayout} />
       )}
-    </main>
+    </div>
   );
 }
