@@ -389,3 +389,22 @@ describe('notesSyncStatus', () => {
     expect(JSON.stringify(notesSyncStatus(USER))).not.toContain('refresh-token');
   });
 });
+
+// O build carrega este módulo mais de uma vez. O que uma cópia registra —
+// a falha de uma rodada — precisa aparecer para a rota que lê pela outra.
+describe('estado compartilhado entre cópias do módulo', () => {
+  it('a situação gravada por uma cópia é lida pela outra', async () => {
+    const { createNote } = await import('@/lib/notes');
+    const first = await import('@/lib/notesSync');
+    await connectDrive();
+    createNote(USER, 'Ideias');
+    fake.failNext.push({ method: 'GET', status: 500 });
+    await first.syncNotesNow(USER);
+    expect(first.notesSyncStatus(USER).lastError).toContain('500');
+
+    vi.resetModules();
+    const second = await import('@/lib/notesSync');
+    expect(second).not.toBe(first);
+    expect(second.notesSyncStatus(USER).lastError).toContain('500');
+  });
+});

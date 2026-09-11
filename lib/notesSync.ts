@@ -126,6 +126,11 @@ export async function syncNotes(userId: string): Promise<SyncResult> {
 // Estado em memória, por processo: o servidor é um processo só. Se ele
 // reiniciar, o que ficou pendente está no banco e sobe na próxima gravação ou
 // leitura das notas.
+//
+// Fica no processo, não no módulo: o build empacota este arquivo mais de uma
+// vez, e cada cópia com o seu Map quebraria a trava de uma rodada por pessoa
+// — duas rodadas em paralelo podem criar o mesmo arquivo duas vezes — e a
+// rota de status leria uma cópia onde nenhuma rodada rodou.
 
 interface UserSyncState {
   timer: ReturnType<typeof setTimeout> | null;
@@ -136,7 +141,9 @@ interface UserSyncState {
   lastSyncedAt: string | null;
 }
 
-const states = new Map<string, UserSyncState>();
+const STATE_KEY = Symbol.for('daily-web.notes-sync');
+const states: Map<string, UserSyncState> = ((globalThis as Record<symbol, unknown>)[STATE_KEY] ??=
+  new Map<string, UserSyncState>()) as Map<string, UserSyncState>;
 
 function stateFor(userId: string): UserSyncState {
   let state = states.get(userId);
