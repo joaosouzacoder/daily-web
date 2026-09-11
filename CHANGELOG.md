@@ -62,6 +62,13 @@ Only `main` is maintained; there are no release branches.
   on reload, and each item keeps its label in a tooltip and for screen readers.
 
 ### Fixed
+- The background refresh now reaches the screen. The production build bundles
+  the refresher once for the startup hook that runs the loop and again for the
+  API routes, and each copy kept its own cache: the loop refreshed a cache no
+  route read, so the dashboard only changed when someone clicked refresh, and
+  the next-refresh countdown never appeared because the routes never saw the
+  loop's schedule. The refresher's state now lives on the process, shared by
+  every copy.
 - The background refresh runs every ten minutes by default instead of every
   minute, and `REFRESH_SECONDS` is validated: an empty or non-numeric value
   used to reach `setInterval` as `NaN`, which fires every millisecond. Any

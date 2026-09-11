@@ -340,3 +340,27 @@ describe('próximo ciclo agendado', () => {
     expect(listEnvelopes).toHaveBeenCalledTimes(2);
   });
 });
+
+// No build de produção o instrumentation e as rotas carregam cópias separadas
+// deste módulo. O ciclo roda numa cópia e a tela lê de outra: estado guardado
+// só no módulo nunca chegava à rota.
+describe('estado compartilhado entre cópias do módulo', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('a cópia das rotas enxerga o cache e o agendamento do ciclo de fundo', async () => {
+    vi.useFakeTimers({ now: new Date('2026-09-11T12:00:00Z') });
+    const doCiclo = await import('@/lib/refresher');
+    vi.resetModules();
+    const daRota = await import('@/lib/refresher');
+    expect(daRota).not.toBe(doCiclo);
+
+    await doCiclo.refreshAll(USER);
+    doCiclo.startRefreshLoop(600);
+
+    const state = daRota.getCachedState(USER);
+    expect(state).not.toBeNull();
+    expect(state?.nextRefreshAt).toBe('2026-09-11T12:10:00.000Z');
+  });
+});

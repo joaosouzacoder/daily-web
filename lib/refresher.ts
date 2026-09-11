@@ -58,19 +58,42 @@ async function mergeConnections<T>(
   return { data, error: errors.join('; ') };
 }
 
+type Patch = (state: DashboardState) => DashboardState;
+
+interface RefresherState {
+  caches: Map<string, DashboardState>;
+  emVoo: Map<symbol, { userId: string; patches: Patch[] }>;
+  refreshesEmCurso: Map<string, Promise<DashboardState>>;
+  timer: ReturnType<typeof setInterval> | null;
+  cicloEmCurso: boolean;
+  proximoTique: number | null;
+}
+
+// O build de produção empacota este módulo mais de uma vez: o instrumentation,
+// que roda o ciclo de fundo, carrega uma cópia e as rotas carregam outra.
+// Estado guardado só no módulo ficava preso na cópia do ciclo — a tela nunca
+// recebia o que o ciclo buscava nem o horário do próximo tique. Guardado no
+// processo, todas as cópias leem e escrevem o mesmo estado.
+const STATE_KEY = Symbol.for('daily-web.refresher');
+const shared: RefresherState = ((globalThis as Record<symbol, unknown>)[STATE_KEY] ??= {
+  caches: new Map(),
+  emVoo: new Map(),
+  refreshesEmCurso: new Map(),
+  timer: null,
+  cicloEmCurso: false,
+  proximoTique: null,
+} satisfies RefresherState) as RefresherState;
+
 // Um cache por usuário. Era uma variável só de módulo, o que fazia todo mundo
 // que abrisse o painel ver os dados de quem tivesse atualizado por último.
-const caches = new Map<string, DashboardState>();
-let timer: ReturnType<typeof setInterval> | null = null;
-
-type Patch = (state: DashboardState) => DashboardState;
+const caches = shared.caches;
 
 // Cada refresh em andamento tem a sua lista. O snapshot é montado a partir de
 // leituras feitas no começo do ciclo, então uma ação do usuário no meio dele
 // não aparece no resultado: gravar o snapshot cru desfazia a ação — o e-mail
 // apagado voltava para a tela até o ciclo seguinte. As ações do intervalo são
 // reaplicadas sobre o snapshot antes de ele virar cache.
-const emVoo = new Map<symbol, { userId: string; patches: Patch[] }>();
+const emVoo = shared.emVoo;
 
 // Um ciclo comporta poucas ações. Se passar disto, o snapshot é velho demais
 // para ser reconciliado e o cache atual — que já reflete tudo — fica de pé.
@@ -81,7 +104,7 @@ const MAX_PATCHES_EM_VOO = 500;
 // conta e o servidor recusa os seguintes, o que fazia o painel voltar com
 // erro — e o clique repetido, que é a reação natural, só piorava a disputa.
 // Quem chega no meio de um refresh recebe o resultado do que já está em curso.
-const refreshesEmCurso = new Map<string, Promise<DashboardState>>();
+const refreshesEmCurso = shared.refreshesEmCurso;
 
 export function refreshAll(userId: string): Promise<DashboardState> {
   const emCurso = refreshesEmCurso.get(userId);
@@ -252,38 +275,34 @@ async function refreshEveryone(): Promise<void> {
   pruneOldBodies();
 }
 
-// Um ciclo que passa do intervalo faria o próximo começar por cima dele,
-// dobrando as conexões abertas em cada caixa a cada tique. Enquanto o anterior
-// não termina, o tique é descartado — não enfileirado, que só adiaria a mesma
-// sobreposição.
-let cicloEmCurso = false;
-
 // Horário do próximo tique, para a tela mostrar quanto falta. Nulo enquanto o
 // ciclo não foi iniciado — nos testes e antes do boot terminar.
-let proximoTique: number | null = null;
-
 function nextRefreshAt(): string | null {
-  return proximoTique === null ? null : new Date(proximoTique).toISOString();
+  return shared.proximoTique === null ? null : new Date(shared.proximoTique).toISOString();
 }
 
 export function startRefreshLoop(intervalSeconds: number): void {
-  if (timer) return;
+  if (shared.timer) return;
   const intervalMs = intervalSeconds * 1000;
 
+  // Um ciclo que passa do intervalo faria o próximo começar por cima dele,
+  // dobrando as conexões abertas em cada caixa a cada tique. Enquanto o anterior
+  // não termina, o tique é descartado — não enfileirado, que só adiaria a mesma
+  // sobreposição.
   const tick = async () => {
-    if (cicloEmCurso) return;
-    cicloEmCurso = true;
+    if (shared.cicloEmCurso) return;
+    shared.cicloEmCurso = true;
     try {
       await refreshEveryone();
     } finally {
-      cicloEmCurso = false;
+      shared.cicloEmCurso = false;
     }
   };
 
-  proximoTique = Date.now() + intervalMs;
+  shared.proximoTique = Date.now() + intervalMs;
   void tick();
-  timer = setInterval(() => {
-    proximoTique = Date.now() + intervalMs;
+  shared.timer = setInterval(() => {
+    shared.proximoTique = Date.now() + intervalMs;
     void tick();
   }, intervalMs);
 }
@@ -292,8 +311,8 @@ export function resetCachesForTests(): void {
   caches.clear();
   emVoo.clear();
   refreshesEmCurso.clear();
-  cicloEmCurso = false;
-  proximoTique = null;
-  if (timer) clearInterval(timer);
-  timer = null;
+  shared.cicloEmCurso = false;
+  shared.proximoTique = null;
+  if (shared.timer) clearInterval(shared.timer);
+  shared.timer = null;
 }
