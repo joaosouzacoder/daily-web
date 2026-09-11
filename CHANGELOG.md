@@ -95,6 +95,11 @@ Only `main` is maintained; there are no release branches.
   on reload, and each item keeps its label in a tooltip and for screen readers.
 
 ### Fixed
+- Panels can be resized again in "Organizar" mode. The rule that stops panel
+  content from catching the pointer while arranging was widened to every child
+  of the grid item in the Tailwind rebuild, which also caught the resize handle
+  the grid injects there: pulling the corner moved the panel instead of
+  resizing it. The handle is now excluded from that rule.
 - The background refresh now reaches the screen. The production build bundles
   the refresher once for the startup hook that runs the loop and again for the
   API routes, and each copy kept its own cache: the loop refreshed a cache no

@@ -654,8 +654,10 @@
   outline-color: var(--brand-edge);
 }
 
-/* Enquanto arrasta, o conteúdo não deve capturar o ponteiro nem rolar. */
-.dashboard-grid.is-arranging [data-slot='grid-panel'] > * {
+/* Enquanto arrasta, o conteúdo não deve capturar o ponteiro nem rolar. A alça
+   de redimensionar também é filha do item, então fica de fora: sem o ponteiro,
+   puxar o canto viraria mover o painel. */
+.dashboard-grid.is-arranging [data-slot='grid-panel'] > :not(.react-resizable-handle) {
   pointer-events: none;
   overflow: hidden;
 }
