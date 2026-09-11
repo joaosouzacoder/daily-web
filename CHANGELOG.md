@@ -9,6 +9,10 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Changed
+- The active note tab is the same band as the sidebar's active item — a brand
+  tint fading out with a 3px bar — instead of a solid surface that read as a
+  black block in the dark theme, with a brand bar that curved around the tab's
+  rounded corner.
 - The front end is rebuilt on Tailwind v4 and shadcn/ui. The hand-written
   stylesheet is gone, replaced by a token layer in `oklch()`: a six-level
   surface ramp, five elevations that each open with a large inset highlight,
@@ -33,6 +37,15 @@ Only `main` is maintained; there are no release branches.
   the colour of action while the background is atmosphere.
 
 ### Added
+- A note can be renamed from a pencil beside its tab, not only by
+  double-clicking it. Enter saves, Escape cancels, and an empty title keeps the
+  old name. The Drive copy follows: the next sync renames the same file rather
+  than creating a new one.
+- A note opens full screen from a maximize button at the top right of the
+  editor, in the app dialog, with the toolbar, the preview and the save status.
+  Focus lands in the text; Escape or the restore button brings it back to the
+  panel with focus in the panel's text, and whatever was typed is saved before
+  the switch.
 - Quick notes can keep a durable copy in the user's own Google Drive, so they
   no longer depend on the machine that serves the app. **Guardar no Google
   Drive** in the settings screen connects one Google account per user with the

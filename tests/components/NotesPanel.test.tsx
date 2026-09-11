@@ -1,5 +1,5 @@
 import { describe, expect, it, afterEach, beforeEach, vi } from 'vitest';
-import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
 import { NotesPanel } from '@/components/NotesPanel';
 import type { Note } from '@/lib/types';
 
@@ -338,6 +338,144 @@ describe('NotesPanel', () => {
 
       await vi.advanceTimersByTimeAsync(10_500);
       expect(chamadas.some((c) => c.url === '/api/notes/sync')).toBe(true);
+    });
+  });
+
+  describe('renomear', () => {
+    it('o lápis abre o título para edição e Enter grava', async () => {
+      responder([nota({ id: '1', title: 'Ideias' })]);
+      render(<NotesPanel />);
+
+      fireEvent.click(await screen.findByRole('button', { name: 'mudar o título de Ideias' }));
+      const campo = screen.getByLabelText('renomear Ideias');
+      expect(campo).toHaveFocus();
+      fireEvent.change(campo, { target: { value: '  Planos  ' } });
+      fireEvent.keyDown(campo, { key: 'Enter' });
+      fireEvent.blur(campo);
+
+      await waitFor(() =>
+        expect(chamadas.filter((c) => c.method === 'PATCH').map((c) => c.body)).toEqual([
+          { title: 'Planos' },
+        ]),
+      );
+      expect(await screen.findByRole('button', { name: 'Planos' })).toBeInTheDocument();
+    });
+
+    it('Esc cancela sem gravar', async () => {
+      responder([nota({ id: '1', title: 'Ideias' })]);
+      render(<NotesPanel />);
+
+      fireEvent.doubleClick(await screen.findByRole('button', { name: 'Ideias' }));
+      const campo = screen.getByLabelText('renomear Ideias');
+      fireEvent.change(campo, { target: { value: 'Descartado' } });
+      fireEvent.keyDown(campo, { key: 'Escape' });
+      fireEvent.blur(campo);
+
+      await vi.advanceTimersByTimeAsync(800);
+      expect(chamadas.some((c) => c.method === 'PATCH')).toBe(false);
+      expect(screen.getByRole('button', { name: 'Ideias' })).toBeInTheDocument();
+    });
+
+    it('título vazio volta ao nome que era', async () => {
+      responder([nota({ id: '1', title: 'Ideias' })]);
+      render(<NotesPanel />);
+
+      fireEvent.click(await screen.findByRole('button', { name: 'mudar o título de Ideias' }));
+      const campo = screen.getByLabelText('renomear Ideias');
+      fireEvent.change(campo, { target: { value: '   ' } });
+      fireEvent.keyDown(campo, { key: 'Enter' });
+      fireEvent.blur(campo);
+
+      await vi.advanceTimersByTimeAsync(800);
+      expect(chamadas.some((c) => c.method === 'PATCH')).toBe(false);
+      expect(screen.getByRole('button', { name: 'Ideias' })).toBeInTheDocument();
+    });
+
+    it('depois de cancelar, a próxima edição grava normalmente', async () => {
+      responder([nota({ id: '1', title: 'Ideias' })]);
+      render(<NotesPanel />);
+
+      fireEvent.click(await screen.findByRole('button', { name: 'mudar o título de Ideias' }));
+      fireEvent.keyDown(screen.getByLabelText('renomear Ideias'), { key: 'Escape' });
+
+      fireEvent.doubleClick(screen.getByRole('button', { name: 'Ideias' }));
+      const campo = screen.getByLabelText('renomear Ideias');
+      fireEvent.change(campo, { target: { value: 'Agora sim' } });
+      fireEvent.blur(campo);
+
+      await waitFor(() =>
+        expect(chamadas.find((c) => c.method === 'PATCH')?.body).toEqual({ title: 'Agora sim' }),
+      );
+    });
+  });
+
+  describe('tela cheia', () => {
+    it('maximizar abre a nota num diálogo, com editor e barra', async () => {
+      responder([nota({ id: '1', title: 'Ideias', body: 'texto' })]);
+      render(<NotesPanel />);
+      await screen.findByLabelText('texto de Ideias');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Maximizar' }));
+
+      const dialogo = await screen.findByRole('dialog', { name: 'Ideias' });
+      expect(within(dialogo).getByLabelText('texto de Ideias')).toHaveValue('texto');
+      await waitFor(() => expect(within(dialogo).getByLabelText('texto de Ideias')).toHaveFocus());
+      expect(within(dialogo).getByRole('button', { name: /Negrito/ })).toBeEnabled();
+      // O painel não mantém um segundo campo com o mesmo texto por baixo.
+      expect(screen.getAllByLabelText('texto de Ideias')).toHaveLength(1);
+      expect(screen.getByText('Aberta em tela cheia.')).toBeInTheDocument();
+    });
+
+    it('o que se digita em tela cheia é salvo e continua no painel', async () => {
+      responder([nota({ id: '1', title: 'Ideias', body: '' })]);
+      render(<NotesPanel />);
+      await screen.findByLabelText('texto de Ideias');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Maximizar' }));
+      const dialogo = await screen.findByRole('dialog');
+      fireEvent.change(within(dialogo).getByLabelText('texto de Ideias'), {
+        target: { value: 'escrito grande' },
+      });
+      fireEvent.click(within(dialogo).getByRole('button', { name: 'Restaurar' }));
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      expect(screen.getByLabelText('texto de Ideias')).toHaveValue('escrito grande');
+      await waitFor(() =>
+        expect(chamadas.find((c) => c.method === 'PATCH')?.body).toEqual({ body: 'escrito grande' }),
+      );
+    });
+
+    it('Esc fecha a tela cheia e volta ao painel', async () => {
+      responder([nota({ id: '1', title: 'Ideias', body: 'texto' })]);
+      render(<NotesPanel />);
+      await screen.findByLabelText('texto de Ideias');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Maximizar' }));
+      const dialogo = await screen.findByRole('dialog');
+      fireEvent.keyDown(within(dialogo).getByLabelText('texto de Ideias'), { key: 'Escape' });
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      const campo = screen.getByLabelText('texto de Ideias') as HTMLTextAreaElement;
+      expect(campo).toHaveValue('texto');
+      expect(campo).toHaveFocus();
+      expect(screen.queryByText('Aberta em tela cheia.')).toBeNull();
+
+      // A barra do painel volta a formatar o campo do painel.
+      campo.setSelectionRange(0, 5);
+      fireEvent.click(screen.getByRole('button', { name: /Negrito/ }));
+      expect(campo).toHaveValue('**texto**');
+    });
+
+    it('a visualização também abre em tela cheia', async () => {
+      responder([nota({ id: '1', title: 'Ideias', body: '# Grande' })]);
+      render(<NotesPanel />);
+      await screen.findByLabelText('texto de Ideias');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Visualizar' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Maximizar' }));
+
+      const dialogo = await screen.findByRole('dialog');
+      expect(within(dialogo).getByRole('region').querySelector('h1')).toHaveTextContent('Grande');
     });
   });
 });

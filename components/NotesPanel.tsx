@@ -19,6 +19,8 @@ import {
   List,
   ListChecks,
   ListOrdered,
+  Maximize2,
+  Minimize2,
   Pencil,
   Plus,
   Quote,
@@ -33,6 +35,13 @@ import { useConfirm } from '@/components/data/ConfirmDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { EmptyState } from '@/components/data/EmptyState';
 import { focusRing } from '@/lib/theme';
 import { cn } from '@/lib/utils';
@@ -104,8 +113,14 @@ export function NotesPanel() {
   const [erro, setErro] = useState<string | null>(null);
   const [renomeando, setRenomeando] = useState<string | null>(null);
   const [lendo, setLendo] = useState(false);
+  const [maximizada, setMaximizada] = useState(false);
+  const campoAtual = () => (maximizada ? campoTelaCheia.current : campoPainel.current);
   const [sync, setSync] = useState<NotesSyncStatus | null>(null);
-  const campo = useRef<HTMLTextAreaElement>(null);
+  // Um campo no painel e outro no diálogo, cada um com a sua ref. Uma ref só
+  // para os dois se perde: o diálogo continua montado durante a animação de
+  // saída e, ao desmontar, zeraria a ref que o campo do painel já assumiu.
+  const campoPainel = useRef<HTMLTextAreaElement>(null);
+  const campoTelaCheia = useRef<HTMLTextAreaElement>(null);
   // Seleção a restaurar depois que o React escrever o texto novo no campo.
   const selecaoPendente = useRef<{ start: number; end: number } | null>(null);
 
@@ -219,9 +234,10 @@ export function NotesPanel() {
 
   useLayoutEffect(() => {
     const alvo = selecaoPendente.current;
-    if (!alvo || !campo.current) return;
+    const el = campoAtual();
+    if (!alvo || !el) return;
     selecaoPendente.current = null;
-    campo.current.setSelectionRange(alvo.start, alvo.end);
+    el.setSelectionRange(alvo.start, alvo.end);
   }, [rascunho]);
 
   /**
@@ -231,7 +247,7 @@ export function NotesPanel() {
    * trocado pelo estado e a seleção volta depois da renderização.
    */
   const editar = (edit: TextEdit) => {
-    const el = campo.current;
+    const el = campoAtual();
     if (!el) return;
     el.focus();
     el.setSelectionRange(edit.from, edit.to);
@@ -248,7 +264,7 @@ export function NotesPanel() {
   };
 
   const formatar = (action: MarkdownAction) => {
-    const el = campo.current;
+    const el = campoAtual();
     if (!el) return;
     editar(formatMarkdown(el.value, { start: el.selectionStart, end: el.selectionEnd }, action));
   };
@@ -328,6 +344,10 @@ export function NotesPanel() {
     });
   };
 
+  const comecarRenomear = (id: string) => setRenomeando(id);
+
+  /** Título vazio não apaga o nome: volta ao que era. Sem nome a aba vira
+   *  "sem título" e o arquivo no Drive também — raramente é o que se quis. */
   const renomear = async (note: Note, titulo: string) => {
     setRenomeando(null);
     const limpo = titulo.trim();
@@ -335,7 +355,93 @@ export function NotesPanel() {
     await gravar(note.id, { title: limpo });
   };
 
+  const alternarMaximizada = (valor: boolean) => {
+    // O texto pendente sobe antes da troca: o campo muda de lugar e o
+    // rascunho não pode depender de qual dos dois estava aberto.
+    void gravarPendente();
+    setMaximizada(valor);
+  };
+
   const notaAtiva = notes.find((n) => n.id === ativa) ?? null;
+
+  /** A barra de formatação. `emTelaCheia` diz em qual das duas ela está: a do
+   *  painel fica inerte enquanto o diálogo está aberto, porque o campo de
+   *  texto que ela formataria é o do diálogo. */
+  const barra = (emTelaCheia: boolean) => (
+    <div className="flex items-start gap-2" role="toolbar" aria-label="formatação Markdown">
+      {/* A formatação quebra linha quando o painel é estreito; ler e
+          maximizar ficam sempre no canto superior direito. */}
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
+        {FERRAMENTAS.map((f) => (
+          <IconAction
+            key={f.action}
+            label={f.label}
+            icon={f.icon}
+            disabled={lendo || (maximizada && !emTelaCheia)}
+            // Sem isto o clique tira o foco do texto e a seleção se perde
+            // antes de a formatação saber onde aplicar.
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => formatar(f.action)}
+          />
+        ))}
+      </div>
+      <div className="flex shrink-0 items-center gap-0.5">
+        <IconAction
+          label={lendo ? 'Editar' : 'Visualizar'}
+          aria-pressed={lendo}
+          disabled={maximizada && !emTelaCheia}
+          icon={lendo ? <Pencil className="size-4" /> : <Eye className="size-4" />}
+          onClick={() => {
+            void gravarPendente();
+            setLendo((v) => !v);
+          }}
+        />
+        <IconAction
+          label={emTelaCheia ? 'Restaurar' : 'Maximizar'}
+          icon={emTelaCheia ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+          onClick={() => alternarMaximizada(!emTelaCheia)}
+        />
+      </div>
+    </div>
+  );
+
+  const corpo = (emTelaCheia: boolean) =>
+    lendo ? (
+      <div
+        className="min-h-40 flex-1 overflow-y-auto rounded-md border border-line-soft px-3 py-2 text-sm"
+        aria-label={`visualização de ${notaAtiva?.title || 'sem título'}`}
+        role="region"
+      >
+        {rascunho.trim() ? (
+          <MarkdownView source={rascunho} />
+        ) : (
+          <p className="text-ink-dim">Nada escrito ainda.</p>
+        )}
+      </div>
+    ) : (
+      <Textarea
+        ref={emTelaCheia ? campoTelaCheia : campoPainel}
+        className="min-h-40 flex-1 resize-none font-mono leading-relaxed [field-sizing:fixed]"
+        aria-label={`texto de ${notaAtiva?.title || 'sem título'}`}
+        placeholder="Escreva aqui, em Markdown. O que você digita é salvo sozinho."
+        value={rascunho}
+        onChange={(e) => digitar(e.target.value)}
+        onKeyDown={teclar}
+        onBlur={() => void gravarPendente()}
+      />
+    );
+
+  const situacao = (
+    <p className="type-caption text-right text-ink-dim" role="status">
+      {estado === 'salvando' ? 'salvando…' : estado === 'erro' ? 'não salvo' : 'salvo'}
+      {sync?.connected && estado !== 'erro' && (
+        <span className={cn(sync.lastError && 'text-warning')}>
+          {' · '}
+          {descreverSync(sync)}
+        </span>
+      )}
+    </p>
+  );
 
   return (
     <Section
@@ -369,10 +475,17 @@ export function NotesPanel() {
               <li
                 key={note.id}
                 className={cn(
-                  'group flex items-center gap-2 rounded-md transition-colors',
+                  // A aba ativa é a mesma faixa do item ativo da barra lateral:
+                  // tinta da marca que se dissolve e uma barra de 3px. Uma
+                  // superfície sólida aqui virava um bloco preto no tema escuro.
+                  'group relative flex items-center gap-1 pr-1 transition-colors duration-100 ease-brand motion-reduce:transition-none',
                   note.id === ativa
-                    ? 'bg-surface-2 shadow-[inset_-2px_0_0_var(--color-brand)]'
-                    : 'hover:bg-surface-1',
+                    ? [
+                        'bg-[linear-gradient(to_right,var(--brand-tint),transparent_85%)]',
+                        "before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-brand before:content-['']",
+                        'dark:before:shadow-[0_0_8px_0_var(--brand)]',
+                      ]
+                    : 'hover:bg-glass-line',
                 )}
               >
                 {renomeando === note.id ? (
@@ -391,16 +504,31 @@ export function NotesPanel() {
                   <button
                     type="button"
                     className={cn(
-                      'min-w-0 flex-1 truncate rounded-md px-3 py-2 text-left text-sm transition-colors',
+                      'min-w-0 flex-1 truncate py-2 pr-2 pl-4 text-left text-sm transition-colors',
                       note.id === ativa ? 'text-ink' : 'text-ink-mid hover:text-ink',
                       focusRing,
                     )}
                     aria-current={note.id === ativa}
                     onClick={() => void trocarAba(note.id)}
-                    onDoubleClick={() => setRenomeando(note.id)}
+                    onDoubleClick={() => comecarRenomear(note.id)}
                     title="Clique duplo para renomear"
                   >
                     {note.title || 'sem título'}
+                  </button>
+                )}
+                {renomeando !== note.id && (
+                  <button
+                    type="button"
+                    className={cn(
+                      'flex size-6 shrink-0 items-center justify-center rounded-md border border-transparent text-ink-dim opacity-0 transition-[opacity,color,border-color] hover:border-line-strong hover:text-ink focus-visible:opacity-100 group-hover:opacity-100',
+                      note.id === ativa && 'opacity-100',
+                      focusRing,
+                    )}
+                    aria-label={`mudar o título de ${note.title || 'sem título'}`}
+                    title="Renomear"
+                    onClick={() => comecarRenomear(note.id)}
+                  >
+                    <Pencil className="size-3.5" />
                   </button>
                 )}
                 <button
@@ -420,70 +548,49 @@ export function NotesPanel() {
           </ul>
 
           <div className="flex min-h-0 flex-col gap-2">
-            <div
-              className="flex flex-wrap items-center gap-0.5"
-              role="toolbar"
-              aria-label="formatação Markdown"
-            >
-              {FERRAMENTAS.map((f) => (
-                <IconAction
-                  key={f.action}
-                  label={f.label}
-                  icon={f.icon}
-                  disabled={lendo}
-                  // Sem isto o clique tira o foco do texto e a seleção se perde
-                  // antes de a formatação saber onde aplicar.
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => formatar(f.action)}
-                />
-              ))}
-              <IconAction
-                className="ml-auto"
-                label={lendo ? 'Editar' : 'Visualizar'}
-                aria-pressed={lendo}
-                icon={lendo ? <Pencil className="size-4" /> : <Eye className="size-4" />}
-                onClick={() => {
-                  void gravarPendente();
-                  setLendo((v) => !v);
-                }}
-              />
-            </div>
-            {lendo ? (
-              <div
-                className="min-h-40 flex-1 overflow-y-auto rounded-md border border-line-soft px-3 py-2 text-sm"
-                aria-label={`visualização de ${notaAtiva?.title || 'sem título'}`}
-                role="region"
-              >
-                {rascunho.trim() ? (
-                  <MarkdownView source={rascunho} />
-                ) : (
-                  <p className="text-ink-dim">Nada escrito ainda.</p>
-                )}
-              </div>
+            {barra(false)}
+            {maximizada ? (
+              <p className="type-caption flex min-h-40 flex-1 items-center justify-center rounded-md border border-dashed border-line-strong text-ink-dim">
+                Aberta em tela cheia.
+              </p>
             ) : (
-              <Textarea
-                ref={campo}
-                className="min-h-40 flex-1 resize-none font-mono leading-relaxed [field-sizing:fixed]"
-                aria-label={`texto de ${notaAtiva?.title || 'sem título'}`}
-                placeholder="Escreva aqui, em Markdown. O que você digita é salvo sozinho."
-                value={rascunho}
-                onChange={(e) => digitar(e.target.value)}
-                onKeyDown={teclar}
-                onBlur={() => void gravarPendente()}
-              />
+              corpo(false)
             )}
-            <p className="type-caption text-right text-ink-dim" role="status">
-              {estado === 'salvando' ? 'salvando…' : estado === 'erro' ? 'não salvo' : 'salvo'}
-              {sync?.connected && estado !== 'erro' && (
-                <span className={cn(sync.lastError && 'text-warning')}>
-                  {' · '}
-                  {descreverSync(sync)}
-                </span>
-              )}
-            </p>
+            {situacao}
           </div>
         </div>
       )}
+
+      {/* A nota em tela cheia é o mesmo editor, no diálogo da app: Esc e o
+          botão de restaurar voltam ao painel com o foco onde estava. */}
+      <Dialog open={maximizada && notaAtiva !== null} onOpenChange={alternarMaximizada}>
+        <DialogContent
+          className="flex h-[calc(100dvh-2rem)] w-full flex-col gap-3 sm:max-w-[min(72rem,calc(100%-2rem))]"
+          // Maximizar é para escrever: o foco vai ao texto, não ao primeiro
+          // botão da barra (que ainda abriria a dica dele por cima).
+          onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            (campoTelaCheia.current ?? (e.currentTarget as HTMLElement)).focus();
+          }}
+          // Na volta, o foco vai ao texto do painel — o botão que abriu o
+          // diálogo pode nem estar mais visível, e escrever é o que se fazia.
+          onCloseAutoFocus={(e) => {
+            if (!campoPainel.current) return;
+            e.preventDefault();
+            campoPainel.current.focus();
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle className="truncate">{notaAtiva?.title || 'sem título'}</DialogTitle>
+            <DialogDescription className="sr-only">
+              Nota em tela cheia. Esc volta ao painel.
+            </DialogDescription>
+          </DialogHeader>
+          {barra(true)}
+          {corpo(true)}
+          {situacao}
+        </DialogContent>
+      </Dialog>
       {dialog}
     </Section>
   );
