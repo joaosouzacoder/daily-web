@@ -1,8 +1,35 @@
 import { describe, expect, it, afterEach, vi } from 'vitest';
 import type { ComponentProps } from 'react';
-import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
 import { JiraPanel } from '@/components/JiraPanel';
-import type { JiraDatedItem, JiraItem } from '@/lib/types';
+import type { JiraDatedItem, JiraItem, JiraProblemItem } from '@/lib/types';
+
+/** A URL da página, em memória: o painel lê a aba dela e escreve nela, e o
+ *  teste confere o que ficou gravado. */
+const nav = vi.hoisted(() => ({
+  search: '',
+  history: [] as string[],
+  listeners: new Set<() => void>(),
+}));
+
+vi.mock('next/navigation', async () => {
+  const { useSyncExternalStore } = await import('react');
+  const subscribe = (listener: () => void) => {
+    nav.listeners.add(listener);
+    return () => nav.listeners.delete(listener);
+  };
+  const push = (url: string) => {
+    nav.history.push(url);
+    nav.search = url.split('?')[1] ?? '';
+    nav.listeners.forEach((listener) => listener());
+  };
+  return {
+    usePathname: () => '/',
+    useRouter: () => ({ push }),
+    useSearchParams: () =>
+      new URLSearchParams(useSyncExternalStore(subscribe, () => nav.search)),
+  };
+});
 
 /** As três listas do painel são obrigatórias; cada teste só quer falar de
  *  uma delas, então o resto vem vazio por padrão. */
@@ -13,6 +40,7 @@ function Panel(props: Partial<ComponentProps<typeof JiraPanel>>) {
       watched={{ data: [], error: null }}
       delivered={{ data: [], error: null }}
       approved={{ data: [], error: null }}
+      problems={{ data: [], error: null }}
       onChanged={() => {}}
       {...props}
     />
@@ -44,6 +72,8 @@ function dated(over: Partial<JiraDatedItem>): JiraDatedItem {
 
 afterEach(() => {
   cleanup();
+  nav.search = '';
+  nav.history = [];
   vi.unstubAllGlobals();
 });
 
@@ -629,5 +659,77 @@ describe('período de entregues e aprovados', () => {
     fireEvent.click(screen.getByRole('button', { name: /7 dias/i }));
 
     expect(screen.getByRole('tab', { name: /entregues, 2/i })).toBeInTheDocument();
+  });
+});
+
+describe('aba Problemas', () => {
+  const problema = (over: Partial<JiraProblemItem> = {}): JiraProblemItem => ({
+    ...issue({ key: 'DAD-7', summary: 'Checkout novo', statusCategory: 'done', status: 'Resolvido' }),
+    problems: ['story-done-without-start', 'story-without-epic'],
+    ...over,
+  });
+
+  it('lista cada issue com todos os seus problemas e o link para o Jira', () => {
+    render(<Panel problems={{ data: [problema()], error: null }} />);
+    fireEvent.click(screen.getByRole('tab', { name: /Problemas/ }));
+
+    expect(screen.getByRole('link', { name: 'DAD-7' })).toHaveAttribute('href', 'https://example/A-1');
+    const lista = screen.getByRole('list', { name: 'problemas de DAD-7' });
+    expect(within(lista).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      'concluída sem data de início',
+      'sem épico',
+    ]);
+  });
+
+  it('conta as issues com problema no rótulo da aba', () => {
+    render(
+      <Panel problems={{ data: [problema(), problema({ key: 'DAD-8' })], error: null }} />,
+    );
+    expect(screen.getByRole('tab', { name: 'Problemas, 2' })).toBeInTheDocument();
+  });
+
+  it('mostra o erro do Jira sem derrubar a aba', () => {
+    render(<Panel problems={{ data: [], error: 'campo "Start date" não encontrado no Jira' }} />);
+    fireEvent.click(screen.getByRole('tab', { name: /Problemas/ }));
+    expect(screen.getByText(/Start date/)).toBeInTheDocument();
+  });
+
+  it('diz quando não há problema', () => {
+    render(<Panel />);
+    fireEvent.click(screen.getByRole('tab', { name: /Problemas/ }));
+    expect(screen.getByText('Nenhuma história ou épico com problema.')).toBeInTheDocument();
+  });
+
+  it('não mostra o período, que é das listas fechadas', () => {
+    render(<Panel problems={{ data: [problema()], error: null }} />);
+    fireEvent.click(screen.getByRole('tab', { name: /Problemas/ }));
+    expect(screen.queryByRole('button', { name: /7 dias/i })).toBeNull();
+  });
+});
+
+describe('aba na URL', () => {
+  it('grava a aba escolhida na URL', () => {
+    render(<Panel />);
+    fireEvent.click(screen.getByRole('tab', { name: /Problemas/ }));
+    expect(nav.history).toEqual(['/?jira=problemas']);
+  });
+
+  it('abre na aba que veio na URL', () => {
+    nav.search = 'jira=entregues';
+    render(<Panel />);
+    expect(screen.getByRole('tab', { name: /Entregues/ })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('tira da URL a aba padrão e mantém os outros parâmetros', () => {
+    nav.search = 'x=1&jira=problemas';
+    render(<Panel />);
+    fireEvent.click(screen.getByRole('tab', { name: /Em aberto/ }));
+    expect(nav.history).toEqual(['/?x=1']);
+  });
+
+  it('cai na aba padrão quando a URL traz uma aba que não existe', () => {
+    nav.search = 'jira=<script>';
+    render(<Panel />);
+    expect(screen.getByRole('tab', { name: /Em aberto/ })).toHaveAttribute('aria-selected', 'true');
   });
 });

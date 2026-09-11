@@ -4,7 +4,14 @@ import { useCallback, useMemo, useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import { IconAction } from '@/components/data/IconAction';
 import { NavArrowRight } from 'iconoir-react';
-import type { JiraDatedItem, JiraItem, JiraStatusCategory, PanelResult } from '@/lib/types';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import type {
+  JiraDatedItem,
+  JiraItem,
+  JiraProblemItem,
+  JiraStatusCategory,
+  PanelResult,
+} from '@/lib/types';
 import { PanelError } from '@/components/data/PanelError';
 import type { ActiveFilter } from '@/lib/filters';
 import { matchesQuery } from '@/lib/filters';
@@ -18,6 +25,7 @@ import {
   stalenessLabel,
 } from '@/lib/parsers/jira';
 import type { JiraNode, JiraProjectGroup } from '@/lib/parsers/jira';
+import { PROBLEM_LABEL } from '@/lib/parsers/jiraProblems';
 import { Section } from './ui/Section';
 import { Tabs } from './ui/legacy-tabs';
 import { FilterBar } from './ui/FilterBar';
@@ -87,10 +95,21 @@ const FILTER_LABEL: Record<Filter, string> = {
   reporter: 'Relator',
 };
 
-/** As três listas do painel. Não são recortes da mesma coleção: "Em aberto" é
- *  o que ainda pede trabalho, "Entregues" é o que saiu das suas mãos e
- *  "Aprovados" é o que passou por uma decisão sua. */
-type Aba = 'abertas' | 'entregues' | 'aprovados';
+/** As listas do painel. Não são recortes da mesma coleção: "Em aberto" é
+ *  o que ainda pede trabalho, "Entregues" é o que saiu das suas mãos,
+ *  "Aprovados" é o que passou por uma decisão sua e "Problemas" é o que está
+ *  mal preenchido. */
+const ABAS = ['abertas', 'entregues', 'aprovados', 'problemas'] as const;
+type Aba = (typeof ABAS)[number];
+
+// A aba vive na URL para sobreviver ao recarregar e ir junto num link. A
+// padrão fica fora dela, e o valor que não for uma aba conhecida cai na padrão.
+const ABA_PARAM = 'jira';
+const ABA_PADRAO: Aba = 'abertas';
+
+function parseAba(value: string | null): Aba {
+  return ABAS.find((aba) => aba === value) ?? ABA_PADRAO;
+}
 
 /** O recorte de tempo das duas listas fechadas. As issues das duas já chegam
  *  cobrindo a semana, com a marca de quais são de hoje, então trocar aqui não
@@ -110,6 +129,8 @@ interface Props {
   delivered: PanelResult<JiraDatedItem[]>;
   /** Issues que você aprovou nos últimos sete dias. */
   approved: PanelResult<JiraDatedItem[]>;
+  /** Histórias e épicos seus com defeito de preenchimento. */
+  problems: PanelResult<JiraProblemItem[]>;
   onChanged: () => void;
   loading?: boolean;
 }
@@ -119,10 +140,22 @@ export function JiraPanel({
   watched,
   delivered,
   approved,
+  problems,
   onChanged,
   loading = false,
 }: Props) {
-  const [aba, setAba] = useState<Aba>('abertas');
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const aba = parseAba(searchParams.get(ABA_PARAM));
+  // Trocar de aba é navegação: entra no histórico, e o voltar desfaz.
+  const setAba = (next: Aba) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === ABA_PADRAO) params.delete(ABA_PARAM);
+    else params.set(ABA_PARAM, next);
+    const query = params.toString();
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
   const [periodo, setPeriodo] = useState<Periodo>('hoje');
   const [novaChave, setNovaChave] = useState('');
   const [watchError, setWatchError] = useState<string | null>(null);
@@ -228,6 +261,8 @@ export function JiraPanel({
   const aprovados = useMemo(() => noPeriodo(approved.data ?? []), [approved.data, noPeriodo]);
   const aprovadosProjects = useMemo(() => buildJiraTree(aprovados), [aprovados]);
 
+  const problemas = problems.data ?? [];
+
   const activeFilters: ActiveFilter[] = [
     ...(query.trim() ? [{ id: 'query', label: `Busca: ${query.trim()}` }] : []),
     ...(filter !== 'both' ? [{ id: 'role', label: FILTER_LABEL[filter] }] : []),
@@ -256,18 +291,19 @@ export function JiraPanel({
         id="jira"
         label="listas do Jira"
         active={aba}
-        onChange={(id) => setAba(id as Aba)}
+        onChange={(id) => setAba(parseAba(id))}
         tabs={[
           { id: 'abertas', label: 'Em aberto', count: all.length },
           { id: 'entregues', label: 'Entregues', count: entregues.length },
           { id: 'aprovados', label: 'Aprovados', count: aprovados.length },
+          { id: 'problemas', label: 'Problemas', count: problemas.length },
         ]}
       />
 
       {/* O período pertence às duas listas fechadas, e não a uma delas: ficar
           fora do painel da aba evita duas barras iguais e mantém o recorte
           visível ao trocar de aba. */}
-      {aba !== 'abertas' && (
+      {(aba === 'entregues' || aba === 'aprovados') && (
         <FilterBar label="Período">
           {(Object.keys(PERIODO_LABEL) as Periodo[]).map((p) => (
             <Chip key={p} active={periodo === p} onClick={() => setPeriodo(p)}>
@@ -322,6 +358,24 @@ export function JiraPanel({
             expandidos={expandidos}
             onAlternar={alternarRamo}
           />
+        </div>
+      )}
+
+      {aba === 'problemas' && (
+        <div id="jira-panel-problemas" role="tabpanel" aria-labelledby="jira-tab-problemas">
+          {problems.error && <PanelError>{problems.error}</PanelError>}
+
+          {loading && problemas.length === 0 && <SkeletonRows count={3} />}
+
+          {!loading && problemas.length === 0 && !problems.error && (
+            <EmptyState title="Nenhuma história ou épico com problema." />
+          )}
+
+          <ul>
+            {problemas.map((issue) => (
+              <JiraProblemRow key={issue.key} issue={issue} />
+            ))}
+          </ul>
         </div>
       )}
 
@@ -480,6 +534,42 @@ export function JiraPanel({
         </div>
       )}
     </Section>
+  );
+}
+
+/** Uma issue da aba de problemas: o que ela é e tudo o que está faltando nela,
+ *  para corrigir de uma vez ao abrir no Jira. */
+function JiraProblemRow({ issue }: { issue: JiraProblemItem }) {
+  return (
+    <li className={rowShell}>
+      <span className="shrink-0 type-caption leading-6 text-ink-dim">{issueMarker(issue)}</span>
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <div className="flex min-w-0 items-baseline gap-3">
+          <a
+            className={cn('shrink-0 font-mono text-sm text-brand hover:underline', focusRing)}
+            href={issue.url}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {issue.key}
+          </a>
+          <span className="min-w-0 flex-1 truncate text-ink">{issue.summary}</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 type-caption text-ink-dim">
+          <JiraStatus issue={issue} />
+          <ul className="contents" aria-label={`problemas de ${issue.key}`}>
+            {issue.problems.map((problem) => (
+              <li
+                key={problem}
+                className={cn(roleBadge, 'border-warning/45 bg-warning-tint text-warning')}
+              >
+                {PROBLEM_LABEL[problem]}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </li>
   );
 }
 

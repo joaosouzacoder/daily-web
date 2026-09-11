@@ -37,6 +37,17 @@ Only `main` is maintained; there are no release branches.
   the colour of action while the background is atmosphere.
 
 ### Added
+- The Jira panel has a "Problemas" tab listing your stories and epics
+  (assignee or reporter, open or updated in the last 30 days) with
+  data-quality problems, each with every problem it has and a link to the
+  issue: a story in progress without a start date, a done story without a
+  start or resolution date, a story without an epic, an epic without stories,
+  and an epic in progress with no story in progress. The start date is found
+  by field name ("Start date" / "Data de início"); if the instance has no such
+  field the tab says so instead of flagging every story. Epic children come in
+  one paginated `parent in (...)` search, not one request per epic.
+- The active Jira tab lives in the URL (`?jira=…`), so reloading, going back
+  and sharing the link land on the same tab.
 - A note can be renamed from a pencil beside its tab, not only by
   double-clicking it. Enter saves, Escape cancels, and an empty title keeps the
   old name. The Drive copy follows: the next sync renames the same file rather

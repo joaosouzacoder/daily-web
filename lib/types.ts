@@ -112,6 +112,21 @@ export interface JiraDatedItem extends JiraItem {
   today: boolean;
 }
 
+/** Os defeitos de preenchimento que a aba de problemas aponta. Uma issue pode
+ *  ter mais de um ao mesmo tempo. */
+export type JiraProblem =
+  | 'story-in-progress-without-start'
+  | 'story-done-without-start'
+  | 'story-done-without-resolution'
+  | 'story-without-epic'
+  | 'epic-without-stories'
+  | 'epic-in-progress-without-active-story';
+
+export interface JiraProblemItem extends JiraItem {
+  /** Nunca vazia: a issue sem problema não entra na lista. */
+  problems: JiraProblem[];
+}
+
 export interface SubTask {
   id: string;
   title: string;
@@ -208,6 +223,8 @@ export interface DashboardState {
   jiraDelivered: PanelResult<JiraDatedItem[]>;
   /** Issues que o usuário aprovou nos últimos sete dias. */
   jiraApproved: PanelResult<JiraDatedItem[]>;
+  /** Histórias e épicos seus com defeito de preenchimento. */
+  jiraProblems: PanelResult<JiraProblemItem[]>;
   tasks: PanelResult<TodoTask[]>;
   notifications: PanelResult<NotificationItem[]>;
   pomodoro: PomodoroState;

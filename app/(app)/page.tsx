@@ -139,6 +139,7 @@ export default function DashboardPage() {
           watched={state?.jiraWatched ?? { data: [], error: null }}
           delivered={state?.jiraDelivered ?? { data: [], error: null }}
           approved={state?.jiraApproved ?? { data: [], error: null }}
+          problems={state?.jiraProblems ?? { data: [], error: null }}
           onChanged={reload}
           loading={booting}
         />

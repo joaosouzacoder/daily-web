@@ -3,6 +3,7 @@ import {
   fetchApproved,
   fetchDelivered,
   fetchIssues,
+  fetchProblems,
   jiraBaseUrl,
 } from '@/lib/integrations/jiraApi';
 import type { Connection } from '@/lib/vault/connections';
@@ -232,5 +233,109 @@ describe('fetchApproved', () => {
     expect(item.key).toBe('PDS-2147');
     expect(item.url).toBe('https://acme.atlassian.net/browse/PDS-2147');
     expect(item.today).toBe(true);
+  });
+});
+
+describe('fetchProblems', () => {
+  const FIELDS_RESPONSE = [
+    { id: 'summary', name: 'Summary' },
+    { id: 'customfield_10015', name: 'Start date' },
+  ];
+
+  /** Responde pela rota: a lista de campos numa, as buscas em sequência na
+   *  outra. Devolve o mock para conferir o que foi perguntado. */
+  function stubJira(searches: unknown[], fields: unknown = FIELDS_RESPONSE) {
+    const pending = [...searches];
+    const fetchMock = vi.fn(async (url: string) => {
+      const body = url.endsWith('/rest/api/3/field') ? fields : pending.shift();
+      return { ok: true, status: 200, json: async () => body };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+
+  const searchBodies = (fetchMock: ReturnType<typeof vi.fn>) =>
+    fetchMock.mock.calls
+      .filter(([url]) => String(url).endsWith('/search/jql'))
+      .map(([, init]) => JSON.parse(init.body));
+
+  const story = (key: string, over: Record<string, unknown> = {}) =>
+    issue(key, {
+      issuetype: { name: 'História', subtask: false },
+      status: { name: 'Em andamento', statusCategory: { key: 'indeterminate' } },
+      parent: { key: 'DAD-1', fields: { summary: 'Épico' } },
+      customfield_10015: '2026-09-01',
+      ...over,
+    });
+
+  const epic = (key: string, over: Record<string, unknown> = {}) =>
+    issue(key, { issuetype: { name: 'Epic', subtask: false }, ...over });
+
+  it('lê a data de início pelo campo descoberto e pede a data de resolução', async () => {
+    const fetchMock = stubJira([
+      { issues: [story('DAD-2', { customfield_10015: null }), story('DAD-3')] },
+    ]);
+    const found = await fetchProblems(CONN);
+
+    const [scope] = searchBodies(fetchMock);
+    expect(scope.fields).toEqual(expect.arrayContaining(['customfield_10015', 'resolutiondate']));
+    expect(scope.jql).toContain('assignee = currentUser() OR reporter = currentUser()');
+    expect(found.map((i) => [i.key, i.problems])).toEqual([
+      ['DAD-2', ['story-in-progress-without-start']],
+    ]);
+    expect(found[0].url).toBe('https://acme.atlassian.net/browse/DAD-2');
+  });
+
+  it('busca as filhas de todos os épicos numa consulta só', async () => {
+    const fetchMock = stubJira([
+      { issues: [epic('DAD-1'), epic('DAD-9'), epic('DAD-20')] },
+      { issues: [story('DAD-5')] },
+    ]);
+    const found = await fetchProblems(CONN);
+
+    const bodies = searchBodies(fetchMock);
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1].jql).toBe('parent in ("DAD-1", "DAD-9", "DAD-20")');
+    expect(found.map((i) => i.key)).toEqual(['DAD-9', 'DAD-20']);
+  });
+
+  it('não busca filhas quando não há épico', async () => {
+    const fetchMock = stubJira([{ issues: [story('DAD-3')] }]);
+    await fetchProblems(CONN);
+    expect(searchBodies(fetchMock)).toHaveLength(1);
+  });
+
+  // Uma filha na segunda página que ficasse de fora faria o épico parecer
+  // sem histórias.
+  it('segue as páginas até a última', async () => {
+    const fetchMock = stubJira([
+      { issues: [epic('DAD-1')], nextPageToken: 'p2', isLast: false },
+      { issues: [epic('DAD-7')], isLast: true },
+      { issues: [story('DAD-5', { parent: { key: 'DAD-7', fields: { summary: 'x' } } })] },
+    ]);
+    const found = await fetchProblems(CONN);
+
+    const bodies = searchBodies(fetchMock);
+    expect(bodies[1].nextPageToken).toBe('p2');
+    expect(bodies[2].jql).toBe('parent in ("DAD-1", "DAD-7")');
+    expect(found.map((i) => i.key)).toEqual(['DAD-1']);
+  });
+
+  it('para com erro em vez de cortar a lista em silêncio', async () => {
+    const page = { issues: [], nextPageToken: 'mais', isLast: false };
+    stubJira(Array.from({ length: 20 }, () => page));
+    await expect(fetchProblems(CONN)).rejects.toThrow('passou de 1000 issues');
+  });
+
+  it('diz que não dá para checar quando o campo de início não existe', async () => {
+    const fetchMock = stubJira([], [{ id: 'summary', name: 'Summary' }]);
+    await expect(fetchProblems(CONN)).rejects.toThrow('campo "Start date" não encontrado');
+    expect(searchBodies(fetchMock)).toHaveLength(0);
+  });
+
+  it('reconhece o campo pelo nome em português', async () => {
+    const fetchMock = stubJira([{ issues: [] }], [{ id: 'customfield_1', name: 'Data de início' }]);
+    await fetchProblems(CONN);
+    expect(searchBodies(fetchMock)[0].fields).toContain('customfield_1');
   });
 });

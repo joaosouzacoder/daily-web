@@ -1,6 +1,15 @@
 import type { Connection } from '@/lib/vault/connections';
-import type { JiraDatedItem, JiraItem, JiraRole, JiraStatusCategory } from '@/lib/types';
+import type {
+  JiraDatedItem,
+  JiraItem,
+  JiraProblemItem,
+  JiraRole,
+  JiraStatusCategory,
+} from '@/lib/types';
 import type { JiraFilter } from '@/lib/parsers/jira';
+import { findProblems, isEpic } from '@/lib/parsers/jiraProblems';
+import type { JiraAuditIssue } from '@/lib/parsers/jiraProblems';
+import { isJiraKey } from '@/lib/preferences';
 
 const TIMEOUT_MS = 20_000;
 const PAGE_SIZE = 100;
@@ -101,6 +110,8 @@ async function request(auth: JiraAuth, path: string, body: unknown): Promise<unk
 
 interface SearchResponse {
   issues?: RawIssue[];
+  nextPageToken?: string;
+  isLast?: boolean;
 }
 
 async function search(auth: JiraAuth, jql: string): Promise<RawIssue[]> {
@@ -266,6 +277,90 @@ export async function fetchByKeys(conn: Connection, keys: string[]): Promise<Jir
   const lista = keys.map((k) => `"${k}"`).join(', ');
   const raw = await search(auth, `key in (${lista}) ORDER BY updated DESC`);
   return raw.map((issue) => toJiraItem(issue, auth.baseUrl, 'assignee'));
+}
+
+// A aba de problemas não pode parar na primeira página como as outras: uma
+// filha que ficasse de fora faria o épico dela aparecer como "sem histórias".
+// Então pagina até o fim, com um teto — passar dele é erro dito, não uma
+// lista cortada em silêncio.
+const MAX_PAGES = 10;
+
+async function searchAll(auth: JiraAuth, jql: string, fields: string[]): Promise<RawIssue[]> {
+  const issues: RawIssue[] = [];
+  let nextPageToken: string | undefined;
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const payload = { jql, fields, maxResults: PAGE_SIZE, ...(nextPageToken ? { nextPageToken } : {}) };
+    const data = (await request(auth, '/rest/api/3/search/jql', payload)) as SearchResponse;
+    issues.push(...(data.issues ?? []));
+    if (data.isLast !== false || !data.nextPageToken) return issues;
+    nextPageToken = data.nextPageToken;
+  }
+  throw new Error(`a busca do Jira passou de ${MAX_PAGES * PAGE_SIZE} issues`);
+}
+
+interface JiraField {
+  id?: string;
+  name?: string;
+}
+
+// A data de início é um campo personalizado, com id diferente em cada
+// instância. O nome é o que se repete — em inglês ou no idioma do perfil.
+const START_FIELD_NAMES = ['start date', 'data de início', 'data de inicio'];
+
+async function startDateField(auth: JiraAuth): Promise<string> {
+  const fields = (await request(auth, '/rest/api/3/field', undefined)) as JiraField[];
+  const field = fields.find((f) => START_FIELD_NAMES.includes(f.name?.trim().toLowerCase() ?? ''));
+  // Sem o campo, toda história em andamento pareceria sem início. Melhor dizer
+  // que não dá para checar do que acusar a lista inteira.
+  if (!field?.id) throw new Error('campo "Start date" não encontrado no Jira');
+  return field.id;
+}
+
+// Histórias e épicos seus que ainda pedem atenção: o que está aberto e o que
+// mudou no último mês. Sem o recorte de tempo, todo o histórico concluído
+// entraria só para ser conferido.
+const PROBLEM_SCOPE =
+  '(assignee = currentUser() OR reporter = currentUser()) AND ' +
+  '(statusCategory != Done OR updated >= -30d) ORDER BY updated DESC';
+
+// Chaves por consulta de filhas: mantém a JQL de tamanho previsível.
+const EPIC_CHUNK = 50;
+
+/** Histórias e épicos seus com defeito de preenchimento. São duas idas ao
+ *  Jira além da descoberta do campo, e não uma por épico: as filhas de todos
+ *  os épicos vêm juntas, por `parent in (...)`. */
+export async function fetchProblems(conn: Connection): Promise<JiraProblemItem[]> {
+  const auth = jiraAuth(conn);
+  const startField = await startDateField(auth);
+
+  const raw = await searchAll(auth, PROBLEM_SCOPE, [...FIELDS, 'resolutiondate', startField]);
+  const scope: JiraAuditIssue[] = raw.map((issue) => {
+    const fields = (issue.fields ?? {}) as Record<string, unknown>;
+    const text = (value: unknown) => (typeof value === 'string' ? value : '');
+    return {
+      ...toJiraItem(issue, auth.baseUrl, 'assignee'),
+      startDate: text(fields[startField]),
+      resolvedAt: text(fields.resolutiondate),
+    };
+  });
+
+  // As chaves vêm do próprio Jira, mas entram numa JQL: a mesma validação da
+  // lista de acompanhamento vale aqui.
+  const epicKeys = scope.filter(isEpic).map((i) => i.key).filter(isJiraKey);
+  const chunks: string[][] = [];
+  for (let i = 0; i < epicKeys.length; i += EPIC_CHUNK) chunks.push(epicKeys.slice(i, i + EPIC_CHUNK));
+
+  const children = (
+    await Promise.all(
+      chunks.map((keys) =>
+        searchAll(auth, `parent in (${keys.map((k) => `"${k}"`).join(', ')})`, FIELDS),
+      ),
+    )
+  )
+    .flat()
+    .map((issue) => toJiraItem(issue, auth.baseUrl, 'assignee'));
+
+  return findProblems(scope, children);
 }
 
 export async function testConnection(conn: Connection): Promise<void> {
