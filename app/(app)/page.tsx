@@ -164,6 +164,7 @@ export default function DashboardPage() {
         onRefresh={() => void refreshNow()}
         onChanged={reload}
         updatedAt={state?.updatedAt ?? null}
+        nextRefreshAt={state?.nextRefreshAt ?? null}
         bell={
           has('jira') ? (
             <NotificationsBell

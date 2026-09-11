@@ -261,3 +261,82 @@ describe('refresh simultâneo', () => {
     expect(listEnvelopes).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('intervalo do ciclo', () => {
+  it('usa dez minutos quando REFRESH_SECONDS não foi definido', async () => {
+    const { refreshIntervalSeconds } = await import('@/lib/refresher');
+    expect(refreshIntervalSeconds(undefined)).toBe(600);
+  });
+
+  it('respeita um valor válido vindo do ambiente', async () => {
+    const { refreshIntervalSeconds } = await import('@/lib/refresher');
+    expect(refreshIntervalSeconds('120')).toBe(120);
+  });
+
+  // Number('lixo') é NaN, e setInterval com NaN dispara a cada milissegundo.
+  it.each(['', 'abc', '0', '-5', 'Infinity'])('cai no padrão com valor inválido %j', async (raw) => {
+    const { refreshIntervalSeconds } = await import('@/lib/refresher');
+    expect(refreshIntervalSeconds(raw)).toBe(600);
+  });
+});
+
+describe('próximo ciclo agendado', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('não anuncia horário enquanto o ciclo não foi iniciado', async () => {
+    const { refreshAll, getCachedState } = await import('@/lib/refresher');
+    await refreshAll(USER);
+
+    expect(getCachedState(USER)?.nextRefreshAt).toBeNull();
+  });
+
+  it('anuncia o próximo ciclo e o avança a cada tique', async () => {
+    vi.useFakeTimers({ now: new Date('2026-09-11T12:00:00Z') });
+    const { refreshAll, getCachedState, startRefreshLoop } = await import('@/lib/refresher');
+    await refreshAll(USER);
+
+    startRefreshLoop(600);
+    expect(getCachedState(USER)?.nextRefreshAt).toBe('2026-09-11T12:10:00.000Z');
+
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(getCachedState(USER)?.nextRefreshAt).toBe('2026-09-11T12:20:00.000Z');
+  });
+
+  it('devolve o próximo ciclo também no resultado do refresh manual', async () => {
+    vi.useFakeTimers({ now: new Date('2026-09-11T12:00:00Z') });
+    const { refreshAll, startRefreshLoop } = await import('@/lib/refresher');
+    startRefreshLoop(600);
+
+    const state = await refreshAll(USER);
+    expect(state.nextRefreshAt).toBe('2026-09-11T12:10:00.000Z');
+  });
+
+  // Um ciclo que passa do intervalo não pode ter outro começando por cima.
+  it('descarta o tique que chega com o ciclo anterior ainda em curso', async () => {
+    vi.useFakeTimers({ now: new Date('2026-09-11T12:00:00Z') });
+    const { createUser } = await import('@/lib/auth/users');
+    const ana = await createUser('ana', 'uma-senha-longa-o-bastante');
+    await connect(ana.id, 'email', { preset: 'gmail', user: 'a@x.com', password: 's' });
+
+    let liberar: (envelopes: unknown[]) => void = () => {};
+    vi.mocked(listEnvelopes).mockReturnValue(
+      new Promise((resolve) => {
+        liberar = resolve as (envelopes: unknown[]) => void;
+      }) as ReturnType<typeof listEnvelopes>,
+    );
+
+    const { startRefreshLoop } = await import('@/lib/refresher');
+    startRefreshLoop(600);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(listEnvelopes).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(listEnvelopes).toHaveBeenCalledTimes(1);
+
+    liberar([]);
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(listEnvelopes).toHaveBeenCalledTimes(2);
+  });
+});

@@ -13,6 +13,17 @@ import { agendaDays, dashboardLayout, dashboardLayouts, jiraWatchedKeys } from '
 import type { Connection } from './vault/connections';
 
 const EMAIL_LIMIT = 30;
+
+// Com o punhado de usuários da app, um ciclo leva segundos por usuário. Dez
+// minutos deixam folga larga para ele terminar antes do próximo tique.
+const DEFAULT_REFRESH_SECONDS = 600;
+
+/** O intervalo vem do ambiente, que é entrada não confiável: Number('lixo') é
+ *  NaN, e setInterval com NaN dispara a cada milissegundo. */
+export function refreshIntervalSeconds(raw: string | undefined): number {
+  const seconds = Number(raw);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : DEFAULT_REFRESH_SECONDS;
+}
 const JIRA_FILTER = 'both' as const;
 
 /** Módulo desligado não é erro nem lista vazia: é ausência. O painel some da
@@ -167,6 +178,7 @@ async function buildState(userId: string, ciclo: symbol): Promise<DashboardState
     tasks,
     notifications,
     pomodoro: getPomodoroState(userId),
+    nextRefreshAt: nextRefreshAt(),
   };
   const pendentes = emVoo.get(ciclo)?.patches ?? [];
   const atual = caches.get(userId);
@@ -190,7 +202,7 @@ async function buildState(userId: string, ciclo: symbol): Promise<DashboardState
 export function getCachedState(userId: string): DashboardState | null {
   const cache = caches.get(userId);
   if (!cache) return null;
-  return { ...cache, pomodoro: getPomodoroState(userId) };
+  return { ...cache, pomodoro: getPomodoroState(userId), nextRefreshAt: nextRefreshAt() };
 }
 
 export function dropCache(userId: string): void {
@@ -246,8 +258,17 @@ async function refreshEveryone(): Promise<void> {
 // sobreposição.
 let cicloEmCurso = false;
 
+// Horário do próximo tique, para a tela mostrar quanto falta. Nulo enquanto o
+// ciclo não foi iniciado — nos testes e antes do boot terminar.
+let proximoTique: number | null = null;
+
+function nextRefreshAt(): string | null {
+  return proximoTique === null ? null : new Date(proximoTique).toISOString();
+}
+
 export function startRefreshLoop(intervalSeconds: number): void {
   if (timer) return;
+  const intervalMs = intervalSeconds * 1000;
 
   const tick = async () => {
     if (cicloEmCurso) return;
@@ -259,8 +280,12 @@ export function startRefreshLoop(intervalSeconds: number): void {
     }
   };
 
+  proximoTique = Date.now() + intervalMs;
   void tick();
-  timer = setInterval(() => void tick(), intervalSeconds * 1000);
+  timer = setInterval(() => {
+    proximoTique = Date.now() + intervalMs;
+    void tick();
+  }, intervalMs);
 }
 
 export function resetCachesForTests(): void {
@@ -268,6 +293,7 @@ export function resetCachesForTests(): void {
   emVoo.clear();
   refreshesEmCurso.clear();
   cicloEmCurso = false;
+  proximoTique = null;
   if (timer) clearInterval(timer);
   timer = null;
 }

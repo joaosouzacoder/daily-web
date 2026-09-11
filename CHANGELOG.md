@@ -52,12 +52,21 @@ Only `main` is maintained; there are no release branches.
   discard. Dropping a label is a space decision and must not become a
   meaning one, so every one of them keeps its words in a tooltip and in its
   accessible name — a shared component makes that the only way to build one.
+- The header counts down to the next background refresh ("próxima em 9:41"),
+  so a screen that has not changed in a while reads as "waiting for the next
+  cycle" rather than "stuck". The server announces the time of its next tick
+  in the dashboard state; the page only ticks the local clock down.
 - The sidebar collapses to a 56px icon rail on Cmd+B or from its own control,
   which gives a vertical monitor back 184px of width. The choice rides a cookie
   the server reads during render, so a collapsed rail never expands for a frame
   on reload, and each item keeps its label in a tooltip and for screen readers.
 
 ### Fixed
+- The background refresh runs every ten minutes by default instead of every
+  minute, and `REFRESH_SECONDS` is validated: an empty or non-numeric value
+  used to reach `setInterval` as `NaN`, which fires every millisecond. Any
+  invalid value now falls back to the default. A tick that arrives while the
+  previous cycle is still running is still dropped, not queued.
 - The pointer cursor is back on everything clickable. Tailwind v4's preflight
   leaves buttons on the arrow, unlike v3, and on a dashboard where nearly every
   control is a button that reads as "not clickable" on almost everything. It is

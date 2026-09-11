@@ -74,6 +74,7 @@ function state(over: Partial<DashboardState> = {}): DashboardState {
       restMinutes: 5,
       completedFocusCount: 0,
     },
+    nextRefreshAt: null,
     ...over,
   };
 }

@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('@/lib/refresher', () => ({
   startRefreshLoop: vi.fn(),
+  refreshIntervalSeconds: vi.fn(() => 600),
 }));
 
 vi.mock('@/lib/auth/users', () => ({ bootstrapFirstUser: vi.fn() }));
@@ -44,7 +45,17 @@ describe('instrumentation register', () => {
     expect(getPomodoroState).toHaveBeenCalledTimes(2);
 
     // startRefreshLoop is only invoked once at boot; the fast poll interval
-    // above is a separate mechanism, not a side effect of the 300s loop.
+    // above is a separate mechanism, not a side effect of the refresh loop.
     expect(startRefreshLoop).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts the refresh loop with the interval parsed from REFRESH_SECONDS', async () => {
+    const { startRefreshLoop, refreshIntervalSeconds } = await import('@/lib/refresher');
+    const { register } = await import('../instrumentation');
+
+    await register();
+
+    expect(refreshIntervalSeconds).toHaveBeenCalledWith(process.env.REFRESH_SECONDS);
+    expect(startRefreshLoop).toHaveBeenCalledWith(600);
   });
 });

@@ -211,4 +211,7 @@ export interface DashboardState {
   tasks: PanelResult<TodoTask[]>;
   notifications: PanelResult<NotificationItem[]>;
   pomodoro: PomodoroState;
+  /** Quando o ciclo de fundo roda de novo, em ISO. Nulo se ele não está
+   *  agendado. */
+  nextRefreshAt: string | null;
 }

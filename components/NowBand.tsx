@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { tabular } from '@/lib/theme';
 import { cn } from '@/lib/utils';
 import { Clock } from './Clock';
+import { NextRefreshCountdown } from './NextRefreshCountdown';
 import { Pomodoro } from './Pomodoro';
 
 interface Props {
@@ -19,6 +20,7 @@ interface Props {
   onChanged: () => void;
   bell: ReactNode;
   updatedAt: string | null;
+  nextRefreshAt: string | null;
   /** Ações que só existem em certas situações — restaurar a disposição dos
    *  painéis, por exemplo, que só faz sentido depois de alguém mexer. */
   extra?: ReactNode;
@@ -40,6 +42,7 @@ export function NowBand({
   onChanged,
   bell,
   updatedAt,
+  nextRefreshAt,
   extra,
 }: Props) {
   return (
@@ -52,6 +55,7 @@ export function NowBand({
         <span className={cn('type-caption text-ink-dim', tabular)}>
           {formatUpdatedAt(updatedAt)}
         </span>
+        <NextRefreshCountdown nextAt={nextRefreshAt} />
         <IconAction
           variant="outline"
           label={loading ? 'Atualizando…' : 'Atualizar agora'}
