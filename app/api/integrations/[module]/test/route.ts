@@ -6,6 +6,7 @@ import * as imap from '@/lib/integrations/imap';
 import * as agenda from '@/lib/integrations/agenda';
 import * as jiraApi from '@/lib/integrations/jiraApi';
 import * as githubApi from '@/lib/integrations/githubApi';
+import { testDriveConnection } from '@/lib/notesSync';
 
 // Tarefas não entram: o provedor local não tem o que testar, e o mstodo já
 // responde na primeira leitura do painel.
@@ -14,6 +15,7 @@ const TESTERS: Partial<Record<ModuleId, (conn: Connection) => Promise<void>>> = 
   agenda: agenda.testConnection,
   jira: jiraApi.testConnection,
   pulls: githubApi.testConnection,
+  notes: testDriveConnection,
 };
 
 /**

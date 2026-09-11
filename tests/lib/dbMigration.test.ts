@@ -132,3 +132,39 @@ describe('migração para escopo por usuário', () => {
     expect(cols.map((c) => c.name)).toContain('user_id');
   });
 });
+
+describe('cópia das notas no Drive', () => {
+  // O banco como ficou depois da migração das notas e antes da cópia no Drive.
+  function seedNotesDatabase(): void {
+    const legacy = new Database(dbFile);
+    legacy.exec(`
+      CREATE TABLE notes (
+        id TEXT PRIMARY KEY, user_id TEXT NOT NULL, title TEXT NOT NULL DEFAULT '',
+        body TEXT NOT NULL DEFAULT '', position INTEGER NOT NULL,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      );
+      INSERT INTO notes VALUES ('n-1', 'u-1', 'Antiga', 'texto', 0, '2026-08-01', '2026-08-01');
+    `);
+    legacy.pragma('user_version = 7');
+    legacy.close();
+  }
+
+  // As notas que já existiam não são despejadas no Drive ao conectar.
+  it('notas anteriores entram como já enviadas', async () => {
+    seedNotesDatabase();
+    const { pendingNotes, countPendingSync, listNotes } = await import('@/lib/notes');
+
+    expect(listNotes('u-1').map((n) => n.body)).toEqual(['texto']);
+    expect(pendingNotes('u-1')).toEqual([]);
+    expect(countPendingSync('u-1')).toBe(0);
+  });
+
+  it('nota anterior editada depois passa a subir', async () => {
+    seedNotesDatabase();
+    const { pendingNotes, updateNote } = await import('@/lib/notes');
+
+    updateNote('u-1', 'n-1', { body: 'editada' });
+
+    expect(pendingNotes('u-1').map((n) => n.body)).toEqual(['editada']);
+  });
+});

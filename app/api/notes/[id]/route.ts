@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUser } from '@/lib/api/context';
 import { deleteNote, NoteLimitError, updateNote } from '@/lib/notes';
+import { scheduleNotesSync } from '@/lib/notesSync';
 
 async function aplicar(request: NextRequest, id: string) {
   const auth = await requireUser();
@@ -25,6 +26,7 @@ async function aplicar(request: NextRequest, id: string) {
     // encontra linha nenhuma e volta 404 — nunca o conteúdo dela.
     const note = updateNote(auth.value.id, id, { title, body: text });
     if (!note) return NextResponse.json({ error: 'nota não encontrada' }, { status: 404 });
+    scheduleNotesSync(auth.value.id);
     return NextResponse.json({ note });
   } catch (err) {
     if (err instanceof NoteLimitError) {
@@ -63,5 +65,6 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
   if (!deleteNote(auth.value.id, id)) {
     return NextResponse.json({ error: 'nota não encontrada' }, { status: 404 });
   }
+  scheduleNotesSync(auth.value.id);
   return NextResponse.json({ ok: true });
 }

@@ -14,6 +14,22 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 // outra", e a segunda sobrescrevia a primeira.
 export const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
 export const OAUTH_SCOPES = `${CALENDAR_SCOPE} openid email`;
+// `drive.file` só alcança os arquivos que esta app criou: as notas, e nada
+// mais do Drive da pessoa.
+export const DRIVE_FILE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+
+/** Para que a autorização foi pedida. Vai assinado no `state`, porque as duas
+ *  voltam pela mesma URI de retorno — a única registrada no client. */
+export type GooglePurpose = 'agenda' | 'notes';
+
+export const SCOPES_BY_PURPOSE: Record<GooglePurpose, string> = {
+  agenda: OAUTH_SCOPES,
+  notes: `${DRIVE_FILE_SCOPE} openid email`,
+};
+
+export function isGooglePurpose(value: unknown): value is GooglePurpose {
+  return value === 'agenda' || value === 'notes';
+}
 const USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -56,9 +72,14 @@ export function isGoogleConfigured(): boolean {
  * usuário: no retorno, além da assinatura conferir, o dono da sessão precisa
  * ser o mesmo que iniciou.
  */
-export function signState(userId: string, secret: string, now = Date.now()): string {
+export function signState(
+  userId: string,
+  secret: string,
+  now = Date.now(),
+  purpose: GooglePurpose = 'agenda',
+): string {
   const payload = Buffer.from(
-    JSON.stringify({ userId, nonce: randomBytes(12).toString('base64url'), at: now }),
+    JSON.stringify({ userId, purpose, nonce: randomBytes(12).toString('base64url'), at: now }),
     'utf8',
   ).toString('base64url');
   const signature = createHmac('sha256', secret).update(payload).digest('base64url');
@@ -69,7 +90,7 @@ export function verifyState(
   state: string,
   secret: string,
   now = Date.now(),
-): { userId: string } | null {
+): { userId: string; purpose: GooglePurpose } | null {
   const [payload, signature] = state.split('.');
   if (!payload || !signature) return null;
 
@@ -81,22 +102,31 @@ export function verifyState(
   try {
     const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as {
       userId?: string;
+      purpose?: unknown;
       at?: number;
     };
     if (!parsed.userId || typeof parsed.at !== 'number') return null;
     if (now - parsed.at > STATE_MAX_AGE_MS || parsed.at > now + 60_000) return null;
-    return { userId: parsed.userId };
+    // Um fluxo iniciado antes de o `purpose` existir era da agenda.
+    const purpose = parsed.purpose === undefined ? 'agenda' : parsed.purpose;
+    if (!isGooglePurpose(purpose)) return null;
+    return { userId: parsed.userId, purpose };
   } catch {
     return null;
   }
 }
 
-export function authorizationUrl(client: GoogleClient, state: string, loginHint?: string): string {
+export function authorizationUrl(
+  client: GoogleClient,
+  state: string,
+  loginHint?: string,
+  purpose: GooglePurpose = 'agenda',
+): string {
   const params = new URLSearchParams({
     client_id: client.clientId,
     redirect_uri: client.redirectUri,
     response_type: 'code',
-    scope: OAUTH_SCOPES,
+    scope: SCOPES_BY_PURPOSE[purpose],
     // `offline` + `consent` são o que garante um refresh token: sem os dois, a
     // segunda autorização volta sem ele e a conexão morre em uma hora.
     access_type: 'offline',
@@ -112,6 +142,7 @@ interface TokenResponse {
   access_token?: string;
   refresh_token?: string;
   expires_in?: number;
+  scope?: string;
   error?: string;
   error_description?: string;
 }
@@ -146,6 +177,9 @@ export function describeTokenError(data: TokenResponse): string {
 export interface ExchangeResult {
   refreshToken: string;
   accessToken: string;
+  /** Escopos concedidos, separados por espaço. A tela de consentimento deixa
+   *  desmarcar um escopo, então o pedido não garante o que voltou. */
+  scope: string;
 }
 
 /** O e-mail da conta que autorizou. É a identidade da conexão: é por ele que
@@ -176,7 +210,15 @@ export async function exchangeCode(client: GoogleClient, code: string): Promise<
       'o Google não devolveu um token de atualização. Remova o acesso desta app em myaccount.google.com/permissions e conecte de novo',
     );
   }
-  return { refreshToken: data.refresh_token, accessToken: data.access_token ?? '' };
+  return {
+    refreshToken: data.refresh_token,
+    accessToken: data.access_token ?? '',
+    scope: data.scope ?? '',
+  };
+}
+
+export function hasScope(granted: string, scope: string): boolean {
+  return granted.split(/\s+/).includes(scope);
 }
 
 // Um access token vale uma hora. Guardar só o refresh token e trocar quando

@@ -270,15 +270,23 @@ export const MODULES: Record<ModuleId, ModuleSpec> = {
   notes: {
     id: 'notes',
     label: 'Notas rápidas',
-    summary: 'Bloco de notas com abas, guardado no servidor.',
+    summary: 'Bloco de notas com abas em Markdown, com cópia opcional no Google Drive.',
     multi: false,
     alwaysAvailable: true,
     instructions: [
-      'Não pede credencial nenhuma: as notas ficam no banco da própria app.',
-      'Como ficam no servidor, você as vê em qualquer máquina onde entrar.',
+      'Funciona sem credencial nenhuma: as notas ficam no banco da própria app.',
+      'Conecte o Google Drive para ter uma cópia fora deste servidor. Cada nota vira um arquivo .md na pasta "daily-web — notas".',
+      'A app só enxerga os arquivos que ela mesma criou no seu Drive — nada mais.',
+      'Numa instalação nova, conectar a mesma conta traz as notas de volta.',
+      'A cópia vai daqui para o Drive: editar o arquivo direto no Drive não altera a nota, e a próxima edição aqui o sobrescreve.',
+      'As notas que já existiam antes de conectar sobem quando forem editadas.',
     ],
-    // Sem campo nenhum: o que existe para configurar é ligar e desligar.
-    fields: [],
+    // Nenhum campo visível: a conexão só nasce pelo botão do Google.
+    fields: [
+      { name: 'provider', label: 'Origem', type: 'text', hidden: true },
+      { name: 'account', label: 'Conta Google', type: 'text', hidden: true },
+      { name: 'refreshToken', label: 'Token do Google', type: 'password', secret: true, hidden: true },
+    ],
   },
 };
 

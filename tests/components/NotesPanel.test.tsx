@@ -16,7 +16,7 @@ function nota(over: Partial<Note>): Note {
 
 let chamadas: { url: string; method: string; body: unknown }[];
 
-function responder(notas: Note[]) {
+function responder(notas: Note[], sync?: object) {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo, init?: RequestInit) => {
@@ -26,8 +26,9 @@ function responder(notas: Note[]) {
       chamadas.push({ url, method, body });
 
       if (url === '/api/notes' && method === 'GET') {
-        return new Response(JSON.stringify({ notes: notas }));
+        return new Response(JSON.stringify({ notes: notas, sync }));
       }
+      if (url === '/api/notes/sync') return new Response(JSON.stringify({ sync }));
       if (url === '/api/notes' && method === 'POST') {
         return new Response(
           JSON.stringify({ note: nota({ id: 'novo', title: (body as { title: string }).title }) }),
@@ -220,5 +221,123 @@ describe('NotesPanel', () => {
     await vi.advanceTimersByTimeAsync(800);
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/100000 caracteres/);
+  });
+
+  describe('Markdown', () => {
+    /** Seleciona um trecho do campo, como o mouse faria. */
+    function selecionar(campo: HTMLTextAreaElement, inicio: number, fim: number) {
+      campo.focus();
+      campo.setSelectionRange(inicio, fim);
+    }
+
+    it('o botão de negrito formata a seleção e grava', async () => {
+      responder([nota({ id: '1', title: 'Ideias', body: 'um dois' })]);
+      render(<NotesPanel />);
+      const campo = (await screen.findByLabelText('texto de Ideias')) as HTMLTextAreaElement;
+
+      selecionar(campo, 3, 7);
+      fireEvent.click(screen.getByRole('button', { name: /Negrito/ }));
+
+      expect(campo).toHaveValue('um **dois**');
+      expect([campo.selectionStart, campo.selectionEnd]).toEqual([5, 9]);
+      await vi.advanceTimersByTimeAsync(800);
+      await waitFor(() =>
+        expect(chamadas.find((c) => c.method === 'PATCH')?.body).toEqual({ body: 'um **dois**' }),
+      );
+    });
+
+    it('Ctrl+B e Ctrl+K formatam pelo teclado', async () => {
+      responder([nota({ id: '1', title: 'Ideias', body: 'abc' })]);
+      render(<NotesPanel />);
+      const campo = (await screen.findByLabelText('texto de Ideias')) as HTMLTextAreaElement;
+
+      selecionar(campo, 0, 3);
+      fireEvent.keyDown(campo, { key: 'b', ctrlKey: true });
+      expect(campo).toHaveValue('**abc**');
+
+      selecionar(campo, 2, 5);
+      fireEvent.keyDown(campo, { key: 'k', metaKey: true });
+      expect(campo).toHaveValue('**[abc](https://)**');
+    });
+
+    it('Enter numa lista abre o próximo item', async () => {
+      responder([nota({ id: '1', title: 'Ideias', body: '- [ ] pão' })]);
+      render(<NotesPanel />);
+      const campo = (await screen.findByLabelText('texto de Ideias')) as HTMLTextAreaElement;
+
+      selecionar(campo, 9, 9);
+      fireEvent.keyDown(campo, { key: 'Enter' });
+
+      expect(campo).toHaveValue('- [ ] pão\n- [ ] ');
+    });
+
+    it('Shift+Enter numa lista é uma quebra comum', async () => {
+      responder([nota({ id: '1', title: 'Ideias', body: '- pão' })]);
+      render(<NotesPanel />);
+      const campo = (await screen.findByLabelText('texto de Ideias')) as HTMLTextAreaElement;
+
+      selecionar(campo, 5, 5);
+      fireEvent.keyDown(campo, { key: 'Enter', shiftKey: true });
+
+      expect(campo).toHaveValue('- pão');
+    });
+
+    it('visualizar mostra o Markdown renderizado, e editar volta ao texto', async () => {
+      responder([nota({ id: '1', title: 'Ideias', body: '# Plano\n\n- [x] feito\n\n<script>alert(1)</script>' })]);
+      render(<NotesPanel />);
+      await screen.findByLabelText('texto de Ideias');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Visualizar' }));
+
+      const leitura = screen.getByRole('region', { name: 'visualização de Ideias' });
+      expect(leitura.querySelector('h1')).toHaveTextContent('Plano');
+      expect(leitura.querySelector('input[type="checkbox"]')).toBeChecked();
+      expect(leitura.querySelector('script')).toBeNull();
+      expect(screen.queryByLabelText('texto de Ideias')).toBeNull();
+      expect(screen.getByRole('button', { name: /Negrito/ })).toBeDisabled();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+      expect(screen.getByLabelText('texto de Ideias')).toHaveValue(
+        '# Plano\n\n- [x] feito\n\n<script>alert(1)</script>',
+      );
+    });
+  });
+
+  describe('cópia no Drive', () => {
+    it('sem Drive conectado, não fala em Drive', async () => {
+      responder([nota({ id: '1', title: 'Ideias' })], { connected: false, pending: 0, lastError: null });
+      render(<NotesPanel />);
+      await screen.findByLabelText('texto de Ideias');
+      expect(screen.getByRole('status')).toHaveTextContent('salvo');
+      expect(screen.getByRole('status')).not.toHaveTextContent(/Drive/);
+    });
+
+    it('conectado e em dia, diz que está no Drive', async () => {
+      responder([nota({ id: '1', title: 'Ideias' })], { connected: true, pending: 0, lastError: null });
+      render(<NotesPanel />);
+      await screen.findByLabelText('texto de Ideias');
+      expect(screen.getByRole('status')).toHaveTextContent('no Google Drive');
+    });
+
+    it('com falha, mostra o motivo', async () => {
+      responder([nota({ id: '1', title: 'Ideias' })], {
+        connected: true,
+        pending: 2,
+        lastError: 'o Google recusou o acesso ao Drive — conecte de novo',
+      });
+      render(<NotesPanel />);
+      await screen.findByLabelText('texto de Ideias');
+      expect(screen.getByRole('status')).toHaveTextContent(/conecte de novo/);
+    });
+
+    it('relê a situação da cópia enquanto a tela está aberta', async () => {
+      responder([nota({ id: '1', title: 'Ideias' })], { connected: true, pending: 1, lastError: null });
+      render(<NotesPanel />);
+      await screen.findByLabelText('texto de Ideias');
+      expect(screen.getByRole('status')).toHaveTextContent('enviando ao Drive');
+
+      await vi.advanceTimersByTimeAsync(10_500);
+      expect(chamadas.some((c) => c.url === '/api/notes/sync')).toBe(true);
+    });
   });
 });

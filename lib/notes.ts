@@ -106,14 +106,33 @@ export function updateNote(userId: string, id: string, patch: NotePatch): Note |
   const updatedAt = new Date().toISOString();
 
   getDb()
-    .prepare('UPDATE notes SET title = ?, body = ?, updated_at = ? WHERE id = ? AND user_id = ?')
+    .prepare(
+      `UPDATE notes SET title = ?, body = ?, updated_at = ?, revision = revision + 1
+       WHERE id = ? AND user_id = ?`,
+    )
     .run(title, body, updatedAt, id, userId);
 
   return { id, title, body, position: atual.position, updatedAt };
 }
 
+/** Apagar uma nota que já chegou ao Drive deixa o registro para o arquivo de
+ *  lá ir para a lixeira — na mesma transação, para não haver instante em que
+ *  a nota sumiu daqui e ninguém lembra de tirá-la de lá. */
 export function deleteNote(userId: string, id: string): boolean {
-  return getDb().prepare('DELETE FROM notes WHERE id = ? AND user_id = ?').run(id, userId).changes > 0;
+  const db = getDb();
+  return db.transaction(() => {
+    const row = db
+      .prepare('SELECT synced_revision FROM notes WHERE id = ? AND user_id = ?')
+      .get(id, userId) as { synced_revision: number } | undefined;
+    if (!row) return false;
+    if (row.synced_revision > 0) {
+      db.prepare(
+        `INSERT OR REPLACE INTO note_deletions (user_id, note_id, deleted_at) VALUES (?, ?, ?)`,
+      ).run(userId, id, new Date().toISOString());
+    }
+    db.prepare('DELETE FROM notes WHERE id = ? AND user_id = ?').run(id, userId);
+    return true;
+  })();
 }
 
 /**
@@ -131,10 +150,115 @@ export function reorderNotes(userId: string, ids: string[]): Note[] {
   const restantes = atuais.filter((n) => !vistos.has(n.id)).map((n) => n.id);
   const final = [...new Set([...ordenados, ...restantes])];
 
+  // Só a nota que mudou de lugar sobe de revisão: arrastar uma aba não pode
+  // reenviar as cem para o Drive.
   db.transaction(() => {
-    const stmt = db.prepare('UPDATE notes SET position = ? WHERE id = ? AND user_id = ?');
-    final.forEach((id, index) => stmt.run(index, id, userId));
+    const stmt = db.prepare(
+      `UPDATE notes SET position = ?, revision = revision + 1
+       WHERE id = ? AND user_id = ? AND position != ?`,
+    );
+    final.forEach((id, index) => stmt.run(index, id, userId, index));
   })();
 
   return listNotes(userId);
+}
+
+// --- Sincronização com o Drive ------------------------------------------------
+
+/** Uma nota junto da revisão que está sendo enviada. */
+export interface PendingNote extends Note {
+  revision: number;
+}
+
+export function pendingNotes(userId: string): PendingNote[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT id, title, body, position, updated_at, revision FROM notes
+       WHERE user_id = ? AND revision != synced_revision ORDER BY position, created_at`,
+    )
+    .all(userId) as (Row & { revision: number })[];
+  return rows.map((row) => ({ ...toNote(row), revision: row.revision }));
+}
+
+/** Marca como enviada a revisão que subiu. Se a nota foi editada enquanto o
+ *  envio estava no ar, a revisão local já é maior e ela continua pendente. */
+export function markNoteSynced(userId: string, id: string, revision: number): void {
+  getDb()
+    .prepare(
+      `UPDATE notes SET synced_revision = MAX(synced_revision, ?) WHERE id = ? AND user_id = ?`,
+    )
+    .run(revision, id, userId);
+}
+
+export function pendingDeletions(userId: string): string[] {
+  const rows = getDb()
+    .prepare('SELECT note_id FROM note_deletions WHERE user_id = ? ORDER BY deleted_at')
+    .all(userId) as { note_id: string }[];
+  return rows.map((r) => r.note_id);
+}
+
+export function clearDeletion(userId: string, noteId: string): void {
+  getDb().prepare('DELETE FROM note_deletions WHERE user_id = ? AND note_id = ?').run(userId, noteId);
+}
+
+export function countPendingSync(userId: string): number {
+  const row = getDb()
+    .prepare(
+      `SELECT (SELECT COUNT(*) FROM notes WHERE user_id = ? AND revision != synced_revision)
+            + (SELECT COUNT(*) FROM note_deletions WHERE user_id = ?) AS total`,
+    )
+    .get(userId, userId) as { total: number };
+  return row.total;
+}
+
+export interface RestoredNote {
+  id: string;
+  title: string;
+  body: string;
+  position: number;
+  updatedAt: string;
+}
+
+/**
+ * Traz de volta as notas guardadas no Drive. Só age com o banco sem nota
+ * nenhuma — é a máquina nova, ou a que perdeu o disco. Com notas locais, o
+ * que está aqui é mais novo que qualquer cópia, e misturar as duas criaria
+ * duplicatas. Devolve quantas entraram.
+ *
+ * Um arquivo do Drive é entrada de fora: o que passar dos limites fica lá e
+ * não entra, em vez de ser cortado aqui e o corte subir de volta por cima.
+ */
+export function restoreNotes(userId: string, remote: RestoredNote[]): number {
+  const db = getDb();
+  return db.transaction(() => {
+    if (countNotes(userId) > 0) return 0;
+
+    const accepted = remote
+      .filter((n) => n.title.length <= MAX_TITLE_LENGTH && n.body.length <= MAX_BODY_LENGTH)
+      .sort((a, b) => a.position - b.position)
+      .slice(0, MAX_NOTES);
+
+    const taken = db.prepare('SELECT 1 FROM notes WHERE id = ?');
+    const insert = db.prepare(
+      `INSERT INTO notes (id, user_id, title, body, position, created_at, updated_at, revision, synced_revision)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+    );
+    accepted.forEach((note, index) => {
+      // O id é global. Se outra pessoa desta instância já usa o mesmo — as
+      // duas conectaram a mesma conta Google —, a nota entra com id novo e
+      // pendente, e sobe como um arquivo à parte em vez de disputar o dela.
+      const clash = taken.get(note.id) !== undefined;
+      insert.run(
+        clash ? randomUUID() : note.id,
+        userId,
+        note.title,
+        note.body,
+        index,
+        note.updatedAt,
+        note.updatedAt,
+        clash ? 0 : 1,
+      );
+    });
+    return accepted.length;
+  })();
 }

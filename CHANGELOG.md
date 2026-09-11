@@ -33,6 +33,26 @@ Only `main` is maintained; there are no release branches.
   the colour of action while the background is atmosphere.
 
 ### Added
+- Quick notes can keep a durable copy in the user's own Google Drive, so they
+  no longer depend on the machine that serves the app. **Guardar no Google
+  Drive** in the settings screen connects one Google account per user with the
+  `drive.file` scope, which only reaches files the app created. Each note is a
+  `.md` file in a *daily-web — notas* folder, uploaded a few seconds after each
+  change; failures leave the note pending and it is retried on the next change
+  or the next time the notes are opened. Deleting a note moves its file to the
+  Drive trash. On a fresh install, connecting the same account restores the
+  notes. The copy is one-way, and notes that existed before this change are
+  not bulk-uploaded — each goes up the next time it is edited. The OAuth flow
+  reuses the calendar's client and redirect URI; the signed `state` now carries
+  what the authorization is for.
+- Notes are Markdown. The editor gets a formatting toolbar, keyboard shortcuts
+  (bold, italic, strikethrough, inline code, link) and list continuation on
+  Enter for bullet, numbered and task lists; **Visualizar** renders the note
+  with GitHub-flavoured Markdown — tables, task lists, fenced code with syntax
+  highlighting, links opening in a new tab. Rendering is sanitized: raw HTML
+  is dropped, the tree goes through GitHub's allowlist, and `javascript:`-style
+  URLs are stripped. New dependencies: `react-markdown`, `remark-gfm`,
+  `rehype-sanitize` and `rehype-highlight`.
 - Theme is three states — system, light and dark — where system is the absence
   of both a class and a cookie. Both legs of the dark palette are written out,
   so an explicit light choice wins on a dark machine and an explicit dark choice

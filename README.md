@@ -43,7 +43,7 @@ Next.js 16 · React 19 · SQLite · no UI framework, CSS written by hand.
 | Jira | Atlassian API token | free |
 | Pull requests | GitHub personal access token | free |
 | Tasks | stored on this server (default) | — |
-| Quick notes | stored on this server | — |
+| Quick notes | stored on this server; optional copy in Google Drive (OAuth) | free |
 
 Each module is independent. A module with no connection does not render an
 empty panel — it does not render at all.
@@ -51,6 +51,24 @@ empty panel — it does not render at all.
 **Tasks** live in the app's own database, so the panel works on first login
 with nothing configured. If you have the `mstodo` CLI installed you can point
 it at Microsoft To Do instead and keep phone sync.
+
+**Quick notes** are Markdown. The editor has a toolbar and shortcuts (Ctrl/Cmd
++B, +I, +K for a link, +E for code, Ctrl/Cmd+Shift+X for strikethrough), and
+Enter continues a list, a numbered list or a task list. **Visualizar** renders
+the note with GitHub-flavoured Markdown — tables, task lists, fenced code with
+syntax highlighting, links. Rendering never goes through `innerHTML`: raw HTML
+in a note is dropped, the tree is sanitized against GitHub's allowlist, and
+`javascript:`-style URLs are stripped.
+
+Notes are saved on this server first, so typing never waits on the network.
+**Guardar no Google Drive**, in the settings screen, adds a durable copy:
+each note becomes a `.md` file in a *daily-web — notas* folder of the user's
+own Drive, uploaded a few seconds after each change. The scope is
+`drive.file`, so the app only sees files it created. On a fresh install,
+connecting the same Google account brings the notes back. The copy is one-way —
+editing the file in Drive does not change the note, and the next edit here
+overwrites it. Deleting a note moves its file to the Drive trash. Notes that
+existed before connecting are uploaded the next time they are edited.
 
 ## Why no OAuth for email
 
@@ -67,7 +85,8 @@ Creating the OAuth client is **free**. Google's paid CASA review is only
 required to publish an app that reaches other people's accounts at scale; an
 unverified app serves up to 100 accounts. Whoever hosts creates the client
 once (step by step in `.env.example`, under `GOOGLE_CLIENT_ID`); everyone else
-just clicks **Conectar com Google**.
+just clicks **Conectar com Google**. The same client serves the notes copy in
+Google Drive, through the same redirect URI.
 
 ## Getting started
 

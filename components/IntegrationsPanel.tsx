@@ -390,6 +390,20 @@ export function IntegrationsPanel() {
               </Button>
             )}
 
+            {/* A cópia das notas no Drive só nasce pelo Google: não há o que
+                preencher. Uma conexão por pessoa; trocar de conta é remover
+                e conectar de novo. */}
+            {mod.module === 'notes' &&
+              payload.googleConfigured &&
+              mod.connections.length === 0 &&
+              !isEditing && (
+                <Button asChild size="sm" className="w-fit">
+                  <a href="/api/integrations/agenda/google/start?purpose=notes">
+                    Guardar no Google Drive
+                  </a>
+                </Button>
+              )}
+
             {/* Sem client no servidor, quem administra a instância precisa
                 saber o que falta — e principalmente qual URI registrar, que é
                 onde o setup costuma falhar. */}
@@ -583,9 +597,10 @@ export function IntegrationsPanel() {
               // Ajuda e ação na mesma linha, com separação: soltas no fluxo
               // elas encostavam uma na outra e liam como uma frase só.
               <div className="flex flex-wrap items-center gap-3">
-                {/* Um módulo sem campo nenhum não tem o que conectar: o
-                    botão abriria um formulário vazio. */}
-                {spec.fields.length > 0 && (spec.multi || mod.connections.length === 0) && (
+                {/* Um módulo sem campo visível não tem o que conectar pelo
+                    formulário: o botão abriria um formulário vazio. */}
+                {spec.fields.some((field) => !field.hidden) &&
+                  (spec.multi || mod.connections.length === 0) && (
                   <Button
                     type="button"
                     variant="outline"

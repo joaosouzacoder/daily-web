@@ -705,6 +705,134 @@
   border-bottom-right-radius: 2px;
 }
 
+/* Markdown renderizado das notas. Estilo por elemento, não por classe: o HTML
+   sai do react-markdown e não tem onde pendurar utilitário. As cores são os
+   tokens do tema, então claro e escuro funcionam sem regra própria. */
+@layer components {
+  .markdown-body {
+    color: var(--ink);
+    line-height: 1.65;
+    overflow-wrap: anywhere;
+  }
+  .markdown-body > :first-child {
+    margin-top: 0;
+  }
+  .markdown-body > :last-child {
+    margin-bottom: 0;
+  }
+  .markdown-body :where(p, ul, ol, blockquote, pre, table) {
+    margin-block: 0.75em;
+  }
+  .markdown-body :where(h1, h2, h3, h4, h5, h6) {
+    margin-block: 1.1em 0.5em;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+  .markdown-body h1 {
+    font-size: 1.45em;
+  }
+  .markdown-body h2 {
+    font-size: 1.25em;
+  }
+  .markdown-body h3 {
+    font-size: 1.1em;
+  }
+  .markdown-body :where(ul, ol) {
+    padding-left: 1.5em;
+  }
+  .markdown-body ul {
+    list-style: disc;
+  }
+  .markdown-body ol {
+    list-style: decimal;
+  }
+  .markdown-body li + li {
+    margin-top: 0.25em;
+  }
+  /* Lista de tarefas: a caixa ocupa o lugar do marcador. */
+  .markdown-body li.task-list-item {
+    list-style: none;
+    margin-left: -1.5em;
+  }
+  .markdown-body li.task-list-item input {
+    margin-right: 0.5em;
+    vertical-align: middle;
+    accent-color: var(--brand);
+  }
+  .markdown-body a {
+    color: var(--brand);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .markdown-body blockquote {
+    border-left: 3px solid var(--line-strong);
+    padding-left: 1em;
+    color: var(--ink-mid);
+  }
+  .markdown-body hr {
+    border: 0;
+    border-top: 1px solid var(--line-soft);
+    margin-block: 1.25em;
+  }
+  .markdown-body :not(pre) > code {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    padding: 0.1em 0.35em;
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+  }
+  .markdown-body pre {
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+    line-height: 1.55;
+    padding: 0.85em 1em;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-md);
+    background: var(--surface-1);
+    overflow-x: auto;
+  }
+  .markdown-body table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+  }
+  .markdown-body :where(th, td) {
+    border: 1px solid var(--line-soft);
+    padding: 0.4em 0.75em;
+    text-align: left;
+  }
+  .markdown-body th {
+    background: var(--surface-1);
+    font-weight: 600;
+  }
+  .markdown-body img {
+    max-width: 100%;
+    border-radius: var(--radius-sm);
+  }
+
+  /* Realce de código: as classes do highlight.js nos sinais do tema. */
+  .markdown-body :where(.hljs-comment, .hljs-quote) {
+    color: var(--ink-dim);
+    font-style: italic;
+  }
+  .markdown-body :where(.hljs-keyword, .hljs-selector-tag, .hljs-built_in, .hljs-type) {
+    color: var(--brand);
+  }
+  .markdown-body :where(.hljs-string, .hljs-regexp, .hljs-addition, .hljs-attribute) {
+    color: var(--signal-success);
+  }
+  .markdown-body :where(.hljs-number, .hljs-literal, .hljs-symbol, .hljs-bullet) {
+    color: var(--signal-warning);
+  }
+  .markdown-body :where(.hljs-title, .hljs-section, .hljs-name, .hljs-attr) {
+    color: var(--signal-info);
+  }
+  .markdown-body :where(.hljs-deletion, .hljs-meta) {
+    color: var(--signal-danger);
+  }
+}
+
 /* Compact density. OUTSIDE any @layer, on purpose: the cells carry utilities and a
    utility beats @layer by LAYER ORDER, not specificity. Inside any layer these rules
    apply nothing. Keep them last in the file. */

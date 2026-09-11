@@ -67,8 +67,16 @@ machine's operator**, who can read the key and the database.
 - Login does not distinguish "no such user" from "wrong password" by response
   time.
 - The OAuth `state` is HMAC-signed with `SESSION_SECRET` and carries the user
-  id; the callback requires both a valid signature and a session belonging to
-  the same user.
+  id and the purpose (calendar or notes); the callback requires both a valid
+  signature and a session belonging to the same user, and a tampered purpose
+  fails the signature.
+- The notes copy asks only for `drive.file`, which reaches files the app
+  created and nothing else in the user's Drive. The callback refuses the
+  connection when the consent screen came back without that scope.
+- Note content is rendered as Markdown without `innerHTML`: raw HTML is
+  dropped, the tree goes through `rehype-sanitize` with GitHub's allowlist, and
+  unsafe URL schemes are stripped. Syntax highlighting runs after sanitization
+  and only adds `hljs-*` spans.
 - The iCal URL is restricted to `http`/`https`, and the file has a size limit.
 - Only fields declared by a module can be written to a connection, and fields
   marked hidden cannot be written by the client at all.

@@ -46,6 +46,26 @@ describe('GET /api/notes', () => {
     currentUser.mockResolvedValue(null);
     expect((await listar()).status).toBe(401);
   });
+
+  it('diz se há cópia no Drive', async () => {
+    const data = await (await listar()).json();
+    expect(data.sync).toMatchObject({ connected: false, pending: 0, lastError: null });
+  });
+});
+
+describe('GET /api/notes/sync', () => {
+  it('devolve só a situação da cópia, sem as notas', async () => {
+    const { GET } = await import('@/app/api/notes/sync/route');
+    await novaNota('minha');
+    const data = await (await GET()).json();
+    expect(data).toEqual({ sync: expect.objectContaining({ connected: false }) });
+  });
+
+  it('exige sessão', async () => {
+    const { GET } = await import('@/app/api/notes/sync/route');
+    currentUser.mockResolvedValue(null);
+    expect((await GET()).status).toBe(401);
+  });
 });
 
 describe('POST /api/notes', () => {

@@ -2,12 +2,39 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth/currentUser';
 import {
   accountEmail,
+  DRIVE_FILE_SCOPE,
   exchangeCode,
   googleClient,
+  hasScope,
   verifyState,
 } from '@/lib/integrations/google/oauth';
 import { listConnections, saveConnection, setModuleEnabled } from '@/lib/vault/connections';
 import { dropCache } from '@/lib/refresher';
+import { notesSyncStatus, syncNotesNow } from '@/lib/notesSync';
+
+/** As notas têm uma conexão só: reconectar, com esta ou outra conta, troca a
+ *  conta da cópia em vez de somar uma segunda. */
+async function connectNotes(userId: string, refreshToken: string, email: string, scope: string) {
+  // A tela de consentimento deixa desmarcar o Drive. Gravar a conexão assim
+  // seria prometer uma cópia que nunca vai subir.
+  if (!hasScope(scope, DRIVE_FILE_SCOPE)) {
+    return back('o acesso ao Google Drive não foi autorizado — conecte de novo e marque o Drive', false);
+  }
+  const existing = listConnections(userId, 'notes')[0];
+  saveConnection(
+    userId,
+    'notes',
+    email || 'Google Drive',
+    { ...(existing?.values ?? {}), provider: 'google', refreshToken, account: email },
+    existing?.id,
+  );
+  // Espera a primeira rodada: numa máquina nova é ela que traz as notas de
+  // volta, e a pessoa deve voltar para a tela já vendo o resultado.
+  await syncNotesNow(userId);
+  const { lastError } = notesSyncStatus(userId);
+  if (lastError) return back(`Google Drive conectado, mas a cópia falhou: ${lastError}`, false);
+  return back('Notas conectadas ao Google Drive', true);
+}
 
 function back(message: string, ok: boolean): NextResponse {
   const origin = process.env.PUBLIC_ORIGIN ?? 'http://localhost:8010';
@@ -41,8 +68,12 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const { refreshToken, accessToken } = await exchangeCode(googleClient(), code);
+    const { refreshToken, accessToken, scope } = await exchangeCode(googleClient(), code);
     const email = await accountEmail(accessToken);
+
+    if (verified.purpose === 'notes') {
+      return await connectNotes(user.id, refreshToken, email, scope);
+    }
 
     // A conexão é identificada pela conta que autorizou. Reconectar a mesma
     // renova o acesso; autorizar outra soma uma agenda. Antes qualquer

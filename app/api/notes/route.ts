@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUser } from '@/lib/api/context';
 import { createNote, listNotes, NoteLimitError, reorderNotes } from '@/lib/notes';
+import { notesSyncStatus, scheduleNotesSync } from '@/lib/notesSync';
 
 export async function GET() {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
-  return NextResponse.json({ notes: listNotes(auth.value.id) });
+  const userId = auth.value.id;
+  const sync = notesSyncStatus(userId);
+  // Abrir as notas também é a chance de reenviar o que ficou pendente depois
+  // de uma falha do Google ou de um reinício do servidor.
+  if (sync.pending > 0) scheduleNotesSync(userId);
+  return NextResponse.json({ notes: listNotes(userId), sync });
 }
 
 export async function POST(request: NextRequest) {
@@ -16,7 +22,9 @@ export async function POST(request: NextRequest) {
   const title = typeof body?.title === 'string' ? body.title : '';
 
   try {
-    return NextResponse.json({ note: createNote(auth.value.id, title) });
+    const note = createNote(auth.value.id, title);
+    scheduleNotesSync(auth.value.id);
+    return NextResponse.json({ note });
   } catch (err) {
     if (err instanceof NoteLimitError) {
       return NextResponse.json({ error: err.message }, { status: 400 });
@@ -36,5 +44,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: 'ids precisa ser uma lista de textos' }, { status: 400 });
   }
 
-  return NextResponse.json({ notes: reorderNotes(auth.value.id, body.ids as string[]) });
+  const notes = reorderNotes(auth.value.id, body.ids as string[]);
+  scheduleNotesSync(auth.value.id);
+  return NextResponse.json({ notes });
 }

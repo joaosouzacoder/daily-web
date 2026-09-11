@@ -250,6 +250,28 @@ function addNotes(instance: Database.Database): void {
   `);
 }
 
+// Cópia das notas no Google Drive. `revision` sobe a cada gravação e
+// `synced_revision` guarda a última que chegou ao Drive: a nota está pendente
+// enquanto as duas diferem. Um contador, e não o `updated_at`, porque
+// reordenar muda a nota sem mudar o texto. As notas que já existiam entram
+// como enviadas — não são despejadas no Drive ao conectar; sobem na próxima
+// vez que forem editadas.
+// Apagar uma nota que já subiu deixa um registro em `note_deletions` até o
+// arquivo ir para a lixeira do Drive; sem ele a nota voltaria na restauração.
+function addNoteSync(instance: Database.Database): void {
+  instance.exec(`
+    ALTER TABLE notes ADD COLUMN revision INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE notes ADD COLUMN synced_revision INTEGER NOT NULL DEFAULT 0;
+    UPDATE notes SET synced_revision = revision;
+    CREATE TABLE IF NOT EXISTS note_deletions (
+      user_id TEXT NOT NULL,
+      note_id TEXT NOT NULL,
+      deleted_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, note_id)
+    );
+  `);
+}
+
 const MIGRATIONS: ((instance: Database.Database) => void)[] = [
   addUserScope,
   addConnections,
@@ -258,6 +280,7 @@ const MIGRATIONS: ((instance: Database.Database) => void)[] = [
   addPreferences,
   addMailboxToBodyCache,
   addNotes,
+  addNoteSync,
 ];
 
 function migrate(instance: Database.Database): void {

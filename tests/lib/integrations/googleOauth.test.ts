@@ -1,7 +1,9 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { createHmac } from 'node:crypto';
 import {
   authorizationUrl,
   describeTokenError,
+  hasScope,
   isGoogleConfigured,
   signState,
   verifyState,
@@ -22,7 +24,41 @@ afterEach(() => {
 describe('state do OAuth', () => {
   it('volta o mesmo usuário que iniciou', () => {
     const state = signState('u-1', SECRET);
-    expect(verifyState(state, SECRET)).toEqual({ userId: 'u-1' });
+    expect(verifyState(state, SECRET)).toEqual({ userId: 'u-1', purpose: 'agenda' });
+  });
+
+  it('carrega a finalidade assinada — agenda ou notas', () => {
+    const state = signState('u-1', SECRET, Date.now(), 'notes');
+    expect(verifyState(state, SECRET)).toEqual({ userId: 'u-1', purpose: 'notes' });
+  });
+
+  // Trocar "agenda" por "notas" no state gravaria um token do Drive onde se
+  // esperava a agenda; a assinatura cobre a finalidade também.
+  it('recusa finalidade adulterada', () => {
+    const [, signature] = signState('u-1', SECRET, Date.now(), 'agenda').split('.');
+    const forjado = Buffer.from(
+      JSON.stringify({ userId: 'u-1', purpose: 'notes', at: Date.now() }),
+    ).toString('base64url');
+    expect(verifyState(`${forjado}.${signature}`, SECRET)).toBeNull();
+  });
+
+  it('recusa finalidade desconhecida mesmo assinada', () => {
+    const payload = Buffer.from(
+      JSON.stringify({ userId: 'u-1', purpose: 'gmail', at: Date.now() }),
+    ).toString('base64url');
+    const signature = createHmac('sha256', SECRET).update(payload).digest('base64url');
+    expect(verifyState(`${payload}.${signature}`, SECRET)).toBeNull();
+  });
+
+  it('state sem finalidade, de antes dela existir, é da agenda', () => {
+    const payload = Buffer.from(JSON.stringify({ userId: 'u-1', at: Date.now() })).toString(
+      'base64url',
+    );
+    const signature = createHmac('sha256', SECRET).update(payload).digest('base64url');
+    expect(verifyState(`${payload}.${signature}`, SECRET)).toEqual({
+      userId: 'u-1',
+      purpose: 'agenda',
+    });
   });
 
   // Sem assinatura, qualquer um monta um state apontando para outro usuário e
@@ -85,9 +121,25 @@ describe('authorizationUrl', () => {
     expect(escopo).not.toContain('calendar.events');
   });
 
+  // `drive.file` alcança só o que a app criou; nada de ler o Drive inteiro,
+  // e a autorização das notas não pede a agenda de carona.
+  it('para as notas, pede só os arquivos da própria app', () => {
+    const escopo = new URL(authorizationUrl(CLIENT, 'e', undefined, 'notes')).searchParams.get('scope') ?? '';
+    expect(escopo.split(' ')).toEqual(['https://www.googleapis.com/auth/drive.file', 'openid', 'email']);
+  });
+
   it('passa o login_hint quando informado', () => {
     const url = new URL(authorizationUrl(CLIENT, 'e', 'a@b.com'));
     expect(url.searchParams.get('login_hint')).toBe('a@b.com');
+  });
+});
+
+describe('hasScope', () => {
+  it('confere o escopo exato, não um prefixo', () => {
+    const drive = 'https://www.googleapis.com/auth/drive.file';
+    expect(hasScope(`openid ${drive} email`, drive)).toBe(true);
+    expect(hasScope('openid https://www.googleapis.com/auth/drive.file.x', drive)).toBe(false);
+    expect(hasScope('', drive)).toBe(false);
   });
 });
 
