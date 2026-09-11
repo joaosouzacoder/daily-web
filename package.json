@@ -13,7 +13,7 @@
     "import-machine": "vite-node --config vitest.config.ts scripts/import-machine-config.ts --"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.120.0",
+    "@anthropic-ai/sdk": "^0.124.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/mailparser": "^3.4.6",
     "bcryptjs": "^3.0.3",
@@ -25,8 +25,8 @@
     "iconoir-react": "^7.12.1",
     "imapflow": "^1.7.6",
     "lucide-react": "^1.43.0",
-    "mailparser": "^3.9.16",
-    "next": "^16.3.3",
+    "mailparser": "^3.9.23",
+    "next": "^16.3.4",
     "node-ical": "^0.27.1",
     "nodemailer": "^9.0.5",
     "radix-ui": "^1.6.7",
