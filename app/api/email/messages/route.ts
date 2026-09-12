@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { listFolder } from '@/lib/integrations/imap';
 import { requireConnection, upstreamError } from '@/lib/api/context';
-import { getMailboxes, isKnownMailbox, setMailboxUidValidity } from '@/lib/email/mailboxes';
-import { listPendingActions, invalidateForUidValidity } from '@/lib/email/pendingActions';
+import { getMailboxes, isKnownMailbox } from '@/lib/email/mailboxes';
+import { listPendingActions } from '@/lib/email/pendingActions';
+import { syncFolder } from '@/lib/email/sync';
 import { reconcileEnvelopes } from '@/lib/email/reconcile';
 
 /** Teto por leitura. A caixa inteira não cabe numa resposta nem numa tela. */
@@ -34,20 +34,15 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const page = await listFolder(connection, folder, limitFrom(params.get('limit')));
-
-    // Numeração reiniciada pelo servidor: todo uid pedido antes passou a
-    // apontar para outra mensagem, e aplicar a ação agora acertaria quem não
-    // foi escolhido.
-    if (page.uidvalidity) {
-      invalidateForUidValidity(user.id, connection.id, folder, page.uidvalidity);
-      setMailboxUidValidity(user.id, connection.id, folder, page.uidvalidity);
-    }
+    // Por diferença: o que chegou desde a última leitura desta pasta, mais a
+    // reconferência da janela recente. A pasta inteira não é relida — e uma
+    // reindexação do servidor invalida ali as ações que dependiam dos uids.
+    const page = await syncFolder(user.id, connection, folder, limitFrom(params.get('limit')));
 
     return NextResponse.json({
       messages: reconcileEnvelopes(page.envelopes, listPendingActions(user.id)),
       uidvalidity: page.uidvalidity,
-      total: page.total,
+      reindexed: page.reindexed,
     });
   } catch (err) {
     return upstreamError(err);

@@ -249,6 +249,12 @@ export async function listEnvelopes(conn: Connection, limit: number): Promise<Em
   });
 }
 
+/** Só os enviados. Eles entram para compor conversa: sem eles um fio mostra
+ *  apenas o lado de quem escreveu para você. */
+export async function listSent(conn: Connection, limit: number): Promise<EmailEnvelope[]> {
+  return withClient(conn, async (client) => listFrom(client, conn, 'sent', limit));
+}
+
 /** O uid é por caixa: buscar um uid de enviados dentro da INBOX devolveria
  *  outra mensagem, não um erro. Por isso a caixa vem junto. */
 export async function fetchBody(
@@ -509,6 +515,105 @@ export async function listFolder(
       lock.release();
     }
   });
+}
+
+export interface FolderFlags {
+  uid: string;
+  unread: boolean;
+  labels: string[];
+}
+
+export interface FolderChanges {
+  uidvalidity: string;
+  /** O que chegou depois do último uid conhecido. Vazio quando nada chegou. */
+  added: EmailEnvelope[];
+  /** Como está agora a janela recente da pasta: o que mudou de lido para não
+   *  lido, ganhou etiqueta, ou sumiu — o que não vem aqui não está mais lá. */
+  flags: FolderFlags[];
+  /** Menor uid coberto pela janela. Fora dela nada pode ser concluído. */
+  windowFrom: string;
+  total: number;
+}
+
+/**
+ * O que mudou na pasta desde a última vez, numa conexão só.
+ *
+ * São dois comandos: um traz as mensagens novas a partir do último uid
+ * conhecido, o outro traz só as flags da janela recente. Nenhum dos dois relê
+ * a caixa inteira, e nenhum deles é por mensagem.
+ */
+export async function fetchFolderChanges(
+  conn: Connection,
+  path: string,
+  sinceUid: string | null,
+  windowSize: number,
+  limit: number,
+): Promise<FolderChanges> {
+  return withClient(conn, async (client) => {
+    const enviados = findSpecialUse(await client.list(), '\\Sent');
+    const kind: MailboxKind = path === enviados ? 'sent' : 'inbox';
+
+    const lock = await client.getMailboxLock(path);
+    try {
+      const caixa = typeof client.mailbox === 'object' ? client.mailbox : null;
+      const uidvalidity = caixa?.uidValidity !== undefined ? String(caixa.uidValidity) : '';
+      const total = caixa?.exists ?? 0;
+      const proximoUid = Number(caixa?.uidNext ?? 0);
+
+      if (total === 0) {
+        return { uidvalidity, added: [], flags: [], windowFrom: '1', total: 0 };
+      }
+
+      const desde = sinceUid === null ? null : Number(sinceUid);
+      const added =
+        desde === null
+          ? await fetchRecent(client, conn, path, kind, total, limit)
+          : // `n:*` sempre devolve ao menos a última mensagem, mesmo quando
+            // nenhuma é mais nova — daí o corte por uid depois do comando.
+            (await fetchByUid(client, conn, path, kind, `${desde + 1}:*`)).filter(
+              (e) => Number(e.id) > desde,
+            );
+
+      // A janela é de uid, não de quantidade: é o que o servidor sabe contar
+      // num comando só. Fora dela nada é concluído, para uma mensagem antiga
+      // não sumir da lista por não ter sido perguntada.
+      const inicioJanela = Math.max(proximoUid - windowSize, 1);
+      const flags: FolderFlags[] = [];
+      for await (const message of client.fetch(
+        `${inicioJanela}:*`,
+        { uid: true, flags: true, labels: true },
+        { uid: true },
+      )) {
+        flags.push({
+          uid: String(message.uid),
+          unread: kind === 'sent' ? false : !message.flags?.has('\\Seen'),
+          labels: userLabels(message.labels),
+        });
+      }
+
+      return { uidvalidity, added, flags, windowFrom: String(inicioJanela), total };
+    } finally {
+      lock.release();
+    }
+  });
+}
+
+async function fetchByUid(
+  client: ImapFlow,
+  conn: Connection,
+  path: string,
+  mailbox: MailboxKind,
+  range: string,
+): Promise<EmailEnvelope[]> {
+  const envelopes: EmailEnvelope[] = [];
+  for await (const message of client.fetch(
+    range,
+    { uid: true, flags: true, envelope: true, labels: true, headers: ['references'] },
+    { uid: true },
+  )) {
+    envelopes.push(toEnvelope(message, conn, mailbox, path));
+  }
+  return envelopes;
 }
 
 export interface ReplyTarget {

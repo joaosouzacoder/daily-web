@@ -10,6 +10,7 @@ import { warmBodyCache, pruneOldBodies } from './emailCache';
 import { listPendingActions } from './email/pendingActions';
 import { reconcileEnvelopes, confirmAgainstSnapshot } from './email/reconcile';
 import { replayPendingActions } from './email/replay';
+import { loadInbox } from './email/inbox';
 import { listUsers } from './auth/users';
 import { enabledModules, listConnections } from './vault/connections';
 import { agendaDays, dashboardLayout, dashboardLayouts, jiraWatchedKeys } from './preferences';
@@ -170,7 +171,9 @@ async function buildState(userId: string, ciclo: symbol): Promise<DashboardState
 
   const [email, agenda, pulls, jira, tasks, mentions, jiraWatched, jiraDelivered, jiraApproved, jiraProblems] =
     await Promise.all([
-      has('email') ? mergeConnections(mailConnections, (c) => imap.listEnvelopes(c, EMAIL_LIMIT)) : OFF,
+      has('email')
+        ? mergeConnections(mailConnections, (c) => loadInbox(userId, c, EMAIL_LIMIT))
+        : OFF,
       has('agenda')
         ? mergeConnections(calendars, (c) => agendaSource.fetchAgenda(c, undefined, days))
         : OFF,

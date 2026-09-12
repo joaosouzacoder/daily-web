@@ -8,6 +8,16 @@ Only `main` is maintained; there are no release branches.
 
 ## [Unreleased]
 
+### Changed
+- The refresh cycle no longer re-reads a whole mailbox to find out that
+  nothing changed. Messages already read from the server are kept, and each
+  cycle asks for two things over one connection: what arrived after the last
+  uid it knows, and the flags of a recent window of uids — which is how a
+  message read, labelled or deleted in another client catches up here. Nothing
+  is concluded about what lies outside that window, because nothing outside it
+  was asked. A folder's stored copy is capped, and a folder the server
+  reindexes is dropped and read again.
+
 ### Added
 - Mailboxes other than the inbox can now be read. `GET /api/email/mailboxes`
   returns the account's folder tree with the total and unread count of each

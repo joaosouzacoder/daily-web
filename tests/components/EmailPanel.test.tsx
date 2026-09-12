@@ -23,6 +23,7 @@ const items: EmailEnvelope[] = [
     references: [],
     labels: [],
     mailbox: 'inbox' as const,
+    folder: 'INBOX',
   },
   {
     id: '2',
@@ -36,6 +37,7 @@ const items: EmailEnvelope[] = [
     references: [],
     labels: [],
     mailbox: 'inbox' as const,
+    folder: 'INBOX',
   },
 ];
 
@@ -309,6 +311,7 @@ describe('seleção por intervalo com Shift', () => {
     references: [],
     labels: [],
     mailbox: 'inbox' as const,
+    folder: 'INBOX',
   }));
 
   const caixa = (n: number) =>
@@ -398,22 +401,22 @@ describe('conversas', () => {
     {
       id: '10', account: 'mail-1', accountLabel: 'Work', from: 'você',
       subject: 'teste assunto', unread: false, date: '2026-08-27T12:11:00Z',
-      messageId: '<a@x>', references: [], labels: [], mailbox: 'sent',
+      messageId: '<a@x>', references: [], labels: [], mailbox: 'sent', folder: 'Sent',
     },
     {
       id: '11', account: 'mail-1', accountLabel: 'Work', from: 'Luan',
       subject: 'Re: teste assunto', unread: true, date: '2026-08-27T14:55:00Z',
-      messageId: '<b@x>', references: ['<a@x>'], labels: [], mailbox: 'inbox',
+      messageId: '<b@x>', references: ['<a@x>'], labels: [], mailbox: 'inbox', folder: 'INBOX',
     },
     {
       id: '12', account: 'mail-1', accountLabel: 'Work', from: 'Luan',
       subject: 'Re: teste assunto', unread: true, date: '2026-08-27T15:02:00Z',
-      messageId: '<c@x>', references: ['<a@x>', '<b@x>'], labels: [], mailbox: 'inbox',
+      messageId: '<c@x>', references: ['<a@x>', '<b@x>'], labels: [], mailbox: 'inbox', folder: 'INBOX',
     },
     {
       id: '20', account: 'mail-1', accountLabel: 'Work', from: 'Nubank',
       subject: 'Cobranças recorrentes', unread: true, date: '2026-08-27T13:00:00Z',
-      messageId: '<n@x>', references: [], labels: [], mailbox: 'inbox',
+      messageId: '<n@x>', references: [], labels: [], mailbox: 'inbox', folder: 'INBOX',
     },
   ];
 
@@ -515,7 +518,7 @@ describe('mensagens enviadas na conversa', () => {
     {
       id: '30', account: 'mail-1', accountLabel: 'Work', from: 'você',
       subject: 'Proposta', unread: false, date: '2026-08-27T09:00:00Z',
-      messageId: '<p@x>', references: [], labels: [], mailbox: 'sent',
+      messageId: '<p@x>', references: [], labels: [], mailbox: 'sent', folder: 'Sent',
     },
   ];
 
@@ -600,12 +603,12 @@ const fioComEnviada: EmailEnvelope[] = [
   {
     id: '30', account: 'mail-1', accountLabel: 'Work', from: 'você',
     subject: 'Proposta', unread: false, date: '2026-08-27T09:00:00Z',
-    messageId: '<p@x>', references: [], labels: [], mailbox: 'sent',
+    messageId: '<p@x>', references: [], labels: [], mailbox: 'sent', folder: 'Sent',
   },
   {
     id: '31', account: 'mail-1', accountLabel: 'Work', from: 'Cliente',
     subject: 'Re: Proposta', unread: true, date: '2026-08-27T10:00:00Z',
-    messageId: '<q@x>', references: ['<p@x>'], labels: [], mailbox: 'inbox',
+    messageId: '<q@x>', references: ['<p@x>'], labels: [], mailbox: 'inbox', folder: 'INBOX',
   },
 ];
 

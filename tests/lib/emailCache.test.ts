@@ -31,6 +31,7 @@ function envelope(over: Partial<EmailEnvelope>): EmailEnvelope {
     references: [],
     labels: [],
     mailbox: 'inbox' as const,
+    folder: 'INBOX',
     ...over,
   };
 }

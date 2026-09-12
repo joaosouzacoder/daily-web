@@ -6,7 +6,7 @@ import path from 'node:path';
 
 vi.mock('@/lib/integrations/imap', () => ({
   listMailboxes: vi.fn(),
-  listFolder: vi.fn(),
+  fetchFolderChanges: vi.fn(),
   setSeen: vi.fn(),
   applyTag: vi.fn(),
   deleteEmails: vi.fn(),
@@ -15,7 +15,7 @@ vi.mock('@/lib/integrations/imap', () => ({
 const currentUser = vi.fn();
 vi.mock('@/lib/auth/currentUser', () => ({ getCurrentUser: () => currentUser() }));
 
-import { listMailboxes, listFolder, deleteEmails } from '@/lib/integrations/imap';
+import { listMailboxes, fetchFolderChanges, deleteEmails } from '@/lib/integrations/imap';
 import { GET as mailboxesRoute } from '@/app/api/email/mailboxes/route';
 import { GET as messagesRoute } from '@/app/api/email/messages/route';
 import { POST as batchRoute } from '@/app/api/email/batch/route';
@@ -79,9 +79,11 @@ beforeEach(async () => {
   });
 
   vi.mocked(listMailboxes).mockResolvedValue(ARVORE);
-  vi.mocked(listFolder).mockResolvedValue({
-    envelopes: [envelope()] as never,
+  vi.mocked(fetchFolderChanges).mockResolvedValue({
     uidvalidity: '100',
+    added: [envelope()] as never,
+    flags: [{ uid: '7', unread: true, labels: [] }],
+    windowFrom: '1',
     total: 5,
   });
   vi.mocked(deleteEmails).mockResolvedValue(undefined);
@@ -138,7 +140,7 @@ describe('GET /api/email/messages', () => {
     const data = await res.json();
 
     expect(res.status).toBe(200);
-    expect(vi.mocked(listFolder).mock.calls[0][1]).toBe('Clientes');
+    expect(vi.mocked(fetchFolderChanges).mock.calls[0][1]).toBe('Clientes');
     expect(data.messages).toHaveLength(1);
   });
 
@@ -147,7 +149,7 @@ describe('GET /api/email/messages', () => {
   it('recusa uma pasta que o servidor não declarou', async () => {
     const res = await messagesRoute(get(`account=${mailId}&folder=../outra`));
     expect(res.status).toBe(404);
-    expect(listFolder).not.toHaveBeenCalled();
+    expect(fetchFolderChanges).not.toHaveBeenCalled();
   });
 
   it('exige a pasta', async () => {
@@ -160,7 +162,7 @@ describe('GET /api/email/messages', () => {
     await mailboxesRoute(get(`account=${mailId}`));
     await messagesRoute(get(`account=${mailId}&folder=Clientes&limit=9999`));
 
-    expect(vi.mocked(listFolder).mock.calls[0][2]).toBe(100);
+    expect(vi.mocked(fetchFolderChanges).mock.calls[0][4]).toBe(100);
   });
 
   it('esconde da pasta a mensagem com exclusão pendente', async () => {
@@ -198,9 +200,11 @@ describe('GET /api/email/messages', () => {
       }),
     );
 
-    vi.mocked(listFolder).mockResolvedValue({
-      envelopes: [envelope()] as never,
+    vi.mocked(fetchFolderChanges).mockResolvedValue({
       uidvalidity: '200',
+      added: [envelope()] as never,
+      flags: [{ uid: '7', unread: true, labels: [] }],
+      windowFrom: '1',
       total: 5,
     });
     await messagesRoute(get(`account=${mailId}&folder=Clientes`));

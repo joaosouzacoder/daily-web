@@ -7,8 +7,8 @@ import path from 'node:path';
 // A ação local precisa vencer o retrato do servidor. O IMAP é dublê aqui
 // justamente para que o retrato possa estar velho de propósito: é assim que o
 // e-mail apagado voltava para a tela.
+vi.mock('@/lib/email/inbox', () => ({ loadInbox: vi.fn() }));
 vi.mock('@/lib/integrations/imap', () => ({
-  listEnvelopes: vi.fn(),
   fetchBodies: vi.fn(),
   setSeen: vi.fn(),
   applyTag: vi.fn(),
@@ -25,7 +25,8 @@ vi.mock('@/lib/tasks', () => ({ fetchTasks: vi.fn() }));
 const currentUser = vi.fn();
 vi.mock('@/lib/auth/currentUser', () => ({ getCurrentUser: () => currentUser() }));
 
-import { listEnvelopes, setSeen, deleteEmails } from '@/lib/integrations/imap';
+import { setSeen, deleteEmails } from '@/lib/integrations/imap';
+import { loadInbox } from '@/lib/email/inbox';
 import { fetchAgenda } from '@/lib/integrations/ics';
 import { fetchPulls } from '@/lib/integrations/githubApi';
 import { fetchIssues, fetchMentions } from '@/lib/integrations/jiraApi';
@@ -84,7 +85,7 @@ beforeEach(async () => {
     password: 's',
   });
 
-  vi.mocked(listEnvelopes).mockResolvedValue([]);
+  vi.mocked(loadInbox).mockResolvedValue([]);
   vi.mocked(fetchAgenda).mockResolvedValue([]);
   vi.mocked(fetchPulls).mockResolvedValue({ items: [], errors: [] });
   vi.mocked(fetchIssues).mockResolvedValue([]);
@@ -103,7 +104,7 @@ describe('a ação local vence o retrato do servidor', () => {
   // porque o ciclo leu a caixa antes da escrita chegar, ou porque o provedor
   // ainda não a propagou. Gravar esse retrato cru desfazia a exclusão.
   it('não traz de volta o e-mail apagado quando o retrato ainda o contém', async () => {
-    vi.mocked(listEnvelopes).mockResolvedValue([envelope()] as never);
+    vi.mocked(loadInbox).mockResolvedValue([envelope()] as never);
     const { refreshAll } = await import('@/lib/refresher');
     await refreshAll(ME.id);
 
@@ -120,7 +121,7 @@ describe('a ação local vence o retrato do servidor', () => {
   // conexão IMAP. A exclusão logo em seguida abre outra na mesma conta e o
   // provedor recusa o login excedente — e era aí que o e-mail voltava.
   it('não traz de volta o e-mail quando a exclusão falha depois de marcar como lido', async () => {
-    vi.mocked(listEnvelopes).mockResolvedValue([envelope()] as never);
+    vi.mocked(loadInbox).mockResolvedValue([envelope()] as never);
     const { refreshAll } = await import('@/lib/refresher');
     await refreshAll(ME.id);
 
@@ -138,7 +139,7 @@ describe('a ação local vence o retrato do servidor', () => {
   // O deploy reinicia o serviço a cada publicação. Uma intenção guardada só em
   // memória morria ali e a mensagem voltava na primeira leitura.
   it('preserva a exclusão através de um reinício do processo', async () => {
-    vi.mocked(listEnvelopes).mockResolvedValue([envelope()] as never);
+    vi.mocked(loadInbox).mockResolvedValue([envelope()] as never);
     const { refreshAll, resetCachesForTests } = await import('@/lib/refresher');
     await refreshAll(ME.id);
     await batchRoute(req({ targets: [{ account: mailId, id: '1' }], action: 'delete' }));
@@ -151,7 +152,7 @@ describe('a ação local vence o retrato do servidor', () => {
 
   // Marcar como lido também é intenção: o retrato velho traz `unread`.
   it('mantém a mensagem lida enquanto o retrato ainda a traz como não lida', async () => {
-    vi.mocked(listEnvelopes).mockResolvedValue([envelope()] as never);
+    vi.mocked(loadInbox).mockResolvedValue([envelope()] as never);
     const { refreshAll } = await import('@/lib/refresher');
     await refreshAll(ME.id);
 
@@ -164,12 +165,12 @@ describe('a ação local vence o retrato do servidor', () => {
 
 describe('a intenção é confirmada ou falha em definitivo', () => {
   it('esquece a exclusão depois que o servidor concorda com ela', async () => {
-    vi.mocked(listEnvelopes).mockResolvedValue([envelope()] as never);
+    vi.mocked(loadInbox).mockResolvedValue([envelope()] as never);
     const { refreshAll } = await import('@/lib/refresher');
     await refreshAll(ME.id);
     await batchRoute(req({ targets: [{ account: mailId, id: '1' }], action: 'delete' }));
 
-    vi.mocked(listEnvelopes).mockResolvedValue([] as never);
+    vi.mocked(loadInbox).mockResolvedValue([] as never);
     await refreshAll(ME.id);
 
     const { listPendingActions } = await import('@/lib/email/pendingActions');
@@ -179,7 +180,7 @@ describe('a intenção é confirmada ou falha em definitivo', () => {
   // Esgotadas as tentativas, esconder a mensagem seria mentir sobre a caixa:
   // ela não foi apagada. Ela volta, com o erro à mostra.
   it('devolve a mensagem com o erro quando as tentativas se esgotam', async () => {
-    vi.mocked(listEnvelopes).mockResolvedValue([envelope()] as never);
+    vi.mocked(loadInbox).mockResolvedValue([envelope()] as never);
     const { refreshAll } = await import('@/lib/refresher');
     await refreshAll(ME.id);
 

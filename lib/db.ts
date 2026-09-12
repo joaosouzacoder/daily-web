@@ -325,6 +325,35 @@ function addEmailMailboxes(instance: Database.Database): void {
   `);
 }
 
+// As mensagens que já foram lidas do servidor, por pasta. Guardá-las é o que
+// permite pedir só o que chegou depois do último uid conhecido, em vez de
+// reler a caixa inteira a cada ciclo. `uidvalidity` entra na chave porque uma
+// reindexação do servidor reaproveita os números para outras mensagens.
+function addEmailMessages(instance: Database.Database): void {
+  instance.exec(`
+    CREATE TABLE IF NOT EXISTS email_messages (
+      user_id TEXT NOT NULL,
+      account TEXT NOT NULL,
+      folder TEXT NOT NULL,
+      uidvalidity TEXT NOT NULL,
+      uid INTEGER NOT NULL,
+      mailbox TEXT NOT NULL,
+      account_label TEXT NOT NULL,
+      sender TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      unread INTEGER NOT NULL,
+      date TEXT NOT NULL,
+      message_id TEXT NOT NULL,
+      refs TEXT NOT NULL,
+      labels TEXT NOT NULL,
+      PRIMARY KEY (user_id, account, folder, uidvalidity, uid)
+    );
+    CREATE INDEX IF NOT EXISTS idx_email_messages_folder
+      ON email_messages (user_id, account, folder, uidvalidity, date DESC);
+    ALTER TABLE email_mailboxes ADD COLUMN last_uid INTEGER NOT NULL DEFAULT 0;
+  `);
+}
+
 const MIGRATIONS: ((instance: Database.Database) => void)[] = [
   addUserScope,
   addConnections,
@@ -336,6 +365,7 @@ const MIGRATIONS: ((instance: Database.Database) => void)[] = [
   addNoteSync,
   addEmailPendingActions,
   addEmailMailboxes,
+  addEmailMessages,
 ];
 
 function migrate(instance: Database.Database): void {

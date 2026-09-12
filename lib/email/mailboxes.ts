@@ -62,19 +62,33 @@ export function putMailboxes(
   const db = getDb();
   const instante = now.toISOString();
   db.transaction(() => {
-    // A pasta que o usuário apagou no servidor não pode sobrar aqui: a árvore
-    // é substituída inteira, não acrescentada.
-    db.prepare('DELETE FROM email_mailboxes WHERE user_id = ? AND account = ?').run(
-      userId,
-      account,
-    );
-    const insert = db.prepare(
+    // A pasta que sumiu do servidor sai daqui; as que continuam são
+    // atualizadas no lugar, para não perderem o que já se sabe da numeração
+    // delas — apagar e reinserir faria toda pasta voltar a ser lida do zero.
+    const mantidos = nodes.map((n) => n.path);
+    const marcadores = mantidos.map(() => '?').join(',');
+    db.prepare(
+      `DELETE FROM email_mailboxes
+       WHERE user_id = ? AND account = ?
+         ${mantidos.length > 0 ? `AND path NOT IN (${marcadores})` : ''}`,
+    ).run(userId, account, ...mantidos);
+
+    const upsert = db.prepare(
       `INSERT INTO email_mailboxes
          (user_id, account, path, name, delimiter, parent, special_use, total, unread, position, synced_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (user_id, account, path)
+       DO UPDATE SET name = excluded.name,
+                     delimiter = excluded.delimiter,
+                     parent = excluded.parent,
+                     special_use = excluded.special_use,
+                     total = excluded.total,
+                     unread = excluded.unread,
+                     position = excluded.position,
+                     synced_at = excluded.synced_at`,
     );
     nodes.forEach((node, index) => {
-      insert.run(
+      upsert.run(
         userId,
         account,
         node.path,
@@ -149,4 +163,46 @@ export function setMailboxUidValidity(
       'UPDATE email_mailboxes SET uidvalidity = ? WHERE user_id = ? AND account = ? AND path = ?',
     )
     .run(uidvalidity, userId, account, path);
+}
+
+/** O maior uid já lido desta pasta. Zero quando ela nunca foi lida — e é o
+ *  que faz a primeira leitura buscar as recentes em vez de nada. */
+export function getLastUid(userId: string, account: string, path: string): number {
+  const row = getDb()
+    .prepare('SELECT last_uid FROM email_mailboxes WHERE user_id = ? AND account = ? AND path = ?')
+    .get(userId, account, path) as { last_uid: number } | undefined;
+  return row?.last_uid ?? 0;
+}
+
+export function setFolderCursor(
+  userId: string,
+  account: string,
+  path: string,
+  uidvalidity: string,
+  lastUid: number,
+): void {
+  getDb()
+    .prepare(
+      `UPDATE email_mailboxes SET uidvalidity = ?, last_uid = ?
+       WHERE user_id = ? AND account = ? AND path = ?`,
+    )
+    .run(uidvalidity, lastUid, userId, account, path);
+}
+
+/** A pasta precisa existir aqui para guardar o que já se sabe da numeração
+ *  dela. A entrada é lida antes de a árvore ser montada pela primeira vez. */
+export function ensureMailboxRow(
+  userId: string,
+  account: string,
+  path: string,
+  now: Date = new Date(),
+): void {
+  getDb()
+    .prepare(
+      `INSERT INTO email_mailboxes
+         (user_id, account, path, name, delimiter, parent, special_use, total, unread, position, synced_at)
+       VALUES (?, ?, ?, ?, '/', NULL, NULL, 0, 0, 0, ?)
+       ON CONFLICT (user_id, account, path) DO NOTHING`,
+    )
+    .run(userId, account, path, path, now.toISOString());
 }

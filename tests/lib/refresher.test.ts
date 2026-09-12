@@ -3,13 +3,14 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-vi.mock('@/lib/integrations/imap', () => ({ listEnvelopes: vi.fn(), fetchBodies: vi.fn() }));
+vi.mock('@/lib/integrations/imap', () => ({ fetchBodies: vi.fn() }));
+vi.mock('@/lib/email/inbox', () => ({ loadInbox: vi.fn() }));
 vi.mock('@/lib/integrations/ics', () => ({ fetchAgenda: vi.fn() }));
 vi.mock('@/lib/integrations/githubApi', () => ({ fetchPulls: vi.fn() }));
 vi.mock('@/lib/integrations/jiraApi', () => ({ fetchIssues: vi.fn(), fetchMentions: vi.fn() }));
 vi.mock('@/lib/tasks', () => ({ fetchTasks: vi.fn() }));
 
-import { listEnvelopes } from '@/lib/integrations/imap';
+import { loadInbox } from '@/lib/email/inbox';
 import { fetchAgenda } from '@/lib/integrations/ics';
 import { fetchPulls } from '@/lib/integrations/githubApi';
 import { fetchIssues, fetchMentions } from '@/lib/integrations/jiraApi';
@@ -33,6 +34,7 @@ function envelope(over: Partial<Record<string, unknown>> = {}) {
     references: [],
     labels: [],
     mailbox: 'inbox' as const,
+    folder: 'INBOX',
     ...over,
   };
 }
@@ -48,7 +50,7 @@ beforeEach(async () => {
   const { resetCachesForTests } = await import('@/lib/refresher');
   resetCachesForTests();
 
-  vi.mocked(listEnvelopes).mockResolvedValue([]);
+  vi.mocked(loadInbox).mockResolvedValue([]);
   vi.mocked(fetchAgenda).mockResolvedValue([]);
   vi.mocked(fetchPulls).mockResolvedValue({ items: [], errors: [] });
   vi.mocked(fetchIssues).mockResolvedValue([]);
@@ -70,7 +72,7 @@ describe('módulos desligados', () => {
     const { refreshAll } = await import('@/lib/refresher');
     await refreshAll(USER);
 
-    expect(listEnvelopes).not.toHaveBeenCalled();
+    expect(loadInbox).not.toHaveBeenCalled();
     expect(fetchAgenda).not.toHaveBeenCalled();
     expect(fetchIssues).not.toHaveBeenCalled();
     expect(fetchPulls).not.toHaveBeenCalled();
@@ -101,7 +103,7 @@ describe('várias conexões no mesmo módulo', () => {
     await connect(USER, 'email', { preset: 'gmail', user: 'a@x.com', password: 's' });
     await connect(USER, 'email', { preset: 'gmail', user: 'b@x.com', password: 's' });
 
-    vi.mocked(listEnvelopes)
+    vi.mocked(loadInbox)
       .mockResolvedValueOnce([envelope({ id: '1' })])
       .mockResolvedValueOnce([envelope({ id: '2' })]);
 
@@ -118,7 +120,7 @@ describe('várias conexões no mesmo módulo', () => {
     await connect(USER, 'email', { preset: 'gmail', user: 'a@x.com', password: 's' });
     await connect(USER, 'email', { preset: 'gmail', user: 'b@x.com', password: 's' });
 
-    vi.mocked(listEnvelopes)
+    vi.mocked(loadInbox)
       .mockResolvedValueOnce([envelope({ id: '1' })])
       .mockRejectedValueOnce(new Error('Pessoal: senha recusada'));
 
@@ -131,7 +133,7 @@ describe('várias conexões no mesmo módulo', () => {
 
   it('só reporta erro quando nenhuma caixa respondeu', async () => {
     await connect(USER, 'email', { preset: 'gmail', user: 'a@x.com', password: 's' });
-    vi.mocked(listEnvelopes).mockRejectedValue(new Error('caiu'));
+    vi.mocked(loadInbox).mockRejectedValue(new Error('caiu'));
 
     const { refreshAll } = await import('@/lib/refresher');
     const state = await refreshAll(USER);
@@ -155,7 +157,7 @@ describe('isolamento entre usuários', () => {
 
   it('não devolve para um usuário o cache do outro', async () => {
     await connect(USER, 'email', { preset: 'gmail', user: 'a@x.com', password: 's' });
-    vi.mocked(listEnvelopes).mockResolvedValue([envelope()]);
+    vi.mocked(loadInbox).mockResolvedValue([envelope()]);
 
     const { refreshAll, getCachedState } = await import('@/lib/refresher');
     await refreshAll(USER);
@@ -196,13 +198,13 @@ describe('ação concorrente com um refresh em voo', () => {
   // a tela e o usuário precisava apagar de novo.
   it('não ressuscita o e-mail apagado durante o refresh', async () => {
     await connect(USER, 'email', { preset: 'gmail', user: 'a@x.com', password: 's' });
-    vi.mocked(listEnvelopes).mockResolvedValue([envelope({ id: '1' })]);
+    vi.mocked(loadInbox).mockResolvedValue([envelope({ id: '1' })]);
 
     const { refreshAll, getCachedState, patchCachedState } = await import('@/lib/refresher');
     await refreshAll(USER);
 
     let liberar: (v: unknown[]) => void = () => {};
-    vi.mocked(listEnvelopes).mockImplementation(
+    vi.mocked(loadInbox).mockImplementation(
       () => new Promise((resolve) => (liberar = resolve as (v: unknown[]) => void)) as never,
     );
 
@@ -226,10 +228,10 @@ describe('refresh simultâneo', () => {
     const { refreshAll } = await import('@/lib/refresher');
 
     let liberar: (envelopes: unknown[]) => void = () => {};
-    vi.mocked(listEnvelopes).mockReturnValue(
+    vi.mocked(loadInbox).mockReturnValue(
       new Promise((resolve) => {
         liberar = resolve as (envelopes: unknown[]) => void;
-      }) as ReturnType<typeof listEnvelopes>,
+      }) as ReturnType<typeof loadInbox>,
     );
 
     const primeiro = refreshAll(USER);
@@ -237,7 +239,7 @@ describe('refresh simultâneo', () => {
     liberar([envelope()]);
 
     expect(await primeiro).toBe(await segundo);
-    expect(listEnvelopes).toHaveBeenCalledTimes(1);
+    expect(loadInbox).toHaveBeenCalledTimes(1);
   });
 
   it('volta a ler o servidor depois que o refresh anterior termina', async () => {
@@ -247,7 +249,7 @@ describe('refresh simultâneo', () => {
     await refreshAll(USER);
     await refreshAll(USER);
 
-    expect(listEnvelopes).toHaveBeenCalledTimes(2);
+    expect(loadInbox).toHaveBeenCalledTimes(2);
   });
 
   // Um usuário esperando o IMAP não pode segurar o refresh do outro.
@@ -258,7 +260,7 @@ describe('refresh simultâneo', () => {
 
     await Promise.all([refreshAll(USER), refreshAll(OTHER)]);
 
-    expect(listEnvelopes).toHaveBeenCalledTimes(2);
+    expect(loadInbox).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -321,23 +323,23 @@ describe('próximo ciclo agendado', () => {
     await connect(ana.id, 'email', { preset: 'gmail', user: 'a@x.com', password: 's' });
 
     let liberar: (envelopes: unknown[]) => void = () => {};
-    vi.mocked(listEnvelopes).mockReturnValue(
+    vi.mocked(loadInbox).mockReturnValue(
       new Promise((resolve) => {
         liberar = resolve as (envelopes: unknown[]) => void;
-      }) as ReturnType<typeof listEnvelopes>,
+      }) as ReturnType<typeof loadInbox>,
     );
 
     const { startRefreshLoop } = await import('@/lib/refresher');
     startRefreshLoop(600);
     await vi.advanceTimersByTimeAsync(0);
-    expect(listEnvelopes).toHaveBeenCalledTimes(1);
+    expect(loadInbox).toHaveBeenCalledTimes(1);
 
     await vi.advanceTimersByTimeAsync(600_000);
-    expect(listEnvelopes).toHaveBeenCalledTimes(1);
+    expect(loadInbox).toHaveBeenCalledTimes(1);
 
     liberar([]);
     await vi.advanceTimersByTimeAsync(600_000);
-    expect(listEnvelopes).toHaveBeenCalledTimes(2);
+    expect(loadInbox).toHaveBeenCalledTimes(2);
   });
 });
 
