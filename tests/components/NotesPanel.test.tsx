@@ -2,6 +2,7 @@ import { describe, expect, it, afterEach, beforeEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
 import { NotesPanel } from '@/components/NotesPanel';
 import type { Note, NoteFolder } from '@/lib/types';
+import { notesChanged } from '@/lib/notesBus';
 
 function nota(over: Partial<Note>): Note {
   return {
@@ -641,6 +642,79 @@ describe('NotesPanel', () => {
       await waitFor(() =>
         expect(chamadas.find((c) => c.method === 'PATCH')?.body).toEqual({ folderId: null }),
       );
+    });
+  });
+
+  describe('nota criada fora do painel', () => {
+    it('aparece sem recarregar a página quando o aviso chega', async () => {
+      const notas = [nota({ id: '1', title: 'Ideias' })];
+      responder(notas);
+      render(<NotesPanel />);
+      await screen.findByRole('button', { name: 'Ideias' });
+
+      // O outro caminho — a rota que cria a nota a partir do e-mail — já
+      // gravou; aqui só chega o aviso.
+      notas.push(nota({ id: '2', title: 'Do e-mail', body: 'corpo do e-mail' }));
+      notesChanged();
+
+      expect(await screen.findByRole('button', { name: 'Do e-mail' })).toBeInTheDocument();
+    });
+
+    it('com activate, abre exatamente aquela nota', async () => {
+      const notas = [nota({ id: '1', title: 'Ideias' })];
+      responder(notas, undefined, [pasta({ id: 'p1', name: 'Trabalho' })]);
+      render(<NotesPanel />);
+      await screen.findByLabelText('texto de Ideias');
+
+      notas.push(nota({ id: '2', title: 'Do e-mail', body: 'corpo do e-mail', folderId: 'p1' }));
+      notesChanged({ activate: '2' });
+
+      expect(await screen.findByLabelText('texto de Do e-mail')).toHaveValue('corpo do e-mail');
+      // A pasta dela fica aberta: seleção escondida na árvore não se vê.
+      expect(screen.getByRole('button', { name: 'Recolher Trabalho' })).toBeInTheDocument();
+    });
+
+    it('um id que não existe recarrega a lista sem trocar a nota aberta', async () => {
+      const notas = [nota({ id: '1', title: 'Ideias' })];
+      responder(notas);
+      render(<NotesPanel />);
+      await screen.findByLabelText('texto de Ideias');
+
+      notas.push(nota({ id: '2', title: 'Outra' }));
+      notesChanged({ activate: 'nao-existe' });
+
+      expect(await screen.findByRole('button', { name: 'Outra' })).toBeInTheDocument();
+      expect(screen.getByLabelText('texto de Ideias')).toBeInTheDocument();
+    });
+
+    it('a releitura não devolve o texto gravado por cima do que está sendo digitado', async () => {
+      const notas = [nota({ id: '1', title: 'Ideias', body: 'gravado' })];
+      responder(notas);
+      render(<NotesPanel />);
+      const campo = await screen.findByLabelText('texto de Ideias');
+
+      fireEvent.change(campo, { target: { value: 'ainda digitando' } });
+      notesChanged();
+
+      await waitFor(() => expect(chamadas.filter((c) => c.url === '/api/notes').length).toBe(2));
+      expect(screen.getByLabelText('texto de Ideias')).toHaveValue('ainda digitando');
+    });
+
+    it('com activate, grava o pendente antes de trocar de nota', async () => {
+      const notas = [nota({ id: '1', title: 'Ideias' }), nota({ id: '2', title: 'Do e-mail' })];
+      responder(notas);
+      render(<NotesPanel />);
+      const campo = await screen.findByLabelText('texto de Ideias');
+
+      fireEvent.change(campo, { target: { value: 'não pode sumir' } });
+      notesChanged({ activate: '2' });
+
+      await waitFor(() => {
+        const patch = chamadas.find((c) => c.method === 'PATCH');
+        expect(patch?.url).toContain('/1');
+        expect(patch?.body).toEqual({ body: 'não pode sumir' });
+      });
+      expect(await screen.findByLabelText('texto de Do e-mail')).toBeInTheDocument();
     });
   });
 

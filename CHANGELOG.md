@@ -8,6 +8,25 @@ Only `main` is maintained; there are no release branches.
 
 ## [Unreleased]
 
+### Fixed
+- A note created outside the notes panel — from an e-mail, today — now shows
+  up in the panel without reloading the page. The panel reads `/api/notes`
+  once when it mounts, so it had no way of hearing about a note created by
+  another part of the same page; it now also listens for the
+  `daily-web:notes-changed` window event and reads the list again. There is no
+  timer and no polling behind it: the event fires once, when whoever created
+  the note says so.
+
+### Added
+- `lib/notesBus.ts` is the contract for that event. `notesChanged()` tells the
+  panel to read its list again, and `notesChanged({ activate: noteId })` also
+  leaves that note open — selected, with its folder expanded and any search
+  cleared — which is what an "Abrir" button next to a created-from-e-mail
+  confirmation needs. The active note used to be internal state with no way in
+  from outside. An unknown id just refreshes the list. Reading the list again
+  never overwrites what is being typed: only the note that is being opened
+  puts text in the editor, and a pending save is flushed before that happens.
+
 ### Added
 - An e-mail can become a note or a task, from an actions menu on its row — in
   the dashboard card and in the full-screen panel alike. The menu is the design

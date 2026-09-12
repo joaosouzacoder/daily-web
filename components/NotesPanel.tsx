@@ -60,6 +60,7 @@ import {
   type TextEdit,
 } from '@/lib/markdown/editing';
 import type { NotesSyncStatus } from '@/lib/notesSync';
+import { onNotesChanged } from '@/lib/notesBus';
 
 /** Quanto o texto fica parado antes de subir. Curto o bastante para não se
  *  perder ao fechar a aba, longo o bastante para não gravar a cada tecla. */
@@ -187,34 +188,78 @@ export function NotesPanel() {
     if (alvo) await gravar(alvo.id, { body: alvo.body });
   }, [gravar]);
 
+  // Qual nota está aberta, para a releitura poder decidir sem depender do
+  // fechamento de um render antigo.
+  const ativaRef = useRef<string | null>(null);
   useEffect(() => {
-    let cancelado = false;
-    void fetch('/api/notes')
-      .then((r) => r.json())
-      .then(
-        (data: {
-          notes?: Note[];
-          folders?: NoteFolder[];
-          sync?: NotesSyncStatus;
-          error?: string;
-        }) => {
-          if (cancelado) return;
-          const lista = data.notes ?? [];
-          setSync(data.sync ?? null);
-          setNotes(lista);
-          setFolders(data.folders ?? []);
-          setAtiva(lista[0]?.id ?? null);
-          setRascunho(lista[0]?.body ?? '');
-          setErro(data.error ?? null);
-        },
-      )
-      .finally(() => {
-        if (!cancelado) setCarregando(false);
-      });
-    return () => {
-      cancelado = true;
-    };
+    ativaRef.current = ativa;
+  }, [ativa]);
+
+  /**
+   * Lê a lista do servidor. `activate` deixa uma nota aberta ao final — é
+   * assim que uma nota criada fora daqui vira a nota em edição.
+   *
+   * O rascunho só é trocado quando a nota aberta muda: uma releitura no meio
+   * da digitação devolveria o texto gravado por cima do que ainda não subiu.
+   */
+  const carregar = useCallback(
+    async (activate?: string) => {
+      // O que estava pendente sobe antes de a nota aberta mudar.
+      if (activate) await gravarPendente();
+
+      const res = await fetch('/api/notes');
+      const data = (await res.json().catch(() => ({}))) as {
+        notes?: Note[];
+        folders?: NoteFolder[];
+        sync?: NotesSyncStatus;
+        error?: string;
+      };
+      if (!res.ok) {
+        setErro(data.error ?? 'Falha ao carregar as notas');
+        return;
+      }
+
+      const lista = data.notes ?? [];
+      setSync(data.sync ?? null);
+      setNotes(lista);
+      setFolders(data.folders ?? []);
+      setErro(data.error ?? null);
+
+      // Um id desconhecido — de outra pessoa, ou já apagado — não abre nada;
+      // a lista foi atualizada do mesmo jeito.
+      const alvo = activate ? (lista.find((n) => n.id === activate) ?? null) : null;
+      const atual = ativaRef.current;
+      const permanece = atual !== null && lista.some((n) => n.id === atual);
+      const proxima = alvo ?? (permanece ? null : (lista[0] ?? null));
+
+      if (proxima) {
+        setAtiva(proxima.id);
+        setRascunho(proxima.body);
+      } else if (!permanece) {
+        setAtiva(null);
+        setRascunho('');
+      }
+
+      if (alvo) {
+        // Abrir uma nota é sair da busca e mostrar a pasta dela na árvore:
+        // seleção escondida atrás de um filtro não se vê.
+        setBusca('');
+        setConsulta('');
+        setAbertas((prev) => new Set(prev).add(alvo.folderId ?? NONE_KEY));
+      }
+    },
+    [gravarPendente],
+  );
+
+  useEffect(() => {
+    void carregar().finally(() => setCarregando(false));
+    // Só na montagem: as releituras seguintes vêm do evento abaixo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Uma nota criada fora do painel — de um e-mail, hoje — avisa por este
+  // evento. Sem ele, a nota só aparecia depois de recarregar a página.
+  useEffect(() => onNotesChanged((detail) => void carregar(detail.activate)), [carregar]);
 
   // Sair da página com o texto ainda esperando o autosave perderia o que foi
   // digitado nos últimos instantes.
