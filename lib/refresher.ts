@@ -18,9 +18,10 @@ import type { Connection } from './vault/connections';
 
 const EMAIL_LIMIT = 30;
 
-// Com o punhado de usuários da app, um ciclo leva segundos por usuário. Dez
-// minutos deixam folga larga para ele terminar antes do próximo tique.
-const DEFAULT_REFRESH_SECONDS = 600;
+// Com o punhado de usuários da app, um ciclo leva segundos por usuário. Cinco
+// minutos deixam folga larga para ele terminar antes do próximo tique, e são
+// frequentes o bastante para a caixa não parecer parada.
+const DEFAULT_REFRESH_SECONDS = 300;
 
 /** O intervalo vem do ambiente, que é entrada não confiável: Number('lixo') é
  *  NaN, e setInterval com NaN dispara a cada milissegundo. */

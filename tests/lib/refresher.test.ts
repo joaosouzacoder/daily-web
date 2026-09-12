@@ -265,9 +265,9 @@ describe('refresh simultâneo', () => {
 });
 
 describe('intervalo do ciclo', () => {
-  it('usa dez minutos quando REFRESH_SECONDS não foi definido', async () => {
+  it('usa cinco minutos quando REFRESH_SECONDS não foi definido', async () => {
     const { refreshIntervalSeconds } = await import('@/lib/refresher');
-    expect(refreshIntervalSeconds(undefined)).toBe(600);
+    expect(refreshIntervalSeconds(undefined)).toBe(300);
   });
 
   it('respeita um valor válido vindo do ambiente', async () => {
@@ -278,7 +278,7 @@ describe('intervalo do ciclo', () => {
   // Number('lixo') é NaN, e setInterval com NaN dispara a cada milissegundo.
   it.each(['', 'abc', '0', '-5', 'Infinity'])('cai no padrão com valor inválido %j', async (raw) => {
     const { refreshIntervalSeconds } = await import('@/lib/refresher');
-    expect(refreshIntervalSeconds(raw)).toBe(600);
+    expect(refreshIntervalSeconds(raw)).toBe(300);
   });
 });
 

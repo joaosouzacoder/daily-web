@@ -71,6 +71,11 @@ Only `main` is maintained; there are no release branches.
   failed and the message returned to the screen.
 
 ### Changed
+- The background cycle runs every five minutes instead of every minute. One
+  minute was more often than a mailbox changes, and it kept a login open on
+  every account twelve times an hour for nothing. Manual refresh is unchanged,
+  and the countdown in the header still comes from the server, so it needs no
+  edit to follow the new cadence.
 - Applying a label is now its own action, separate from moving. Both used to
   travel as "move" while only ever copying, which is what a Gmail label is;
   moving a message out of a folder had no way to be asked for.
