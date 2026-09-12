@@ -168,3 +168,57 @@ describe('cópia das notas no Drive', () => {
     expect(pendingNotes('u-1').map((n) => n.body)).toEqual(['editada']);
   });
 });
+
+describe('pastas das notas', () => {
+  it('a nota que já existia continua lá, agora sem pasta', async () => {
+    const legacy = new Database(dbFile);
+    legacy.exec(`
+      CREATE TABLE notes (
+        id TEXT PRIMARY KEY, user_id TEXT NOT NULL, title TEXT NOT NULL DEFAULT '',
+        body TEXT NOT NULL DEFAULT '', position INTEGER NOT NULL,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+        revision INTEGER NOT NULL DEFAULT 1, synced_revision INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE note_deletions (
+        user_id TEXT NOT NULL, note_id TEXT NOT NULL, deleted_at TEXT NOT NULL,
+        PRIMARY KEY (user_id, note_id)
+      );
+      INSERT INTO notes VALUES ('n-1', 'u-1', 'Antiga', 'texto', 0, '2026-08-01', '2026-08-01', 1, 1);
+    `);
+    legacy.pragma('user_version = 12');
+    legacy.close();
+
+    const { listNotes } = await import('@/lib/notes');
+    const { listFolders } = await import('@/lib/noteFolders');
+
+    expect(listNotes('u-1')).toEqual([
+      {
+        id: 'n-1',
+        title: 'Antiga',
+        body: 'texto',
+        position: 0,
+        updatedAt: '2026-08-01',
+        folderId: null,
+      },
+    ]);
+    expect(listFolders('u-1')).toEqual([]);
+  });
+
+  it('a migração das pastas roda uma vez só', async () => {
+    const { getDb } = await import('@/lib/db');
+    const { createFolder, listFolders } = await import('@/lib/noteFolders');
+    createFolder('u-1', 'Trabalho');
+    const version = getDb().pragma('user_version', { simple: true });
+
+    // Uma segunda abertura do mesmo arquivo não repete o ALTER TABLE nem
+    // perde o que já estava gravado.
+    const again = new Database(dbFile);
+    again.close();
+    process.env.DAILY_WEB_DB_PATH = dbFile;
+    vi.resetModules();
+    const { getDb: reopen } = await import('@/lib/db');
+    expect(reopen().pragma('user_version', { simple: true })).toBe(version);
+    const { listFolders: relist } = await import('@/lib/noteFolders');
+    expect(relist('u-1')).toHaveLength(1);
+  });
+});

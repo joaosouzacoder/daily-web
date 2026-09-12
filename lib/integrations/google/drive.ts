@@ -22,6 +22,18 @@ export interface DriveNoteFile {
   modifiedTime: string;
   /** Em bytes. Serve para recusar baixar o que não caberia numa nota. */
   size: number;
+  /** As pastas do Drive onde o arquivo está. Um arquivo pode estar em mais
+   *  de uma; ao mudar de pasta, todas as antigas saem. */
+  parents: string[];
+}
+
+/** Uma pasta de notas espelhada no Drive. A hierarquia de lá é a mesma daqui:
+ *  a pasta pai do arquivo é o espelho da pasta pai da nota. */
+export interface DriveFolderMirror {
+  fileId: string;
+  folderId: string;
+  name: string;
+  parents: string[];
 }
 
 export interface DriveNoteContent {
@@ -84,6 +96,7 @@ interface RawFile {
   name?: string;
   modifiedTime?: string;
   size?: string;
+  parents?: string[];
   appProperties?: Record<string, string>;
 }
 
@@ -104,7 +117,7 @@ async function listFiles(token: string, q: string): Promise<RawFile[]> {
       q,
       spaces: 'drive',
       pageSize: '1000',
-      fields: 'nextPageToken, files(id, name, modifiedTime, size, appProperties)',
+      fields: 'nextPageToken, files(id, name, modifiedTime, size, parents, appProperties)',
     });
     if (pageToken) params.set('pageToken', pageToken);
     const data = (await (await request(token, `${API}/files?${params}`)).json()) as RawList;
@@ -134,8 +147,63 @@ export async function listNoteFiles(token: string): Promise<DriveNoteFile[]> {
         untitled: file.appProperties?.untitled === '1',
         modifiedTime: file.modifiedTime ?? new Date().toISOString(),
         size: Number(file.size ?? 0),
+        parents: file.parents ?? [],
       },
     ];
+  });
+}
+
+/** Os espelhos de pasta que esta app criou, fora da lixeira. */
+export async function listFolderMirrors(token: string): Promise<DriveFolderMirror[]> {
+  const files = await listFiles(
+    token,
+    `mimeType = '${FOLDER_MIME}' and appProperties has { key='${APP_KEY}' and value='noteFolder' } and trashed = false`,
+  );
+  return files.flatMap((file) => {
+    const folderId = file.appProperties?.folderId;
+    if (!file.id || !folderId) return [];
+    return [{ fileId: file.id, folderId, name: file.name ?? '', parents: file.parents ?? [] }];
+  });
+}
+
+/** Cria o espelho de uma pasta dentro de `parentId` — que é a pasta raiz da
+ *  app ou o espelho da pasta de cima. */
+export async function createFolderMirror(
+  token: string,
+  parentId: string,
+  folder: { folderId: string; name: string },
+): Promise<string> {
+  const response = await request(token, `${API}/files?fields=id`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      name: folder.name,
+      mimeType: FOLDER_MIME,
+      parents: [parentId],
+      appProperties: { [APP_KEY]: 'noteFolder', folderId: folder.folderId },
+    }),
+  });
+  const data = (await response.json()) as RawFile;
+  if (!data.id) throw new DriveError('o Google Drive não devolveu o id da pasta', 502);
+  return data.id;
+}
+
+/** Renomeia o espelho e, quando a pasta mudou de lugar aqui, muda de lugar
+ *  lá também — o arquivo sai de todos os pais antigos de uma vez. */
+export async function updateFolderMirror(
+  token: string,
+  fileId: string,
+  folder: { name: string; parentId: string; currentParents: string[] },
+): Promise<void> {
+  const params = new URLSearchParams({ fields: 'id' });
+  if (!folder.currentParents.includes(folder.parentId)) {
+    params.set('addParents', folder.parentId);
+    if (folder.currentParents.length > 0) params.set('removeParents', folder.currentParents.join(','));
+  }
+  await request(token, `${API}/files/${encodeURIComponent(fileId)}?${params}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name: folder.name }),
   });
 }
 
@@ -212,17 +280,25 @@ export async function createNoteFile(
   return data.id;
 }
 
+/** `move`, quando a nota mudou de pasta: o arquivo entra na pasta nova e sai
+ *  de todas as antigas na mesma requisição que grava o texto. */
 export async function updateNoteFile(
   token: string,
   fileId: string,
   note: DriveNoteContent,
+  move?: { parentId: string; currentParents: string[] },
 ): Promise<void> {
   const payload = multipart(metadataFor(note), note.body);
-  await request(
-    token,
-    `${UPLOAD}/files/${encodeURIComponent(fileId)}?uploadType=multipart&fields=id`,
-    { method: 'PATCH', headers: { 'content-type': payload.type }, body: payload.body },
-  );
+  const params = new URLSearchParams({ uploadType: 'multipart', fields: 'id' });
+  if (move && !move.currentParents.includes(move.parentId)) {
+    params.set('addParents', move.parentId);
+    if (move.currentParents.length > 0) params.set('removeParents', move.currentParents.join(','));
+  }
+  await request(token, `${UPLOAD}/files/${encodeURIComponent(fileId)}?${params}`, {
+    method: 'PATCH',
+    headers: { 'content-type': payload.type },
+    body: payload.body,
+  });
 }
 
 /** Lixeira, não exclusão: um engano aqui ainda se desfaz pelo próprio Drive. */

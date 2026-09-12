@@ -23,6 +23,7 @@ interface Row {
   body: string;
   position: number;
   updated_at: string;
+  folder_id: string | null;
 }
 
 function toNote(row: Row): Note {
@@ -32,13 +33,15 @@ function toNote(row: Row): Note {
     body: row.body,
     position: row.position,
     updatedAt: row.updated_at,
+    folderId: row.folder_id,
   };
 }
 
 export function listNotes(userId: string): Note[] {
   const rows = getDb()
     .prepare(
-      'SELECT id, title, body, position, updated_at FROM notes WHERE user_id = ? ORDER BY position, created_at',
+      `SELECT id, title, body, position, updated_at, folder_id FROM notes
+       WHERE user_id = ? ORDER BY position, created_at`,
     )
     .all(userId) as Row[];
   return rows.map(toNote);
@@ -51,7 +54,7 @@ export function countNotes(userId: string): number {
   return row.total;
 }
 
-export function createNote(userId: string, title = ''): Note {
+export function createNote(userId: string, title = '', folderId: string | null = null): Note {
   if (countNotes(userId) >= MAX_NOTES) {
     throw new NoteLimitError(`o limite é de ${MAX_NOTES} notas`);
   }
@@ -66,14 +69,24 @@ export function createNote(userId: string, title = ''): Note {
     body: '',
     position: row.last + 1,
     updatedAt: new Date().toISOString(),
+    folderId,
   };
 
   getDb()
     .prepare(
-      `INSERT INTO notes (id, user_id, title, body, position, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO notes (id, user_id, title, body, position, created_at, updated_at, folder_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-    .run(note.id, userId, note.title, note.body, note.position, note.updatedAt, note.updatedAt);
+    .run(
+      note.id,
+      userId,
+      note.title,
+      note.body,
+      note.position,
+      note.updatedAt,
+      note.updatedAt,
+      note.folderId,
+    );
 
   return note;
 }
@@ -97,7 +110,10 @@ export function updateNote(userId: string, id: string, patch: NotePatch): Note |
   }
 
   const atual = getDb()
-    .prepare('SELECT id, title, body, position, updated_at FROM notes WHERE id = ? AND user_id = ?')
+    .prepare(
+      `SELECT id, title, body, position, updated_at, folder_id FROM notes
+       WHERE id = ? AND user_id = ?`,
+    )
     .get(id, userId) as Row | undefined;
   if (!atual) return null;
 
@@ -112,7 +128,38 @@ export function updateNote(userId: string, id: string, patch: NotePatch): Note |
     )
     .run(title, body, updatedAt, id, userId);
 
-  return { id, title, body, position: atual.position, updatedAt };
+  return { id, title, body, position: atual.position, updatedAt, folderId: atual.folder_id };
+}
+
+/**
+ * Muda a nota de pasta. `folderId` null tira a nota de qualquer pasta. A
+ * pasta é conferida contra as do próprio usuário, então um id de outra pessoa
+ * não move nada. Devolve null quando a nota não é do usuário.
+ */
+export function moveNote(userId: string, id: string, folderId: string | null): Note | null {
+  const db = getDb();
+  if (folderId !== null) {
+    const folder = db
+      .prepare('SELECT 1 AS ok FROM note_folders WHERE id = ? AND user_id = ?')
+      .get(folderId, userId);
+    if (!folder) throw new NoteLimitError('pasta não encontrada');
+  }
+
+  const changed = db
+    .prepare(
+      `UPDATE notes SET folder_id = ?, revision = revision + 1
+       WHERE id = ? AND user_id = ?`,
+    )
+    .run(folderId, id, userId).changes;
+  if (changed === 0) return null;
+
+  const row = db
+    .prepare(
+      `SELECT id, title, body, position, updated_at, folder_id FROM notes
+       WHERE id = ? AND user_id = ?`,
+    )
+    .get(id, userId) as Row;
+  return toNote(row);
 }
 
 /** Apagar uma nota que já chegou ao Drive deixa o registro para o arquivo de
@@ -173,7 +220,7 @@ export interface PendingNote extends Note {
 export function pendingNotes(userId: string): PendingNote[] {
   const rows = getDb()
     .prepare(
-      `SELECT id, title, body, position, updated_at, revision FROM notes
+      `SELECT id, title, body, position, updated_at, folder_id, revision FROM notes
        WHERE user_id = ? AND revision != synced_revision ORDER BY position, created_at`,
     )
     .all(userId) as (Row & { revision: number })[];
@@ -217,6 +264,8 @@ export interface RestoredNote {
   body: string;
   position: number;
   updatedAt: string;
+  /** A pasta onde a nota estava. Um id que não veio junto vira "Sem pasta". */
+  folderId?: string | null;
 }
 
 /**
@@ -240,8 +289,8 @@ export function restoreNotes(userId: string, remote: RestoredNote[]): number {
 
     const taken = db.prepare('SELECT 1 FROM notes WHERE id = ?');
     const insert = db.prepare(
-      `INSERT INTO notes (id, user_id, title, body, position, created_at, updated_at, revision, synced_revision)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+      `INSERT INTO notes (id, user_id, title, body, position, created_at, updated_at, folder_id, revision, synced_revision)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
     );
     accepted.forEach((note, index) => {
       // O id é global. Se outra pessoa desta instância já usa o mesmo — as
@@ -256,6 +305,7 @@ export function restoreNotes(userId: string, remote: RestoredNote[]): number {
         index,
         note.updatedAt,
         note.updatedAt,
+        note.folderId ?? null,
         clash ? 0 : 1,
       );
     });

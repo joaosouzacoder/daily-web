@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent,
@@ -13,6 +14,7 @@ import {
   Bold,
   Code,
   Eye,
+  FolderPlus,
   Heading2,
   Italic,
   Link,
@@ -21,6 +23,7 @@ import {
   ListOrdered,
   Maximize2,
   Minimize2,
+  PanelLeft,
   Pencil,
   Plus,
   Quote,
@@ -28,12 +31,10 @@ import {
   Strikethrough,
 } from 'lucide-react';
 import { IconAction } from '@/components/data/IconAction';
-import { Trash } from 'iconoir-react';
-import type { Note } from '@/lib/types';
+import type { Note, NoteFolder } from '@/lib/types';
 import { PanelError } from '@/components/data/PanelError';
 import { useConfirm } from '@/components/data/ConfirmDialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { SearchInput } from '@/components/ui/SearchInput';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
@@ -47,6 +48,10 @@ import { focusRing } from '@/lib/theme';
 import { cn } from '@/lib/utils';
 import { Section } from './ui/Section';
 import { MarkdownView } from './MarkdownView';
+import { NoteTree, ALL_KEY, NONE_KEY, type Scope } from './notes/NoteTree';
+import { NoteSearchResults } from './notes/NoteSearchResults';
+import { searchNotes } from '@/lib/notesSearch';
+import { descendantIds } from '@/lib/notesTree';
 import {
   applyEdit,
   continueList,
@@ -59,6 +64,10 @@ import type { NotesSyncStatus } from '@/lib/notesSync';
 /** Quanto o texto fica parado antes de subir. Curto o bastante para não se
  *  perder ao fechar a aba, longo o bastante para não gravar a cada tecla. */
 const AUTOSAVE_MS = 700;
+
+/** Espera da busca. A consulta corre sobre o texto inteiro de cada nota;
+ *  refazer isso a cada tecla pisca a lista sem necessidade. */
+const SEARCH_DEBOUNCE_MS = 250;
 
 type Estado = 'salvo' | 'salvando' | 'erro';
 
@@ -107,6 +116,7 @@ function descreverSync(sync: NotesSyncStatus): string {
 export function NotesPanel() {
   const { confirm, dialog } = useConfirm();
   const [notes, setNotes] = useState<Note[]>([]);
+  const [folders, setFolders] = useState<NoteFolder[]>([]);
   const [ativa, setAtiva] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [estado, setEstado] = useState<Estado>('salvo');
@@ -114,8 +124,21 @@ export function NotesPanel() {
   const [renomeando, setRenomeando] = useState<string | null>(null);
   const [lendo, setLendo] = useState(false);
   const [maximizada, setMaximizada] = useState(false);
-  const campoAtual = () => (maximizada ? campoTelaCheia.current : campoPainel.current);
   const [sync, setSync] = useState<NotesSyncStatus | null>(null);
+
+  // A navegação: o que está selecionado na árvore, o que está aberto e se a
+  // barra lateral cabe na tela. Fica aqui, e não dentro da árvore, porque a
+  // mesma navegação serve ao painel e ao diálogo — maximizar não pode perder
+  // a nota escolhida nem as pastas abertas.
+  const [escopo, setEscopo] = useState<Scope>({ kind: 'all' });
+  const [abertas, setAbertas] = useState<Set<string>>(() => new Set([NONE_KEY]));
+  const [barraAberta, setBarraAberta] = useState(true);
+
+  const [busca, setBusca] = useState('');
+  const [consulta, setConsulta] = useState('');
+  const [soNaPasta, setSoNaPasta] = useState(false);
+
+  const campoAtual = () => (maximizada ? campoTelaCheia.current : campoPainel.current);
   // Um campo no painel e outro no diálogo, cada um com a sua ref. Uma ref só
   // para os dois se perde: o diálogo continua montado durante a animação de
   // saída e, ao desmontar, zeraria a ref que o campo do painel já assumiu.
@@ -168,15 +191,23 @@ export function NotesPanel() {
     let cancelado = false;
     void fetch('/api/notes')
       .then((r) => r.json())
-      .then((data: { notes?: Note[]; sync?: NotesSyncStatus; error?: string }) => {
-        if (cancelado) return;
-        const lista = data.notes ?? [];
-        setSync(data.sync ?? null);
-        setNotes(lista);
-        setAtiva(lista[0]?.id ?? null);
-        setRascunho(lista[0]?.body ?? '');
-        setErro(data.error ?? null);
-      })
+      .then(
+        (data: {
+          notes?: Note[];
+          folders?: NoteFolder[];
+          sync?: NotesSyncStatus;
+          error?: string;
+        }) => {
+          if (cancelado) return;
+          const lista = data.notes ?? [];
+          setSync(data.sync ?? null);
+          setNotes(lista);
+          setFolders(data.folders ?? []);
+          setAtiva(lista[0]?.id ?? null);
+          setRascunho(lista[0]?.body ?? '');
+          setErro(data.error ?? null);
+        },
+      )
       .finally(() => {
         if (!cancelado) setCarregando(false);
       });
@@ -200,6 +231,12 @@ export function NotesPanel() {
     window.addEventListener('pagehide', aoSair);
     return () => window.removeEventListener('pagehide', aoSair);
   }, []);
+
+  // A consulta só vira busca depois de uma pausa na digitação.
+  useEffect(() => {
+    const id = setTimeout(() => setConsulta(busca), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(id);
+  }, [busca]);
 
   const digitar = (texto: string) => {
     if (!ativa) return;
@@ -287,30 +324,36 @@ export function NotesPanel() {
     }
   };
 
-  const trocarAba = async (id: string) => {
+  /** Trocar de nota grava o que estava pendente antes de o rascunho virar
+   *  outro texto — sem isto, o que foi digitado por último se perderia. */
+  const abrirNota = async (id: string) => {
     if (id === ativa) return;
-    // O que estava pendente é gravado antes de o rascunho virar outro texto.
     await gravarPendente();
     setAtiva(id);
     setRascunho(notes.find((n) => n.id === id)?.body ?? '');
   };
+
+  const pastaDoEscopo = escopo.kind === 'folder' ? escopo.id : null;
 
   const criar = async () => {
     await gravarPendente();
     const res = await fetch('/api/notes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: `Nota ${notes.length + 1}` }),
+      body: JSON.stringify({ title: `Nota ${notes.length + 1}`, folderId: pastaDoEscopo }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       setErro(data.error ?? 'Falha ao criar a nota');
       return;
     }
+    const nota = data.note as Note;
     setErro(null);
-    setNotes((prev) => [...prev, data.note as Note]);
-    setAtiva((data.note as Note).id);
+    setNotes((prev) => [...prev, nota]);
+    setAtiva(nota.id);
     setRascunho('');
+    // A nota nova precisa estar à vista para ser renomeada.
+    abrir(nota.folderId ?? NONE_KEY);
   };
 
   const apagar = async (note: Note) => {
@@ -344,16 +387,158 @@ export function NotesPanel() {
     });
   };
 
-  const comecarRenomear = (id: string) => setRenomeando(id);
-
   /** Título vazio não apaga o nome: volta ao que era. Sem nome a aba vira
    *  "sem título" e o arquivo no Drive também — raramente é o que se quis. */
-  const renomear = async (note: Note, titulo: string) => {
-    setRenomeando(null);
+  const renomear = async (id: string, titulo: string) => {
+    const note = notes.find((n) => n.id === id);
     const limpo = titulo.trim();
-    if (!limpo || limpo === note.title) return;
+    if (!note || !limpo || limpo === note.title) return;
     await gravar(note.id, { title: limpo });
   };
+
+  const abrir = (key: string) => setAbertas((prev) => new Set(prev).add(key));
+
+  const alternarAberta = (key: string) =>
+    setAbertas((prev) => {
+      const proximo = new Set(prev);
+      if (!proximo.delete(key)) proximo.add(key);
+      return proximo;
+    });
+
+  // --- Pastas -----------------------------------------------------------------
+
+  const moverNota = async (noteId: string, folderId: string | null) => {
+    const note = notes.find((n) => n.id === noteId);
+    if (!note || note.folderId === folderId) return;
+    // O texto pendente sobe primeiro: a resposta do move traz a nota inteira
+    // e sobrescreveria o que ainda não foi gravado.
+    await gravarPendente();
+
+    const res = await fetch(`/api/notes/${encodeURIComponent(noteId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folderId }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setErro(data.error ?? 'Falha ao mover a nota');
+      return;
+    }
+    setErro(null);
+    setNotes((prev) => prev.map((n) => (n.id === noteId ? (data.note as Note) : n)));
+    abrir(folderId ?? NONE_KEY);
+  };
+
+  const criarPasta = async (parentId: string | null) => {
+    const res = await fetch('/api/notes/folders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Nova pasta', parentId }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setErro(data.error ?? 'Falha ao criar a pasta');
+      return;
+    }
+    const pasta = data.folder as NoteFolder;
+    setErro(null);
+    setFolders((prev) => [...prev, pasta]);
+    if (parentId) abrir(parentId);
+    // Nasce com o nome em edição: ninguém quer ficar com "Nova pasta".
+    setRenomeando(pasta.id);
+  };
+
+  const renomearPasta = async (id: string, nome: string) => {
+    const pasta = folders.find((f) => f.id === id);
+    const limpo = nome.trim();
+    if (!pasta || !limpo || limpo === pasta.name) return;
+    const res = await fetch(`/api/notes/folders/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: limpo }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setErro(data.error ?? 'Falha ao renomear a pasta');
+      return;
+    }
+    setErro(null);
+    setFolders((prev) => prev.map((f) => (f.id === id ? (data.folder as NoteFolder) : f)));
+  };
+
+  const moverPasta = async (id: string, parentId: string | null) => {
+    const pasta = folders.find((f) => f.id === id);
+    if (!pasta || pasta.parentId === parentId) return;
+    const res = await fetch(`/api/notes/folders/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parentId }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setErro(data.error ?? 'Falha ao mover a pasta');
+      return;
+    }
+    setErro(null);
+    setFolders((prev) => prev.map((f) => (f.id === id ? (data.folder as NoteFolder) : f)));
+    if (parentId) abrir(parentId);
+  };
+
+  const apagarPasta = async (folder: NoteFolder) => {
+    const dentro = descendantIds(folders, folder.id);
+    const subpastas = dentro.length - 1;
+    const notasDentro = notes.filter((n) => n.folderId && dentro.includes(n.folderId)).length;
+
+    const efeito = [
+      subpastas > 0 && `${subpastas} ${subpastas === 1 ? 'subpasta' : 'subpastas'}`,
+      notasDentro > 0 && `${notasDentro} ${notasDentro === 1 ? 'nota' : 'notas'}`,
+    ].filter(Boolean);
+
+    const ok = await confirm({
+      title: `Apagar a pasta "${folder.name}"?`,
+      description:
+        efeito.length === 0
+          ? 'A pasta está vazia e será removida.'
+          : `A pasta tem ${efeito.join(' e ')}. ${
+              notasDentro > 0
+                ? 'Nenhuma nota é apagada: todas vão para "Sem pasta". '
+                : ''
+            }${subpastas > 0 ? 'As subpastas são removidas junto.' : ''}`,
+      confirmLabel: notasDentro > 0 ? 'Apagar e mover para Sem pasta' : 'Apagar',
+      destructive: true,
+    });
+    if (!ok) return;
+
+    const res = await fetch(`/api/notes/folders/${encodeURIComponent(folder.id)}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      setErro('Falha ao apagar a pasta');
+      return;
+    }
+    setErro(null);
+    setFolders((prev) => prev.filter((f) => !dentro.includes(f.id)));
+    setNotes((prev) =>
+      prev.map((n) => (n.folderId && dentro.includes(n.folderId) ? { ...n, folderId: null } : n)),
+    );
+    if (escopo.kind === 'folder' && dentro.includes(escopo.id)) setEscopo({ kind: 'all' });
+  };
+
+  // --- Busca ------------------------------------------------------------------
+
+  const escopoDaBusca = useMemo(() => {
+    if (!soNaPasta) return null;
+    if (escopo.kind === 'folder') return descendantIds(folders, escopo.id);
+    if (escopo.kind === 'none') return [null];
+    return null;
+  }, [soNaPasta, escopo, folders]);
+
+  const resultados = useMemo(
+    () => searchNotes(notes, folders, consulta, { scopeIds: escopoDaBusca }),
+    [notes, folders, consulta, escopoDaBusca],
+  );
+
+  const buscando = consulta.trim().length > 0;
 
   const alternarMaximizada = (valor: boolean) => {
     // O texto pendente sobe antes da troca: o campo muda de lugar e o
@@ -368,7 +553,13 @@ export function NotesPanel() {
    *  painel fica inerte enquanto o diálogo está aberto, porque o campo de
    *  texto que ela formataria é o do diálogo. */
   const barra = (emTelaCheia: boolean) => (
-    <div className="flex items-start gap-2" role="toolbar" aria-label="formatação Markdown">
+    <div className="flex shrink-0 items-start gap-2" role="toolbar" aria-label="formatação Markdown">
+      <IconAction
+        label={barraAberta ? 'Esconder a lista' : 'Mostrar a lista'}
+        aria-pressed={barraAberta}
+        icon={<PanelLeft className="size-4" />}
+        onClick={() => setBarraAberta((v) => !v)}
+      />
       {/* A formatação quebra linha quando o painel é estreito; ler e
           maximizar ficam sempre no canto superior direito. */}
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
@@ -377,7 +568,7 @@ export function NotesPanel() {
             key={f.action}
             label={f.label}
             icon={f.icon}
-            disabled={lendo || (maximizada && !emTelaCheia)}
+            disabled={lendo || !notaAtiva || (maximizada && !emTelaCheia)}
             // Sem isto o clique tira o foco do texto e a seleção se perde
             // antes de a formatação saber onde aplicar.
             onMouseDown={(e) => e.preventDefault()}
@@ -405,11 +596,21 @@ export function NotesPanel() {
     </div>
   );
 
-  const corpo = (emTelaCheia: boolean) =>
-    lendo ? (
+  /** O texto da nota. Rola dentro da própria caixa — a barra de formatação
+   *  fica fora da área que rola, e por isso continua alcançável por mais
+   *  longa que a nota seja. */
+  const corpo = (emTelaCheia: boolean) => {
+    if (!notaAtiva) {
+      return (
+        <div className="flex min-h-40 flex-1 items-center justify-center rounded-md border border-dashed border-line-strong">
+          <p className="type-caption text-ink-dim">Escolha uma nota na lista.</p>
+        </div>
+      );
+    }
+    return lendo ? (
       <div
-        className="min-h-40 flex-1 overflow-y-auto rounded-md border border-line-soft px-3 py-2 text-sm"
-        aria-label={`visualização de ${notaAtiva?.title || 'sem título'}`}
+        className="min-h-0 flex-1 overflow-y-auto rounded-md border border-line-soft px-3 py-2 text-sm [scrollbar-gutter:stable]"
+        aria-label={`visualização de ${notaAtiva.title || 'sem título'}`}
         role="region"
       >
         {rascunho.trim() ? (
@@ -421,8 +622,8 @@ export function NotesPanel() {
     ) : (
       <Textarea
         ref={emTelaCheia ? campoTelaCheia : campoPainel}
-        className="min-h-40 flex-1 resize-none font-mono leading-relaxed [field-sizing:fixed]"
-        aria-label={`texto de ${notaAtiva?.title || 'sem título'}`}
+        className="h-full min-h-0 flex-1 resize-none overflow-y-auto font-mono leading-relaxed [field-sizing:fixed] [scrollbar-gutter:stable]"
+        aria-label={`texto de ${notaAtiva.title || 'sem título'}`}
         placeholder="Escreva aqui, em Markdown. O que você digita é salvo sozinho."
         value={rascunho}
         onChange={(e) => digitar(e.target.value)}
@@ -430,9 +631,10 @@ export function NotesPanel() {
         onBlur={() => void gravarPendente()}
       />
     );
+  };
 
   const situacao = (
-    <p className="type-caption text-right text-ink-dim" role="status">
+    <p className="type-caption shrink-0 text-right text-ink-dim" role="status">
       {estado === 'salvando' ? 'salvando…' : estado === 'erro' ? 'não salvo' : 'salvo'}
       {sync?.connected && estado !== 'erro' && (
         <span className={cn(sync.lastError && 'text-warning')}>
@@ -443,111 +645,111 @@ export function NotesPanel() {
     </p>
   );
 
+  /** A barra lateral: busca em cima, e embaixo a árvore ou os resultados.
+   *  Só ela rola — o painel inteiro fica parado. */
+  const lateral = (
+    <aside className="flex max-h-[45vh] min-h-0 flex-col gap-2 overflow-hidden md:max-h-full md:border-r md:border-line-soft md:pr-2">
+      <div className="flex shrink-0 flex-col gap-1">
+        {/* O campo é feito para uma barra horizontal: a base dele é largura,
+            e numa coluna viraria altura. */}
+        <div className="flex">
+          <SearchInput
+            value={busca}
+            onChange={setBusca}
+            label="Buscar notas"
+            placeholder="Buscar no título ou conteúdo"
+          />
+        </div>
+        {buscando && (escopo.kind === 'folder' || escopo.kind === 'none') && (
+          <label className="flex items-center gap-1.5 type-caption text-ink-dim">
+            <input
+              type="checkbox"
+              className={cn('size-3.5 accent-[var(--brand)]', focusRing)}
+              checked={soNaPasta}
+              onChange={(e) => setSoNaPasta(e.target.checked)}
+            />
+            Só nesta pasta e subpastas
+          </label>
+        )}
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto pr-1 [scrollbar-gutter:stable]">
+        {buscando ? (
+          <NoteSearchResults
+            results={resultados}
+            activeNoteId={ativa}
+            onOpen={(id) => void abrirNota(id)}
+          />
+        ) : (
+          <NoteTree
+            folders={folders}
+            notes={notes}
+            activeNoteId={ativa}
+            scope={escopo}
+            expanded={abertas}
+            renaming={renomeando}
+            onRenaming={setRenomeando}
+            onToggle={alternarAberta}
+            onSelectScope={setEscopo}
+            onSelectNote={(id) => void abrirNota(id)}
+            onMoveNote={(noteId, folderId) => void moverNota(noteId, folderId)}
+            onMoveFolder={(id, parentId) => void moverPasta(id, parentId)}
+            onRenameFolder={(id, name) => void renomearPasta(id, name)}
+            onCreateFolder={(parentId) => void criarPasta(parentId)}
+            onDeleteFolder={(folder) => void apagarPasta(folder)}
+            onRenameNote={(id, title) => void renomear(id, title)}
+            onDeleteNote={(note) => void apagar(note)}
+          />
+        )}
+      </div>
+    </aside>
+  );
+
+  const acoes = (
+    <div className="flex items-center gap-1">
+      <IconAction
+        variant="outline"
+        label="Nova pasta"
+        onClick={() => void criarPasta(pastaDoEscopo)}
+        icon={<FolderPlus className="size-4" />}
+      />
+      <IconAction
+        variant="outline"
+        label="Nova nota"
+        onClick={() => void criar()}
+        icon={<Plus className="size-4" />}
+      />
+    </div>
+  );
+
+  const vazio = !carregando && notes.length === 0 && folders.length === 0;
+
   return (
     <Section
       className="min-h-0"
       eyebrow="Notas rápidas"
       count={notes.length > 0 ? String(notes.length) : undefined}
-      actions={
-        <IconAction
-          variant="outline"
-          label="Nova nota"
-          onClick={() => void criar()}
-          icon={<Plus className="size-4" />}
-        />
-      }
+      actions={acoes}
     >
       {erro && <PanelError>{erro}</PanelError>}
 
-      {!carregando && notes.length === 0 && (
-        <EmptyState title="Nenhuma nota ainda." description="Crie a primeira." />
-      )}
+      {vazio && <EmptyState title="Nenhuma nota ainda." description="Crie a primeira." />}
 
-      {notes.length > 0 && (
-        <div className="grid min-h-0 flex-1 gap-4 md:grid-cols-[minmax(140px,26%)_1fr]">
-          {/* As abas ficam na vertical e rolam sozinhas: com muitas notas, é a
-              coluna que rola, não o painel inteiro. */}
-          <ul
-            className="max-h-[40vh] min-h-0 overflow-y-auto pr-2 md:max-h-full md:border-r md:border-line-soft"
-            aria-label="notas"
-          >
-            {notes.map((note) => (
-              <li
-                key={note.id}
-                className={cn(
-                  // A aba ativa é a mesma faixa do item ativo da barra lateral:
-                  // tinta da marca que se dissolve e uma barra de 3px. Uma
-                  // superfície sólida aqui virava um bloco preto no tema escuro.
-                  'group relative flex items-center gap-1 pr-1 transition-colors duration-100 ease-brand motion-reduce:transition-none',
-                  note.id === ativa
-                    ? [
-                        'bg-[linear-gradient(to_right,var(--brand-tint),transparent_85%)]',
-                        "before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-brand before:content-['']",
-                        'dark:before:shadow-[0_0_8px_0_var(--brand)]',
-                      ]
-                    : 'hover:bg-glass-line',
-                )}
-              >
-                {renomeando === note.id ? (
-                  <Input
-                    className="h-8 min-w-0 flex-1 px-2 text-sm"
-                    aria-label={`renomear ${note.title || 'sem título'}`}
-                    defaultValue={note.title}
-                    autoFocus
-                    onBlur={(e) => void renomear(note, e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') e.currentTarget.blur();
-                      if (e.key === 'Escape') setRenomeando(null);
-                    }}
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    className={cn(
-                      'min-w-0 flex-1 truncate py-2 pr-2 pl-4 text-left text-sm transition-colors',
-                      note.id === ativa ? 'text-ink' : 'text-ink-mid hover:text-ink',
-                      focusRing,
-                    )}
-                    aria-current={note.id === ativa}
-                    onClick={() => void trocarAba(note.id)}
-                    onDoubleClick={() => comecarRenomear(note.id)}
-                    title="Clique duplo para renomear"
-                  >
-                    {note.title || 'sem título'}
-                  </button>
-                )}
-                {renomeando !== note.id && (
-                  <button
-                    type="button"
-                    className={cn(
-                      'flex size-6 shrink-0 items-center justify-center rounded-md border border-transparent text-ink-dim opacity-0 transition-[opacity,color,border-color] hover:border-line-strong hover:text-ink focus-visible:opacity-100 group-hover:opacity-100',
-                      note.id === ativa && 'opacity-100',
-                      focusRing,
-                    )}
-                    aria-label={`mudar o título de ${note.title || 'sem título'}`}
-                    title="Renomear"
-                    onClick={() => comecarRenomear(note.id)}
-                  >
-                    <Pencil className="size-3.5" />
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className={cn(
-                    'flex size-6 shrink-0 items-center justify-center rounded-md border border-transparent text-ink-dim opacity-0 transition-[opacity,color,border-color] hover:border-danger/40 hover:text-danger focus-visible:opacity-100 group-hover:opacity-100',
-                    note.id === ativa && 'opacity-100',
-                    focusRing,
-                  )}
-                  aria-label={`apagar ${note.title || 'sem título'}`}
-                  onClick={() => void apagar(note)}
-                >
-                  <Trash width={14} height={14} />
-                </button>
-              </li>
-            ))}
-          </ul>
+      {!vazio && (
+        <div
+          className={cn(
+            // `h-full` é o que dá altura de verdade ao editor: o corpo do
+            // painel é um container que rola, e num container assim `flex-1`
+            // não limita nada — a nota longa empurrava a barra de formatação
+            // para fora do cartão em vez de rolar dentro dele.
+            'grid h-full min-h-0 gap-4 overflow-hidden',
+            barraAberta && !maximizada && 'md:grid-cols-[minmax(180px,28%)_1fr]',
+          )}
+        >
+          {/* Em tela cheia a lista é a do diálogo: duas iguais na mesma
+              página seriam dois alvos para a mesma ação. */}
+          {barraAberta && !maximizada && lateral}
 
-          <div className="flex min-h-0 flex-col gap-2">
+          <div className="flex min-h-0 flex-col gap-2 overflow-hidden">
             {barra(false)}
             {maximizada ? (
               <p className="type-caption flex min-h-40 flex-1 items-center justify-center rounded-md border border-dashed border-line-strong text-ink-dim">
@@ -562,7 +764,9 @@ export function NotesPanel() {
       )}
 
       {/* A nota em tela cheia é o mesmo editor, no diálogo da app: Esc e o
-          botão de restaurar voltam ao painel com o foco onde estava. */}
+          botão de restaurar voltam ao painel com o foco onde estava. A
+          navegação é a mesma da barra lateral, então trocar de nota aqui não
+          fecha nada. */}
       <Dialog open={maximizada && notaAtiva !== null} onOpenChange={alternarMaximizada}>
         <DialogContent
           className="flex h-[calc(100dvh-2rem)] w-full flex-col gap-3 sm:max-w-[min(72rem,calc(100%-2rem))]"
@@ -586,9 +790,19 @@ export function NotesPanel() {
               Nota em tela cheia. Esc volta ao painel.
             </DialogDescription>
           </DialogHeader>
-          {barra(true)}
-          {corpo(true)}
-          {situacao}
+          <div
+            className={cn(
+              'grid min-h-0 flex-1 gap-4 overflow-hidden',
+              barraAberta && 'md:grid-cols-[minmax(220px,20rem)_1fr]',
+            )}
+          >
+            {barraAberta && lateral}
+            <div className="flex min-h-0 flex-col gap-2 overflow-hidden">
+              {barra(true)}
+              {corpo(true)}
+              {situacao}
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
       {dialog}

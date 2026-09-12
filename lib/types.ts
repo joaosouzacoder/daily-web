@@ -174,6 +174,23 @@ export interface Note {
   body: string;
   position: number;
   updatedAt: string;
+  /** A pasta onde a nota está, ou null quando está solta ("Sem pasta"). */
+  folderId: string | null;
+}
+
+/** Uma pasta de notas. `parentId` null é uma pasta da raiz. */
+export interface NoteFolder {
+  id: string;
+  name: string;
+  parentId: string | null;
+  position: number;
+  updatedAt: string;
+}
+
+/** A mesma pasta já na hierarquia, como a barra lateral desenha. */
+export interface NoteFolderNode extends NoteFolder {
+  depth: number;
+  children: NoteFolderNode[];
 }
 
 export type NotificationSource = 'jira_mention' | 'pull_request' | 'email';

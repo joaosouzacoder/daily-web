@@ -42,6 +42,12 @@ class FakeDrive {
     return full;
   }
 
+  mirrors(): FakeFile[] {
+    return [...this.files.values()].filter(
+      (f) => f.appProperties.dailyWeb === 'noteFolder' && !f.trashed,
+    );
+  }
+
   notes(): FakeFile[] {
     return [...this.files.values()].filter((f) => f.appProperties.dailyWeb === 'note');
   }
@@ -83,6 +89,10 @@ class FakeDrive {
     }
     if (method === 'PATCH') {
       if (!file) return new Response('{}', { status: 404 });
+      const remove = url.searchParams.get('removeParents');
+      if (remove) file.parents = file.parents.filter((p) => !remove.split(',').includes(p));
+      const add = url.searchParams.get('addParents');
+      if (add) file.parents = [...new Set([...file.parents, ...add.split(',')])];
       if (url.pathname.startsWith('/upload/')) {
         const { meta, content } = parseMultipart(init);
         Object.assign(file, meta, { content });
@@ -104,6 +114,7 @@ class FakeDrive {
         name: f.name,
         modifiedTime: f.modifiedTime,
         size: String(Buffer.byteLength(f.content)),
+        parents: f.parents,
         appProperties: f.appProperties,
       }));
   }
@@ -364,6 +375,146 @@ describe('syncNotes', () => {
     fake.failNext.push({ method: 'GET', status: 401 });
 
     await expect(syncNotes(USER)).rejects.toThrow('conecte de novo');
+  });
+});
+
+describe('pastas espelhadas no Drive', () => {
+  it('a pasta vira uma pasta do Drive dentro da pasta da app', async () => {
+    const { createFolder } = await import('@/lib/noteFolders');
+    const { syncNotes } = await import('@/lib/notesSync');
+    await connectDrive();
+    const pasta = createFolder(USER, 'Trabalho');
+
+    await syncNotes(USER);
+
+    const raiz = [...fake.files.values()].find((f) => f.appProperties.dailyWeb === 'folder')!;
+    const [espelho] = fake.mirrors();
+    expect(espelho.name).toBe('Trabalho');
+    expect(espelho.appProperties.folderId).toBe(pasta.id);
+    expect(espelho.parents).toEqual([raiz.id]);
+  });
+
+  it('a subpasta entra dentro do espelho da pasta de cima', async () => {
+    const { createFolder } = await import('@/lib/noteFolders');
+    const { syncNotes } = await import('@/lib/notesSync');
+    await connectDrive();
+    const pai = createFolder(USER, 'Trabalho');
+    const filha = createFolder(USER, 'Clientes', pai.id);
+
+    await syncNotes(USER);
+
+    const porPasta = new Map(fake.mirrors().map((f) => [f.appProperties.folderId, f]));
+    expect(porPasta.get(filha.id)!.parents).toEqual([porPasta.get(pai.id)!.id]);
+  });
+
+  it('o arquivo da nota fica dentro do espelho da pasta dela', async () => {
+    const { createNote, moveNote } = await import('@/lib/notes');
+    const { createFolder } = await import('@/lib/noteFolders');
+    const { syncNotes } = await import('@/lib/notesSync');
+    await connectDrive();
+    const pasta = createFolder(USER, 'Trabalho');
+    const nota = createNote(USER, 'Ideias');
+    moveNote(USER, nota.id, pasta.id);
+
+    await syncNotes(USER);
+
+    const [espelho] = fake.mirrors();
+    expect(fake.live()[0].parents).toEqual([espelho.id]);
+  });
+
+  it('mover a nota de pasta move o arquivo, sem deixar cópia na antiga', async () => {
+    const { createNote, moveNote } = await import('@/lib/notes');
+    const { createFolder } = await import('@/lib/noteFolders');
+    const { syncNotes } = await import('@/lib/notesSync');
+    await connectDrive();
+    const origem = createFolder(USER, 'Origem');
+    const destino = createFolder(USER, 'Destino');
+    const nota = createNote(USER, 'Ideias');
+    moveNote(USER, nota.id, origem.id);
+    await syncNotes(USER);
+
+    moveNote(USER, nota.id, destino.id);
+    await syncNotes(USER);
+
+    const porPasta = new Map(fake.mirrors().map((f) => [f.appProperties.folderId, f]));
+    expect(fake.live()[0].parents).toEqual([porPasta.get(destino.id)!.id]);
+    expect(fake.live()).toHaveLength(1);
+  });
+
+  it('renomear a pasta renomeia o espelho, sem criar outro', async () => {
+    const { createFolder, renameFolder } = await import('@/lib/noteFolders');
+    const { syncNotes } = await import('@/lib/notesSync');
+    await connectDrive();
+    const pasta = createFolder(USER, 'Trabalho');
+    await syncNotes(USER);
+
+    renameFolder(USER, pasta.id, 'Projetos');
+    await syncNotes(USER);
+
+    expect(fake.mirrors().map((f) => f.name)).toEqual(['Projetos']);
+  });
+
+  it('apagar a pasta manda o espelho para a lixeira e a nota volta para a raiz', async () => {
+    const { createNote, moveNote } = await import('@/lib/notes');
+    const { createFolder, deleteFolder } = await import('@/lib/noteFolders');
+    const { syncNotes } = await import('@/lib/notesSync');
+    await connectDrive();
+    const pasta = createFolder(USER, 'Trabalho');
+    const nota = createNote(USER, 'Ideias');
+    moveNote(USER, nota.id, pasta.id);
+    await syncNotes(USER);
+
+    deleteFolder(USER, pasta.id);
+    await syncNotes(USER);
+
+    const raiz = [...fake.files.values()].find((f) => f.appProperties.dailyWeb === 'folder')!;
+    expect(fake.mirrors()).toEqual([]);
+    expect(fake.live()[0].parents).toEqual([raiz.id]);
+  });
+
+  it('rodar duas vezes seguidas não duplica pasta nem arquivo', async () => {
+    const { createNote, moveNote } = await import('@/lib/notes');
+    const { createFolder } = await import('@/lib/noteFolders');
+    const { syncNotes } = await import('@/lib/notesSync');
+    await connectDrive();
+    const pasta = createFolder(USER, 'Trabalho');
+    moveNote(USER, createNote(USER, 'Ideias').id, pasta.id);
+
+    await syncNotes(USER);
+    await syncNotes(USER);
+
+    expect(fake.mirrors()).toHaveLength(1);
+    expect(fake.live()).toHaveLength(1);
+  });
+
+  it('a restauração traz a árvore de volta, com cada nota na sua pasta', async () => {
+    const { createNote, moveNote, listNotes, deleteNote } = await import('@/lib/notes');
+    const { createFolder, listFolders, deleteFolder } = await import('@/lib/noteFolders');
+    const { syncNotes } = await import('@/lib/notesSync');
+    await connectDrive();
+    const pai = createFolder(USER, 'Trabalho');
+    const filha = createFolder(USER, 'Clientes', pai.id);
+    const nota = createNote(USER, 'Contrato');
+    moveNote(USER, nota.id, filha.id);
+    await syncNotes(USER);
+
+    // A máquina nova: o banco não tem nada, o Drive tem tudo.
+    const { getDb } = await import('@/lib/db');
+    getDb().prepare('DELETE FROM notes').run();
+    getDb().prepare('DELETE FROM note_folders').run();
+    getDb().prepare('DELETE FROM note_deletions').run();
+
+    const result = await syncNotes(USER);
+
+    expect(result.restored).toBe(1);
+    const pastas = listFolders(USER);
+    expect(pastas.map((f) => f.name).sort()).toEqual(['Clientes', 'Trabalho']);
+    const clientes = pastas.find((f) => f.name === 'Clientes')!;
+    const trabalho = pastas.find((f) => f.name === 'Trabalho')!;
+    expect(clientes.parentId).toBe(trabalho.id);
+    expect(listNotes(USER)[0].folderId).toBe(clientes.id);
+    expect(deleteNote(USER, listNotes(USER)[0].id)).toBe(true);
+    expect(deleteFolder(USER, trabalho.id)).toBe(true);
   });
 });
 

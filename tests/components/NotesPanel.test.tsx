@@ -1,7 +1,7 @@
 import { describe, expect, it, afterEach, beforeEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
 import { NotesPanel } from '@/components/NotesPanel';
-import type { Note } from '@/lib/types';
+import type { Note, NoteFolder } from '@/lib/types';
 
 function nota(over: Partial<Note>): Note {
   return {
@@ -10,13 +10,33 @@ function nota(over: Partial<Note>): Note {
     body: '',
     position: 0,
     updatedAt: '2026-08-27T12:00:00Z',
+    folderId: null,
     ...over,
   };
 }
 
+/** Abre o menu de ações da nota e clica no item. As ações que ficavam soltas
+ *  ao lado da aba agora vivem nesse menu. */
+async function acaoDaNota(titulo: string, item: RegExp) {
+  // O menu do Radix abre por ponteiro ou teclado; o jsdom não tem ponteiro.
+  fireEvent.keyDown(await screen.findByLabelText(`ações de ${titulo}`), { key: 'Enter' });
+  fireEvent.click(await screen.findByRole('menuitem', { name: item }));
+}
+
 let chamadas: { url: string; method: string; body: unknown }[];
 
-function responder(notas: Note[], sync?: object) {
+function pasta(over: Partial<NoteFolder>): NoteFolder {
+  return {
+    id: 'p1',
+    name: 'Trabalho',
+    parentId: null,
+    position: 0,
+    updatedAt: '2026-08-27T12:00:00Z',
+    ...over,
+  };
+}
+
+function responder(notas: Note[], sync?: object, pastas: NoteFolder[] = []) {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo, init?: RequestInit) => {
@@ -26,7 +46,17 @@ function responder(notas: Note[], sync?: object) {
       chamadas.push({ url, method, body });
 
       if (url === '/api/notes' && method === 'GET') {
-        return new Response(JSON.stringify({ notes: notas, sync }));
+        return new Response(JSON.stringify({ notes: notas, folders: pastas, sync }));
+      }
+      if (url === '/api/notes/folders' && method === 'POST') {
+        return new Response(
+          JSON.stringify({ folder: pasta({ id: 'nova', name: (body as { name: string }).name }) }),
+        );
+      }
+      if (url.startsWith('/api/notes/folders/')) {
+        if (method === 'DELETE') return new Response(JSON.stringify({ ok: true }));
+        const alvo = pastas.find((f) => url.endsWith(f.id)) ?? pastas[0];
+        return new Response(JSON.stringify({ folder: { ...alvo, ...(body as object) } }));
       }
       if (url === '/api/notes/sync') return new Response(JSON.stringify({ sync }));
       if (url === '/api/notes' && method === 'POST') {
@@ -152,7 +182,7 @@ describe('NotesPanel', () => {
     responder([nota({ id: '1', title: 'Ideias' }), nota({ id: '2', title: 'Compras' })]);
     render(<NotesPanel />);
 
-    fireEvent.click(await screen.findByLabelText('apagar Ideias'));
+    await acaoDaNota('Ideias', /Apagar nota/);
     fireEvent.click(await screen.findByRole('button', { name: 'Apagar' }));
 
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Ideias' })).toBeNull());
@@ -163,7 +193,7 @@ describe('NotesPanel', () => {
     responder([nota({ id: '1', title: 'Ideias' })]);
     render(<NotesPanel />);
 
-    fireEvent.click(await screen.findByLabelText('apagar Ideias'));
+    await acaoDaNota('Ideias', /Apagar nota/);
     fireEvent.click(await screen.findByRole('button', { name: 'Cancelar' }));
 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
@@ -174,7 +204,7 @@ describe('NotesPanel', () => {
     responder([nota({ id: '1', title: 'Ideias' }), nota({ id: '2', title: 'Compras' })]);
     render(<NotesPanel />);
 
-    fireEvent.click(await screen.findByLabelText('apagar Ideias'));
+    await acaoDaNota('Ideias', /Apagar nota/);
     fireEvent.keyDown(await screen.findByRole('dialog'), { key: 'Enter' });
 
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Ideias' })).toBeNull());
@@ -185,7 +215,7 @@ describe('NotesPanel', () => {
     responder([nota({ id: '1', title: 'Ideias' })]);
     render(<NotesPanel />);
 
-    fireEvent.click(await screen.findByLabelText('apagar Ideias'));
+    await acaoDaNota('Ideias', /Apagar nota/);
     const dialogo = await screen.findByRole('dialog');
     fireEvent.keyDown(dialogo, { key: 'Escape' });
 
@@ -346,7 +376,7 @@ describe('NotesPanel', () => {
       responder([nota({ id: '1', title: 'Ideias' })]);
       render(<NotesPanel />);
 
-      fireEvent.click(await screen.findByRole('button', { name: 'mudar o título de Ideias' }));
+      await acaoDaNota('Ideias', /Renomear/);
       const campo = screen.getByLabelText('renomear Ideias');
       expect(campo).toHaveFocus();
       fireEvent.change(campo, { target: { value: '  Planos  ' } });
@@ -380,7 +410,7 @@ describe('NotesPanel', () => {
       responder([nota({ id: '1', title: 'Ideias' })]);
       render(<NotesPanel />);
 
-      fireEvent.click(await screen.findByRole('button', { name: 'mudar o título de Ideias' }));
+      await acaoDaNota('Ideias', /Renomear/);
       const campo = screen.getByLabelText('renomear Ideias');
       fireEvent.change(campo, { target: { value: '   ' } });
       fireEvent.keyDown(campo, { key: 'Enter' });
@@ -395,7 +425,7 @@ describe('NotesPanel', () => {
       responder([nota({ id: '1', title: 'Ideias' })]);
       render(<NotesPanel />);
 
-      fireEvent.click(await screen.findByRole('button', { name: 'mudar o título de Ideias' }));
+      await acaoDaNota('Ideias', /Renomear/);
       fireEvent.keyDown(screen.getByLabelText('renomear Ideias'), { key: 'Escape' });
 
       fireEvent.doubleClick(screen.getByRole('button', { name: 'Ideias' }));
@@ -476,6 +506,183 @@ describe('NotesPanel', () => {
 
       const dialogo = await screen.findByRole('dialog');
       expect(within(dialogo).getByRole('region').querySelector('h1')).toHaveTextContent('Grande');
+    });
+  });
+  describe('pastas', () => {
+    it('mostra a árvore com as pastas e a nota dentro da pasta dela', async () => {
+      responder(
+        [nota({ id: '1', title: 'Contrato', folderId: 'p1' }), nota({ id: '2', title: 'Solta' })],
+        undefined,
+        [pasta({ id: 'p1', name: 'Trabalho' })],
+      );
+      render(<NotesPanel />);
+
+      expect(await screen.findByRole('button', { name: 'Trabalho' })).toBeInTheDocument();
+      // A nota solta aparece sob "Sem pasta", que já vem aberta.
+      expect(screen.getByRole('button', { name: 'Solta' })).toBeInTheDocument();
+      // A da pasta só depois de abrir a pasta.
+      expect(screen.queryByRole('button', { name: 'Contrato' })).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Expandir Trabalho' }));
+      expect(screen.getByRole('button', { name: 'Contrato' })).toBeInTheDocument();
+    });
+
+    it('cria uma pasta e já abre o nome para edição', async () => {
+      responder([nota({ id: '1', title: 'Ideias' })]);
+      render(<NotesPanel />);
+      await screen.findByLabelText('texto de Ideias');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Nova pasta' }));
+
+      await waitFor(() =>
+        expect(chamadas.find((c) => c.url === '/api/notes/folders')?.body).toEqual({
+          name: 'Nova pasta',
+          parentId: null,
+        }),
+      );
+      expect(await screen.findByLabelText('renomear pasta Nova pasta')).toBeInTheDocument();
+    });
+
+    it('move a nota pelo menu, gravando antes o que estava pendente', async () => {
+      responder([nota({ id: '1', title: 'Ideias' })], undefined, [pasta({ id: 'p1' })]);
+      render(<NotesPanel />);
+      const campo = await screen.findByLabelText('texto de Ideias');
+
+      fireEvent.change(campo, { target: { value: 'não pode sumir' } });
+      await acaoDaNota('Ideias', /Mover para Trabalho/);
+
+      await waitFor(() => {
+        const patches = chamadas.filter((c) => c.method === 'PATCH');
+        // O texto sobe antes do movimento: a resposta do move traz a nota
+        // inteira e apagaria o que ainda não tinha sido gravado.
+        expect(patches[0].body).toEqual({ body: 'não pode sumir' });
+        expect(patches[1].body).toEqual({ folderId: 'p1' });
+      });
+    });
+
+    it('apagar a pasta explica o efeito e leva as notas para Sem pasta', async () => {
+      responder([nota({ id: '1', title: 'Contrato', folderId: 'p1' })], undefined, [
+        pasta({ id: 'p1', name: 'Trabalho' }),
+      ]);
+      render(<NotesPanel />);
+
+      fireEvent.keyDown(await screen.findByLabelText('ações da pasta Trabalho'), { key: 'Enter' });
+      fireEvent.click(await screen.findByRole('menuitem', { name: /Apagar pasta/ }));
+
+      expect(await screen.findByText(/1 nota/)).toBeInTheDocument();
+      expect(screen.getByText(/todas vão para "Sem pasta"/)).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: /Apagar e mover para Sem pasta/ }));
+
+      await waitFor(() =>
+        expect(chamadas.some((c) => c.method === 'DELETE' && c.url.includes('/folders/p1'))).toBe(
+          true,
+        ),
+      );
+      // A nota continua na tela, agora solta.
+      expect(await screen.findByRole('button', { name: 'Contrato' })).toBeInTheDocument();
+    });
+  });
+
+  describe('arrastar e soltar', () => {
+    it('arrastar a nota para a pasta a move', async () => {
+      responder([nota({ id: '1', title: 'Ideias' })], undefined, [pasta({ id: 'p1' })]);
+      render(<NotesPanel />);
+      const linha = await screen.findByRole('button', { name: 'Ideias' });
+      const destino = screen.getByRole('button', { name: 'Trabalho' });
+
+      // Um DataTransfer de mentira: o jsdom não tem o do navegador, e é por
+      // ele que o tipo do arraste viaja.
+      const dados = new Map<string, string>();
+      const dataTransfer = {
+        types: [] as string[],
+        setData: (tipo: string, valor: string) => {
+          dados.set(tipo, valor);
+          dataTransfer.types = [...dados.keys()];
+        },
+        getData: (tipo: string) => dados.get(tipo) ?? '',
+        dropEffect: 'none',
+        effectAllowed: 'none',
+      };
+
+      fireEvent.dragStart(linha.parentElement!, { dataTransfer });
+      fireEvent.dragOver(destino.parentElement!, { dataTransfer });
+      fireEvent.drop(destino.parentElement!, { dataTransfer });
+
+      await waitFor(() =>
+        expect(chamadas.find((c) => c.method === 'PATCH')?.body).toEqual({ folderId: 'p1' }),
+      );
+    });
+
+    it('soltar a nota em "Sem pasta" tira ela da pasta', async () => {
+      responder([nota({ id: '1', title: 'Contrato', folderId: 'p1' })], undefined, [
+        pasta({ id: 'p1' }),
+      ]);
+      render(<NotesPanel />);
+      fireEvent.click(await screen.findByRole('button', { name: 'Expandir Trabalho' }));
+      const linha = screen.getByRole('button', { name: 'Contrato' });
+      const soltas = screen.getByRole('button', { name: 'Sem pasta' });
+
+      const dados = new Map<string, string>();
+      const dataTransfer = {
+        types: [] as string[],
+        setData: (tipo: string, valor: string) => {
+          dados.set(tipo, valor);
+          dataTransfer.types = [...dados.keys()];
+        },
+        getData: (tipo: string) => dados.get(tipo) ?? '',
+        dropEffect: 'none',
+        effectAllowed: 'none',
+      };
+
+      fireEvent.dragStart(linha.parentElement!, { dataTransfer });
+      fireEvent.drop(soltas.parentElement!, { dataTransfer });
+
+      await waitFor(() =>
+        expect(chamadas.find((c) => c.method === 'PATCH')?.body).toEqual({ folderId: null }),
+      );
+    });
+  });
+
+  describe('busca', () => {
+    it('acha pelo conteúdo sem acento, mostra a pasta e abre a nota', async () => {
+      responder(
+        [
+          nota({ id: '1', title: 'Contrato', body: 'combinamos a MIGRAÇÃO', folderId: 'p1' }),
+          nota({ id: '2', title: 'Outra', body: 'nada a ver' }),
+        ],
+        undefined,
+        [pasta({ id: 'p1', name: 'Trabalho' })],
+      );
+      render(<NotesPanel />);
+      await screen.findByRole('button', { name: 'Outra' });
+
+      fireEvent.change(screen.getByLabelText('Buscar notas'), { target: { value: 'migracao' } });
+      // Antes da pausa, a lista ainda é a árvore.
+      expect(screen.queryByLabelText('resultados da busca')).not.toBeInTheDocument();
+      await vi.advanceTimersByTimeAsync(300);
+
+      const lista = await screen.findByLabelText('resultados da busca');
+      expect(within(lista).getAllByRole('button')).toHaveLength(1);
+      expect(within(lista).getByText(/Trabalho/)).toBeInTheDocument();
+      expect(within(lista).getByText(/MIGRAÇÃO/)).toBeInTheDocument();
+
+      fireEvent.click(within(lista).getByRole('button'));
+      await waitFor(() => expect(screen.getByLabelText('texto de Contrato')).toBeInTheDocument());
+    });
+
+    it('limpar a busca traz a navegação de volta', async () => {
+      responder([nota({ id: '1', title: 'Ideias' })]);
+      render(<NotesPanel />);
+      await screen.findByRole('button', { name: 'Ideias' });
+
+      fireEvent.change(screen.getByLabelText('Buscar notas'), { target: { value: 'zzz' } });
+      await vi.advanceTimersByTimeAsync(300);
+      expect(await screen.findByText(/Nenhuma nota encontrada/)).toBeInTheDocument();
+
+      fireEvent.change(screen.getByLabelText('Buscar notas'), { target: { value: '' } });
+      await vi.advanceTimersByTimeAsync(300);
+      expect(await screen.findByRole('button', { name: 'Ideias' })).toBeInTheDocument();
     });
   });
 });

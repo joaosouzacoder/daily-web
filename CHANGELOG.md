@@ -47,6 +47,47 @@ Only `main` is maintained; there are no release branches.
   button explains in a tooltip that it marks that folder in that account —
   including what was never loaded here — which is not the same as marking the
   selected conversations.
+- Notes live in folders and subfolders. The panel shows a tree with "Todas as
+  notas" and "Sem pasta" above the hierarchy, folders expand and collapse, and
+  a note moves between them by the row menu or by being dragged onto a folder;
+  a folder moves the same way. Notes that already existed start with no folder.
+  Deleting a folder says beforehand how many subfolders and notes it holds and
+  never deletes a note: everything inside goes to "Sem pasta" while the
+  subfolders go with it. The tree is bounded — at most 100 folders per person
+  and five levels deep, and a move that would put a folder inside itself or
+  push the branch past that depth is refused.
+- The folder tree is mirrored in the Google Drive copy: inside the app's
+  folder, each note folder is a Drive folder tagged with its `folderId`, and
+  each note's `.md` file sits in the mirror of its own folder — a note with no
+  folder stays at the root. Renaming or moving a folder renames or moves the
+  mirror instead of creating a second one, and deleting one sends the mirror to
+  the Drive trash after its notes have moved out. What ties the two sides is
+  the id, not the name or the path, so renaming a folder inside Drive breaks
+  nothing. The sync stays one-way — what comes back from Drive is still only
+  the restore, and it now rebuilds the tree along with the notes.
+- Searching notes: one field that matches the title or the body, ignoring case
+  and accents, debounced while typing. Each result shows the title, a snippet
+  around the match and the folder path, and opening one opens the note. The
+  search is global by default and can be restricted to the selected folder and
+  its subfolders; clearing it brings back the tree exactly as it was.
+- The maximized note keeps the same tree on the left and the note on the right.
+  The active note is highlighted, switching notes never closes the dialog, and
+  the selection and the expanded folders survive maximizing and restoring.
+  Switching notes flushes the pending save first, so nothing typed is lost. On
+  a narrow screen the list collapses to give the editor the whole width.
+
+### Fixed
+- A long note no longer pushes the formatting toolbar out of the card. The
+  editor now has a definite height inside the panel, so the text scrolls in its
+  own area and the toolbar, the preview toggle and the maximize button stay put
+  — in the dashboard card, in the maximized view and at narrow widths.
+
+### Changed
+- The inner cards on the settings screen — each saved connection and the form
+  that edits it — are translucent surfaces over the gradient instead of the
+  near-black `surface-1`, with a discreet border and hover and focus states.
+  All modules render through the same markup, so E-mail, Agenda, Jira and the
+  rest are identical to each other.
 
 ### Added
 - A whole folder can be marked as read from the folder tree, including the

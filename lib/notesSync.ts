@@ -10,6 +10,16 @@ import {
   pendingNotes,
   restoreNotes,
 } from '@/lib/notes';
+import {
+  clearFolderDeletion,
+  countPendingFolderSync,
+  listFolders,
+  markFolderSynced,
+  pendingFolderDeletions,
+  pendingFolders,
+  restoreFolders,
+} from '@/lib/noteFolders';
+import { MAX_FOLDER_DEPTH } from '@/lib/notesTree';
 import { listConnections, type Connection } from '@/lib/vault/connections';
 
 // O banco local continua sendo onde a nota é gravada — digitar não pode
@@ -35,6 +45,18 @@ export interface SyncResult {
   trashed: number;
   restored: number;
 }
+
+// Como uma pasta daqui vira uma pasta lá
+// ----------------------------------------------------------------------------
+// A hierarquia é espelhada: dentro da pasta raiz da app, cada pasta de notas
+// é uma pasta do Drive marcada com `dailyWeb=noteFolder` e o `folderId`
+// daqui, e o arquivo .md de cada nota fica dentro do espelho da pasta dela —
+// nota sem pasta fica na raiz. Quem abrir o Drive vê a mesma árvore que vê
+// aqui, e renomear ou mover lá não quebra nada, porque o que liga os dois
+// lados é o `folderId`, não o nome nem o caminho.
+//
+// A direção continua sendo uma só: daqui para lá. O que volta do Drive é a
+// restauração — e só quando não há nota nenhuma neste banco.
 
 export function driveConnection(userId: string): Connection | null {
   return (
@@ -64,6 +86,9 @@ export async function syncNotes(userId: string): Promise<SyncResult> {
   const token = await accessToken(googleClient(), conn.values.refreshToken);
   const remote = await drive.listNoteFiles(token);
   const byNote = new Map(remote.map((file) => [file.noteId, file]));
+  const mirrors = new Map(
+    (await drive.listFolderMirrors(token)).map((mirror) => [mirror.folderId, mirror]),
+  );
 
   // As exclusões vêm antes da restauração: quem apagou a última nota não quer
   // vê-la voltar do Drive.
@@ -81,39 +106,135 @@ export async function syncNotes(userId: string): Promise<SyncResult> {
     clearDeletion(userId, noteId);
   }
 
+  // A pasta apagada aqui vai para a lixeira lá. As notas que estavam dentro
+  // já foram para "Sem pasta" e sobem de novo logo abaixo, na raiz — então a
+  // pasta some sem levar texto junto.
+  for (const folderId of pendingFolderDeletions(userId)) {
+    const mirror = mirrors.get(folderId);
+    if (mirror) {
+      try {
+        await drive.trashFile(token, mirror.fileId);
+        result.trashed += 1;
+      } catch (err) {
+        if (!drive.isGone(err)) throw err;
+      }
+      mirrors.delete(folderId);
+    }
+    clearFolderDeletion(userId, folderId);
+  }
+
+  let rootId: string | null = null;
+  const root = async (): Promise<string> => (rootId ??= await drive.ensureFolder(token));
+
   if (countNotes(userId) === 0 && byNote.size > 0) {
+    // A árvore volta junto com as notas: sem ela, tudo voltaria solto.
+    const mirrorByFile = new Map([...mirrors.values()].map((m) => [m.fileId, m]));
+    restoreFolders(
+      userId,
+      [...mirrors.values()].map((mirror) => ({
+        id: mirror.folderId,
+        name: mirror.name,
+        parentId: mirror.parents.map((p) => mirrorByFile.get(p)?.folderId ?? null).find(Boolean) ?? null,
+        position: 0,
+        updatedAt: new Date().toISOString(),
+      })),
+    );
+    const known = new Set(listFolders(userId).map((f) => f.id));
+
     // Um arquivo maior que o teto da nota nem é baixado. Em UTF-8 um caractere
     // tem até quatro bytes, então este é o maior tamanho que ainda pode caber.
     const candidates = [...byNote.values()].filter((file) => file.size <= MAX_BODY_LENGTH * 4);
     const restored = [];
     for (const file of candidates) {
+      const folderId =
+        file.parents.map((p) => mirrorByFile.get(p)?.folderId).find((id) => id && known.has(id)) ??
+        null;
       restored.push({
         id: file.noteId,
         title: drive.titleFrom(file),
         body: await drive.downloadFile(token, file.fileId),
         position: file.position,
         updatedAt: file.modifiedTime,
+        folderId,
       });
     }
     result.restored = restoreNotes(userId, restored);
   }
 
+  const folders = listFolders(userId);
+  const byId = new Map(folders.map((f) => [f.id, f]));
+
+  /**
+   * O id da pasta do Drive onde a nota (ou a subpasta) deve ficar: o espelho
+   * da pasta, criado agora se ainda não existe, e a raiz para quem não tem
+   * pasta. A subida dos pais é limitada pela profundidade máxima da árvore,
+   * então nem um ciclo gravado no banco faz isto girar sem fim.
+   */
+  const mirrorOf = async (folderId: string | null): Promise<string> => {
+    if (!folderId) return root();
+    const chain: string[] = [];
+    let current: string | null = folderId;
+    for (let step = 0; step <= MAX_FOLDER_DEPTH && current; step += 1) {
+      if (mirrors.has(current)) break;
+      chain.unshift(current);
+      current = byId.get(current)?.parentId ?? null;
+    }
+    for (const id of chain) {
+      const folder = byId.get(id);
+      if (!folder) continue;
+      const parentId = folder.parentId
+        ? (mirrors.get(folder.parentId)?.fileId ?? (await root()))
+        : await root();
+      const fileId = await drive.createFolderMirror(token, parentId, {
+        folderId: id,
+        name: folder.name,
+      });
+      mirrors.set(id, { fileId, folderId: id, name: folder.name, parents: [parentId] });
+    }
+    return mirrors.get(folderId)?.fileId ?? (await root());
+  };
+
+  // As pastas sobem antes das notas: o arquivo da nota precisa de uma pasta
+  // que já exista lá.
+  for (const folder of pendingFolders(userId)) {
+    const parentId = await mirrorOf(folder.parentId);
+    const mirror = mirrors.get(folder.id);
+    if (mirror) {
+      try {
+        await drive.updateFolderMirror(token, mirror.fileId, {
+          name: folder.name,
+          parentId,
+          currentParents: mirror.parents,
+        });
+        mirrors.set(folder.id, { ...mirror, name: folder.name, parents: [parentId] });
+      } catch (err) {
+        if (!drive.isGone(err)) throw err;
+        mirrors.delete(folder.id);
+        await mirrorOf(folder.id);
+      }
+    } else {
+      await mirrorOf(folder.id);
+    }
+    markFolderSynced(userId, folder.id, folder.revision);
+  }
+
   const pending = pendingNotes(userId);
-  let folderId: string | null = null;
   for (const note of pending) {
     const content = { noteId: note.id, title: note.title, body: note.body, position: note.position };
+    const parentId = await mirrorOf(note.folderId);
     const file = byNote.get(note.id);
     if (file) {
       try {
-        await drive.updateNoteFile(token, file.fileId, content);
+        await drive.updateNoteFile(token, file.fileId, content, {
+          parentId,
+          currentParents: file.parents,
+        });
       } catch (err) {
         if (!drive.isGone(err)) throw err;
-        folderId ??= await drive.ensureFolder(token);
-        await drive.createNoteFile(token, folderId, content);
+        await drive.createNoteFile(token, parentId, content);
       }
     } else {
-      folderId ??= await drive.ensureFolder(token);
-      await drive.createNoteFile(token, folderId, content);
+      await drive.createNoteFile(token, parentId, content);
     }
     markNoteSynced(userId, note.id, note.revision);
     result.uploaded += 1;
@@ -206,7 +327,7 @@ export function notesSyncStatus(userId: string): NotesSyncStatus {
   return {
     connected: conn !== null,
     account: conn?.values.account ?? '',
-    pending: conn ? countPendingSync(userId) : 0,
+    pending: conn ? countPendingSync(userId) + countPendingFolderSync(userId) : 0,
     lastError: state?.lastError ?? null,
     lastSyncedAt: state?.lastSyncedAt ?? null,
   };

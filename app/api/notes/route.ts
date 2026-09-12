@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUser } from '@/lib/api/context';
 import { createNote, listNotes, NoteLimitError, reorderNotes } from '@/lib/notes';
+import { FolderMoveError, listFolders } from '@/lib/noteFolders';
 import { notesSyncStatus, scheduleNotesSync } from '@/lib/notesSync';
 
 export async function GET() {
@@ -11,7 +12,7 @@ export async function GET() {
   // Abrir as notas também é a chance de reenviar o que ficou pendente depois
   // de uma falha do Google ou de um reinício do servidor.
   if (sync.pending > 0) scheduleNotesSync(userId);
-  return NextResponse.json({ notes: listNotes(userId), sync });
+  return NextResponse.json({ notes: listNotes(userId), folders: listFolders(userId), sync });
 }
 
 export async function POST(request: NextRequest) {
@@ -20,13 +21,14 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => null);
   const title = typeof body?.title === 'string' ? body.title : '';
+  const folderId = typeof body?.folderId === 'string' ? body.folderId : null;
 
   try {
-    const note = createNote(auth.value.id, title);
+    const note = createNote(auth.value.id, title, folderId);
     scheduleNotesSync(auth.value.id);
     return NextResponse.json({ note });
   } catch (err) {
-    if (err instanceof NoteLimitError) {
+    if (err instanceof NoteLimitError || err instanceof FolderMoveError) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }
     throw err;

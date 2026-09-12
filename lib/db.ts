@@ -360,6 +360,39 @@ function renameCopyActionToTag(instance: Database.Database): void {
   instance.exec("UPDATE email_pending_actions SET action = 'tag' WHERE action = 'move'");
 }
 
+// Pastas das notas. A nota guarda o id da pasta, ou NULL quando está solta —
+// as notas que já existiam começam sem pasta, que é "Sem pasta" na tela.
+// `revision`/`synced_revision` seguem o mesmo contrato das notas: a pasta está
+// pendente enquanto as duas diferem, e apagar uma que já subiu deixa registro
+// até a pasta espelhada ir para a lixeira do Drive.
+function addNoteFolders(instance: Database.Database): void {
+  instance.exec(`
+    CREATE TABLE IF NOT EXISTS note_folders (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      parent_id TEXT,
+      name TEXT NOT NULL,
+      position INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      revision INTEGER NOT NULL DEFAULT 1,
+      synced_revision INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_note_folders_user
+      ON note_folders (user_id, parent_id, position);
+
+    CREATE TABLE IF NOT EXISTS note_folder_deletions (
+      user_id TEXT NOT NULL,
+      folder_id TEXT NOT NULL,
+      deleted_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, folder_id)
+    );
+
+    ALTER TABLE notes ADD COLUMN folder_id TEXT;
+    CREATE INDEX IF NOT EXISTS idx_notes_folder ON notes (user_id, folder_id, position);
+  `);
+}
+
 const MIGRATIONS: ((instance: Database.Database) => void)[] = [
   addUserScope,
   addConnections,
@@ -373,6 +406,7 @@ const MIGRATIONS: ((instance: Database.Database) => void)[] = [
   addEmailMailboxes,
   addEmailMessages,
   renameCopyActionToTag,
+  addNoteFolders,
 ];
 
 function migrate(instance: Database.Database): void {
