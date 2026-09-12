@@ -85,7 +85,8 @@ function envelope(over: Record<string, unknown> = {}) {
   return {
     id: '10', account: 'mail-1', accountLabel: 'Trabalho', from: 'Milton',
     subject: 'Revisão', unread: true, date: '2026-08-30T10:00:00Z',
-    messageId: '<a@x>', references: [], labels: [], mailbox: 'inbox' as const, ...over,
+    messageId: '<a@x>', references: [], labels: [], mailbox: 'inbox' as const,
+    folder: 'INBOX', ...over,
   };
 }
 

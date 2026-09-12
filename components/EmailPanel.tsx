@@ -1,6 +1,17 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEmailView } from '@/lib/hooks/useEmailView';
+import { FolderTree } from '@/components/email/FolderTree';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Maximize2, Minimize2 } from 'lucide-react';
+import type { MailboxNode } from '@/lib/types';
 import { FolderInput, Mail, MailOpen, Trash2 } from 'lucide-react';
 import { IconAction } from '@/components/data/IconAction';
 import { Label, Trash } from 'iconoir-react';
@@ -49,6 +60,10 @@ interface BatchTargetResult {
 type Sort = 'recent' | 'oldest';
 // Era 'work' | 'personal'. Agora é o id de uma caixa cadastrada — quantas a
 // pessoa quiser, com o nome que ela deu.
+/** O caminho da entrada no servidor. Na URL ela é o caminho vazio: é o
+ *  padrão, e o padrão não vai para o link. */
+const INBOX_PATH = 'INBOX';
+
 type AccountFilter = 'all' | string;
 
 function key(m: EmailEnvelope): string {
@@ -82,12 +97,19 @@ async function postJson(url: string, body: unknown) {
 async function postBatch(
   targets: { account: string; id: string }[],
   action: 'read' | 'unread' | 'delete' | 'move',
-  folder?: string,
+  folder: string | undefined,
+  // A pasta em que as mensagens estão. O uid só identifica dentro de uma.
+  folderPath: string,
 ): Promise<BatchTargetResult[]> {
   const res = await fetch('/api/email/batch', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(folder !== undefined ? { targets, action, folder } : { targets, action }),
+    body: JSON.stringify({
+      targets,
+      action,
+      folderPath,
+      ...(folder !== undefined ? { folder } : {}),
+    }),
   });
   const data = await res.json();
   return (data.results ?? []) as BatchTargetResult[];
@@ -103,7 +125,15 @@ export function EmailPanel({
 }: Props) {
   const { confirm, dialog } = useConfirm();
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [openKey, setOpenKey] = useState<string | null>(null);
+
+  // Pasta, busca, filtro, ordenação, mensagem aberta e tela cheia vivem na
+  // URL: recarregar, voltar e mandar o link para si mesmo caem no mesmo lugar.
+  const [view, setView] = useEmailView();
+  const openKey = view.open || null;
+  const setOpenKey = (next: string | null | ((prev: string | null) => string | null)) => {
+    const valor = typeof next === 'function' ? next(view.open || null) : next;
+    setView({ open: valor ?? '' });
+  };
   // Conversas abertas na lista. Uma de uma mensagem não expande: abre direto.
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [tagMenuKey, setTagMenuKey] = useState<string | null>(null);
@@ -112,13 +142,32 @@ export function EmailPanel({
   const [folders, setFolders] = useState<string[]>([]);
   const [targetFolder, setTargetFolder] = useState('');
 
-  const [query, setQuery] = useState('');
-  const [onlyUnread, setOnlyUnread] = useState(false);
-  const [account, setAccount] = useState<AccountFilter>('all');
-  const [sort, setSort] = useState<Sort>('recent');
+  const query = view.query;
+  const setQuery = (valor: string) => setView({ query: valor });
+  const onlyUnread = view.onlyUnread;
+  const setOnlyUnread = (next: boolean | ((prev: boolean) => boolean)) =>
+    setView({ onlyUnread: typeof next === 'function' ? next(view.onlyUnread) : next });
+  // A ausência de conta na URL é "todas": o padrão não vai para o link.
+  const account: AccountFilter = view.account === '' ? 'all' : view.account;
+  const setAccount = (valor: AccountFilter) =>
+    setView({ account: valor === 'all' ? '' : valor });
+  const sort = view.sort;
+  const setSort = (valor: Sort) => setView({ sort: valor });
   // Listar pastas é uma ida ao IMAP: faz uma vez por conta e reaproveita,
   // para o seletor de etiqueta já abrir pronto.
   const [tagFolders, setTagFolders] = useState<Record<string, string[]>>({});
+
+  // A árvore de pastas e a listagem de uma pasta que não é a entrada. A
+  // entrada vem pronta do ciclo do painel e não custa uma ida ao servidor.
+  const [mailboxNodes, setMailboxNodes] = useState<MailboxNode[]>([]);
+  const [foldersLoading, setFoldersLoading] = useState(false);
+  const [foldersError, setFoldersError] = useState<string | null>(null);
+  const [remote, setRemote] = useState<EmailEnvelope[] | null>(null);
+  const [remoteLoading, setRemoteLoading] = useState(false);
+  const [remoteError, setRemoteError] = useState<string | null>(null);
+
+  // A pasta que a tela está mostrando, no caminho que o servidor usa.
+  const pastaDasMensagens = view.folder || INBOX_PATH;
 
   const loadTagFolders = async (acc: Account) => {
     if (tagFolders[acc]) return;
@@ -145,7 +194,7 @@ export function EmailPanel({
     onSeenChanged(alvos, true);
     setTagMenuKey(null);
 
-    const failed = (await postBatch(alvos, 'move', tag)).filter((r) => !r.ok);
+    const failed = (await postBatch(alvos, 'move', tag, pastaDasMensagens)).filter((r) => !r.ok);
     if (failed.length > 0) {
       setBatchError(failed[0].error ?? 'Falha ao aplicar etiqueta');
       onChanged();
@@ -185,7 +234,9 @@ export function EmailPanel({
     setOpenKey((prev) => (prev !== null && chaves.has(prev) ? null : prev));
     onRemoved(alvos);
 
-    const failed = (await postBatch(alvos, 'delete')).filter((r) => !r.ok);
+    const failed = (await postBatch(alvos, 'delete', undefined, pastaDasMensagens)).filter(
+      (r) => !r.ok,
+    );
     if (failed.length > 0) {
       setBatchError(failed[0].error ?? 'Falha ao excluir');
       // Recarrega para o e-mail voltar: ele não foi apagado de verdade.
@@ -193,7 +244,81 @@ export function EmailPanel({
     }
   };
 
-  const all = useMemo(() => email.data ?? [], [email.data]);
+  // A conta cuja árvore é mostrada: a escolhida no filtro, ou a primeira.
+  const treeAccount = view.account || mailboxes[0]?.id || '';
+  const pastaAtual = view.folder;
+
+  const tituloDaPasta = pastaAtual
+    ? (mailboxNodes.find((m) => m.path === pastaAtual)?.name ?? pastaAtual)
+    : 'Inbox';
+
+  const abrirPasta = (path: string) => {
+    // A entrada tem o caminho vazio na URL: ela é o padrão e o link fica limpo.
+    setView({ folder: path === INBOX_PATH ? '' : path, open: '' });
+  };
+
+  useEffect(() => {
+    if (!view.maximized || !treeAccount) return;
+    let cancelado = false;
+    setFoldersLoading(true);
+    setFoldersError(null);
+    void fetch(`/api/email/mailboxes?account=${encodeURIComponent(treeAccount)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelado) return;
+        if (data.error) setFoldersError(String(data.error));
+        else setMailboxNodes((data.mailboxes ?? []) as MailboxNode[]);
+      })
+      .catch(() => {
+        if (!cancelado) setFoldersError('Não deu para listar as pastas');
+      })
+      .finally(() => {
+        if (!cancelado) setFoldersLoading(false);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [view.maximized, treeAccount]);
+
+  useEffect(() => {
+    if (!pastaAtual || !treeAccount) {
+      setRemote(null);
+      setRemoteError(null);
+      return;
+    }
+    let cancelado = false;
+    setRemoteLoading(true);
+    setRemoteError(null);
+    void fetch(
+      `/api/email/messages?account=${encodeURIComponent(treeAccount)}&folder=${encodeURIComponent(pastaAtual)}`,
+    )
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelado) return;
+        if (data.error) {
+          setRemoteError(String(data.error));
+          setRemote([]);
+        } else {
+          setRemote((data.messages ?? []) as EmailEnvelope[]);
+        }
+      })
+      .catch(() => {
+        if (cancelado) return;
+        setRemoteError('Não deu para abrir a pasta');
+        setRemote([]);
+      })
+      .finally(() => {
+        if (!cancelado) setRemoteLoading(false);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [pastaAtual, treeAccount]);
+
+  const all = useMemo(
+    () => (pastaAtual ? (remote ?? []) : (email.data ?? [])),
+    [pastaAtual, remote, email.data],
+  );
 
   const visible = useMemo(() => {
     const filtered = all.filter(
@@ -333,7 +458,7 @@ export function EmailPanel({
     else if (action === 'delete') onRemoved(targets);
     else onSeenChanged(targets, true);
 
-    const results = await postBatch(targets, action, folder);
+    const results = await postBatch(targets, action, folder, pastaDasMensagens);
     const failed = results.filter((r) => !r.ok);
     if (failed.length > 0) {
       setBatchError(
@@ -352,7 +477,7 @@ export function EmailPanel({
 
   const openMessageData = all.find((m) => key(m) === openKey) ?? null;
 
-  const actions =
+  const acoesEmLote =
     selected.size > 0 ? (
       <>
         <span className={cn('text-sm text-ink-dim', tabular)}>{selected.size} selecionados</span>
@@ -399,304 +524,354 @@ export function EmailPanel({
       </>
     ) : null;
 
+  const actions = (
+    <>
+      {acoesEmLote}
+      <IconAction
+        variant="ghost"
+        label={view.maximized ? 'Restaurar' : 'Abrir em tela cheia'}
+        onClick={() => setView({ maximized: !view.maximized })}
+        icon={view.maximized ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+      />
+    </>
+  );
+
+  // O mesmo conteúdo serve ao painel e à tela cheia: ali ele ganha a árvore
+  // de pastas ao lado, e nada mais muda.
+  const conteudo = (
+    <>
+        <FilterBar label="Filtrar e-mails">
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            label="buscar e-mails"
+            placeholder="assunto ou remetente"
+          />
+          <Chip active={onlyUnread} onClick={() => setOnlyUnread((v) => !v)}>
+            Não lidos
+          </Chip>
+          {/* Uma caixa só não precisa de filtro por caixa. */}
+          {mailboxes.length > 1 &&
+            mailboxes.map((box) => (
+              <Chip
+                key={box.id}
+                active={account === box.id}
+                onClick={() => setAccount(account === box.id ? 'all' : box.id)}
+              >
+                {box.label}
+              </Chip>
+            ))}
+          <select
+            className={cn(selectClass, focusRing)}
+            aria-label="ordenar e-mails"
+            value={sort}
+            onChange={(e) => setSort(e.target.value as Sort)}
+          >
+            <option value="recent">Mais recentes</option>
+            <option value="oldest">Mais antigos</option>
+          </select>
+        </FilterBar>
+
+        <ActiveFilters filters={activeFilters} onRemove={clearFilter} onClearAll={clearAll} />
+
+        {!pastaAtual && email.error && <PanelError>{email.error}</PanelError>}
+        {remoteError && <PanelError>{remoteError}</PanelError>}
+        {batchError && <PanelError>{batchError}</PanelError>}
+
+        {(loading || remoteLoading) && all.length === 0 && <SkeletonRows count={6} />}
+
+        {!loading && all.length === 0 && !email.error && (
+          <EmptyState title="Caixa de entrada limpa." />
+        )}
+
+        {all.length > 0 && visible.length === 0 && (
+          <EmptyState title="Nenhum e-mail com esses filtros." />
+        )}
+
+        {threads.length > 0 && (
+          <ul className="text-sm">
+            {threads.map((thread) => {
+              // Uma conversa de uma mensagem abre direto no corpo: expandir para
+              // clicar de novo seria um passo a mais para o caso mais comum.
+              const sozinha = thread.messages.length === 1 ? thread.messages[0] : null;
+              const enviadas = thread.messages.length - recebidas(thread).length;
+              const isOpen = sozinha ? key(sozinha) === openKey : expanded.has(thread.id);
+              const marcada = threadKeys(thread).every((k) => selected.has(k));
+              const titulo = thread.subject || '(sem assunto)';
+              const tags = threadTags(thread, appliedTags[thread.id] ?? []);
+              // A ação que esgotou as tentativas não some em silêncio: a mensagem
+              // continua na caixa do servidor e o erro é o que explica por quê.
+              const acaoComErro = thread.messages.find((m) => m.actionError)?.actionError ?? null;
+              return (
+                <li key={thread.id} className={cn('rounded-lg', isOpen && 'bg-brand-tint')}>
+                  <div
+                    className={cn(
+                      // `row` and `row-unread` stay as behavioural markers: the suite
+                      // reads the unread state of a conversation off this element.
+                      'row flex items-center gap-3 border-b border-line-soft px-2 py-3 transition-colors duration-100 ease-brand even:bg-muted/25 motion-reduce:transition-none',
+                      isOpen ? 'bg-brand-tint' : 'hover:bg-brand-tint',
+                      thread.unreadCount > 0 && 'row-unread',
+                    )}
+                  >
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'size-1.5 shrink-0 rounded-full',
+                        thread.unreadCount > 0 ? 'bg-brand' : 'bg-transparent',
+                      )}
+                    />
+                    <input
+                      type="checkbox"
+                      className={cn('size-4 shrink-0 accent-brand', focusRing)}
+                      checked={marcada}
+                      onChange={() => {}}
+                      // O checkbox nativo não conta se o Shift estava
+                      // pressionado no `change`; o clique, sim.
+                      onClick={(e) => toggleSelect(thread, e.shiftKey)}
+                      aria-label={`selecionar ${titulo}`}
+                    />
+                    <button
+                      type="button"
+                      className={cn(
+                        'flex min-w-0 flex-1 cursor-pointer flex-col items-start gap-0.5 rounded-sm text-left',
+                        focusRing,
+                      )}
+                      aria-expanded={isOpen}
+                      onClick={() => {
+                        if (sozinha) {
+                          setOpenKey(isOpen ? null : key(sozinha));
+                          if (!isOpen) void loadTagFolders(sozinha.account);
+                          return;
+                        }
+                        setExpanded((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(thread.id)) next.delete(thread.id);
+                          else next.add(thread.id);
+                          return next;
+                        });
+                        void loadTagFolders(thread.messages[0].account);
+                      }}
+                    >
+                      <span
+                        className={cn(
+                          'w-full truncate',
+                          thread.unreadCount > 0 ? 'font-medium text-ink' : 'text-ink-mid',
+                        )}
+                      >
+                        {titulo}
+                      </span>
+                      <span className="w-full truncate type-caption text-ink-dim">
+                        {thread.participants.join(', ') || EM_DASH}
+                      </span>
+                      {acaoComErro && (
+                        <span role="alert" className="w-full truncate type-caption text-danger">
+                          {acaoComErro}
+                        </span>
+                      )}
+                    </button>
+                    {thread.messages.length > 1 && (
+                      <span
+                        className={cn(
+                          'shrink-0 rounded-full border px-1.5 type-caption leading-relaxed',
+                          tabular,
+                          thread.unreadCount > 0
+                            ? 'border-brand-edge bg-brand-tint text-brand'
+                            : 'border-line-strong bg-neutral-tint text-ink-dim',
+                        )}
+                        aria-label={
+                          enviadas > 0
+                            ? `${thread.messages.length} mensagens, ${enviadas} enviadas por você`
+                            : `${thread.messages.length} mensagens`
+                        }
+                      >
+                        {thread.messages.length}
+                      </span>
+                    )}
+                    <span
+                      className={cn(
+                        'min-w-[3.5ch] shrink-0 text-right type-caption text-ink-dim',
+                        tabular,
+                      )}
+                    >
+                      {relativeTime(thread.lastDate) || EM_DASH}
+                    </span>
+                    {mailboxes.length > 1 && (
+                      <Badge variant="secondary" className="shrink-0">
+                        {thread.messages[0].accountLabel ?? EM_DASH}
+                      </Badge>
+                    )}
+                    <div className="flex shrink-0 items-center gap-0.5">
+                      <div className="relative flex">
+                        <button
+                          type="button"
+                          // `is-tagged` stays as a behavioural marker: the suite reads
+                          // whether a conversation already carries a label off it.
+                          className={cn(iconButtonClass, tags.length > 0 && 'is-tagged text-brand')}
+                          aria-label={`etiquetar ${titulo}`}
+                          aria-expanded={tagMenuKey === thread.id}
+                          onClick={() => {
+                            const next = tagMenuKey === thread.id ? null : thread.id;
+                            setTagMenuKey(next);
+                            if (next) void loadTagFolders(thread.messages[0].account);
+                          }}
+                        >
+                          <Label width={16} height={16} />
+                        </button>
+                        {tagMenuKey === thread.id && (
+                          <>
+                            <div className="fixed inset-0 z-40" onClick={() => setTagMenuKey(null)} />
+                            <div
+                              className="absolute top-full right-0 z-50 mt-2 flex max-h-80 min-w-45 flex-col overflow-y-auto rounded-xl border border-line-strong bg-surface-4 p-2 shadow-e4"
+                              role="menu"
+                              aria-label="etiquetas"
+                            >
+                              {(tagFolders[thread.messages[0].account] ?? []).length === 0 ? (
+                                <p className="px-3 py-2 text-sm text-ink-dim">
+                                  Carregando etiquetas…
+                                </p>
+                              ) : (
+                                (tagFolders[thread.messages[0].account] ?? []).map((f) => (
+                                  <button
+                                    key={f}
+                                    type="button"
+                                    role="menuitem"
+                                    className={cn(
+                                      'rounded-md px-3 py-2 text-left text-sm text-ink-mid transition-colors duration-100 ease-brand hover:bg-brand-tint hover:text-ink motion-reduce:transition-none',
+                                      focusRing,
+                                    )}
+                                    onClick={() => void applyTagToThread(thread, f)}
+                                  >
+                                    {f}
+                                  </button>
+                                ))
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className={cn(iconButtonClass, 'hover:border-danger/40 hover:text-danger')}
+                        aria-label={`excluir ${titulo}`}
+                        onClick={() => void removeThread(thread)}
+                      >
+                        <Trash width={16} height={16} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {sozinha && isOpen && (
+                    <EmailDetail
+                      email={sozinha}
+                      onClose={() => setOpenKey(null)}
+                      onChanged={onChanged}
+                      onSeenChanged={onSeenChanged}
+                      appliedTags={tags}
+                    />
+                  )}
+
+                  {/* A conversa aberta mostra as mensagens na ordem em que
+                      aconteceram; clicar numa delas abre o corpo. */}
+                  {!sozinha && isOpen && (
+                    <ul className="ml-9 border-l border-line-soft">
+                      {thread.messages.map((m) => {
+                        const aberta = key(m) === openKey;
+                        return (
+                          <li key={key(m)} className={cn(aberta && 'bg-brand-tint')}>
+                            <button
+                              type="button"
+                              // `thread-row` and `row-unread` stay as behavioural
+                              // markers: the suite finds the messages of a conversation
+                              // and their unread state through them.
+                              className={cn(
+                                'thread-row flex w-full cursor-pointer items-baseline gap-3 px-3 py-2 text-left transition-colors duration-100 ease-brand motion-reduce:transition-none',
+                                aberta ? 'bg-brand-tint text-ink' : 'hover:bg-brand-tint',
+                                m.unread && 'row-unread',
+                                focusRing,
+                              )}
+                              aria-expanded={aberta}
+                              onClick={() => setOpenKey(aberta ? null : key(m))}
+                            >
+                              <span
+                                className={cn(
+                                  'min-w-0 flex-1 truncate',
+                                  m.mailbox === 'sent'
+                                    ? 'text-ink-dim'
+                                    : m.unread
+                                      ? 'font-medium text-ink'
+                                      : 'text-ink-mid',
+                                )}
+                              >
+                                {m.from || EM_DASH}
+                              </span>
+                              {m.mailbox === 'sent' && (
+                                <Badge variant="secondary" className="shrink-0">
+                                  enviada
+                                </Badge>
+                              )}
+                              <span className={cn('shrink-0 type-caption text-ink-dim', tabular)}>
+                                {relativeTime(m.date) || EM_DASH}
+                              </span>
+                            </button>
+                            {aberta && (
+                              <EmailDetail
+                                email={m}
+                                onClose={() => setOpenKey(null)}
+                                onChanged={onChanged}
+                                onSeenChanged={onSeenChanged}
+                                appliedTags={tags}
+                              />
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+    </>
+  );
+
+  const arvore = (
+    <FolderTree
+      mailboxes={mailboxNodes}
+      selected={view.folder || INBOX_PATH}
+      onSelect={abrirPasta}
+      loading={foldersLoading}
+      error={foldersError}
+    />
+  );
+
   return (
     <Section
-      eyebrow="Inbox"
+      eyebrow={tituloDaPasta}
       count={activeFilters.length > 0 ? `${visible.length} de ${all.length}` : undefined}
       actions={actions}
     >
-      <FilterBar label="Filtrar e-mails">
-        <SearchInput
-          value={query}
-          onChange={setQuery}
-          label="buscar e-mails"
-          placeholder="assunto ou remetente"
-        />
-        <Chip active={onlyUnread} onClick={() => setOnlyUnread((v) => !v)}>
-          Não lidos
-        </Chip>
-        {/* Uma caixa só não precisa de filtro por caixa. */}
-        {mailboxes.length > 1 &&
-          mailboxes.map((box) => (
-            <Chip
-              key={box.id}
-              active={account === box.id}
-              onClick={() => setAccount(account === box.id ? 'all' : box.id)}
-            >
-              {box.label}
-            </Chip>
-          ))}
-        <select
-          className={cn(selectClass, focusRing)}
-          aria-label="ordenar e-mails"
-          value={sort}
-          onChange={(e) => setSort(e.target.value as Sort)}
-        >
-          <option value="recent">Mais recentes</option>
-          <option value="oldest">Mais antigos</option>
-        </select>
-      </FilterBar>
-
-      <ActiveFilters filters={activeFilters} onRemove={clearFilter} onClearAll={clearAll} />
-
-      {email.error && <PanelError>{email.error}</PanelError>}
-      {batchError && <PanelError>{batchError}</PanelError>}
-
-      {loading && all.length === 0 && <SkeletonRows count={6} />}
-
-      {!loading && all.length === 0 && !email.error && (
-        <EmptyState title="Caixa de entrada limpa." />
-      )}
-
-      {all.length > 0 && visible.length === 0 && (
-        <EmptyState title="Nenhum e-mail com esses filtros." />
-      )}
-
-      {threads.length > 0 && (
-        <ul className="text-sm">
-          {threads.map((thread) => {
-            // Uma conversa de uma mensagem abre direto no corpo: expandir para
-            // clicar de novo seria um passo a mais para o caso mais comum.
-            const sozinha = thread.messages.length === 1 ? thread.messages[0] : null;
-            const enviadas = thread.messages.length - recebidas(thread).length;
-            const isOpen = sozinha ? key(sozinha) === openKey : expanded.has(thread.id);
-            const marcada = threadKeys(thread).every((k) => selected.has(k));
-            const titulo = thread.subject || '(sem assunto)';
-            const tags = threadTags(thread, appliedTags[thread.id] ?? []);
-            // A ação que esgotou as tentativas não some em silêncio: a mensagem
-            // continua na caixa do servidor e o erro é o que explica por quê.
-            const acaoComErro = thread.messages.find((m) => m.actionError)?.actionError ?? null;
-            return (
-              <li key={thread.id} className={cn('rounded-lg', isOpen && 'bg-brand-tint')}>
-                <div
-                  className={cn(
-                    // `row` and `row-unread` stay as behavioural markers: the suite
-                    // reads the unread state of a conversation off this element.
-                    'row flex items-center gap-3 border-b border-line-soft px-2 py-3 transition-colors duration-100 ease-brand even:bg-muted/25 motion-reduce:transition-none',
-                    isOpen ? 'bg-brand-tint' : 'hover:bg-brand-tint',
-                    thread.unreadCount > 0 && 'row-unread',
-                  )}
-                >
-                  <span
-                    aria-hidden
-                    className={cn(
-                      'size-1.5 shrink-0 rounded-full',
-                      thread.unreadCount > 0 ? 'bg-brand' : 'bg-transparent',
-                    )}
-                  />
-                  <input
-                    type="checkbox"
-                    className={cn('size-4 shrink-0 accent-brand', focusRing)}
-                    checked={marcada}
-                    onChange={() => {}}
-                    // O checkbox nativo não conta se o Shift estava
-                    // pressionado no `change`; o clique, sim.
-                    onClick={(e) => toggleSelect(thread, e.shiftKey)}
-                    aria-label={`selecionar ${titulo}`}
-                  />
-                  <button
-                    type="button"
-                    className={cn(
-                      'flex min-w-0 flex-1 cursor-pointer flex-col items-start gap-0.5 rounded-sm text-left',
-                      focusRing,
-                    )}
-                    aria-expanded={isOpen}
-                    onClick={() => {
-                      if (sozinha) {
-                        setOpenKey(isOpen ? null : key(sozinha));
-                        if (!isOpen) void loadTagFolders(sozinha.account);
-                        return;
-                      }
-                      setExpanded((prev) => {
-                        const next = new Set(prev);
-                        if (next.has(thread.id)) next.delete(thread.id);
-                        else next.add(thread.id);
-                        return next;
-                      });
-                      void loadTagFolders(thread.messages[0].account);
-                    }}
-                  >
-                    <span
-                      className={cn(
-                        'w-full truncate',
-                        thread.unreadCount > 0 ? 'font-medium text-ink' : 'text-ink-mid',
-                      )}
-                    >
-                      {titulo}
-                    </span>
-                    <span className="w-full truncate type-caption text-ink-dim">
-                      {thread.participants.join(', ') || EM_DASH}
-                    </span>
-                    {acaoComErro && (
-                      <span role="alert" className="w-full truncate type-caption text-danger">
-                        {acaoComErro}
-                      </span>
-                    )}
-                  </button>
-                  {thread.messages.length > 1 && (
-                    <span
-                      className={cn(
-                        'shrink-0 rounded-full border px-1.5 type-caption leading-relaxed',
-                        tabular,
-                        thread.unreadCount > 0
-                          ? 'border-brand-edge bg-brand-tint text-brand'
-                          : 'border-line-strong bg-neutral-tint text-ink-dim',
-                      )}
-                      aria-label={
-                        enviadas > 0
-                          ? `${thread.messages.length} mensagens, ${enviadas} enviadas por você`
-                          : `${thread.messages.length} mensagens`
-                      }
-                    >
-                      {thread.messages.length}
-                    </span>
-                  )}
-                  <span
-                    className={cn(
-                      'min-w-[3.5ch] shrink-0 text-right type-caption text-ink-dim',
-                      tabular,
-                    )}
-                  >
-                    {relativeTime(thread.lastDate) || EM_DASH}
-                  </span>
-                  {mailboxes.length > 1 && (
-                    <Badge variant="secondary" className="shrink-0">
-                      {thread.messages[0].accountLabel ?? EM_DASH}
-                    </Badge>
-                  )}
-                  <div className="flex shrink-0 items-center gap-0.5">
-                    <div className="relative flex">
-                      <button
-                        type="button"
-                        // `is-tagged` stays as a behavioural marker: the suite reads
-                        // whether a conversation already carries a label off it.
-                        className={cn(iconButtonClass, tags.length > 0 && 'is-tagged text-brand')}
-                        aria-label={`etiquetar ${titulo}`}
-                        aria-expanded={tagMenuKey === thread.id}
-                        onClick={() => {
-                          const next = tagMenuKey === thread.id ? null : thread.id;
-                          setTagMenuKey(next);
-                          if (next) void loadTagFolders(thread.messages[0].account);
-                        }}
-                      >
-                        <Label width={16} height={16} />
-                      </button>
-                      {tagMenuKey === thread.id && (
-                        <>
-                          <div className="fixed inset-0 z-40" onClick={() => setTagMenuKey(null)} />
-                          <div
-                            className="absolute top-full right-0 z-50 mt-2 flex max-h-80 min-w-45 flex-col overflow-y-auto rounded-xl border border-line-strong bg-surface-4 p-2 shadow-e4"
-                            role="menu"
-                            aria-label="etiquetas"
-                          >
-                            {(tagFolders[thread.messages[0].account] ?? []).length === 0 ? (
-                              <p className="px-3 py-2 text-sm text-ink-dim">
-                                Carregando etiquetas…
-                              </p>
-                            ) : (
-                              (tagFolders[thread.messages[0].account] ?? []).map((f) => (
-                                <button
-                                  key={f}
-                                  type="button"
-                                  role="menuitem"
-                                  className={cn(
-                                    'rounded-md px-3 py-2 text-left text-sm text-ink-mid transition-colors duration-100 ease-brand hover:bg-brand-tint hover:text-ink motion-reduce:transition-none',
-                                    focusRing,
-                                  )}
-                                  onClick={() => void applyTagToThread(thread, f)}
-                                >
-                                  {f}
-                                </button>
-                              ))
-                            )}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      className={cn(iconButtonClass, 'hover:border-danger/40 hover:text-danger')}
-                      aria-label={`excluir ${titulo}`}
-                      onClick={() => void removeThread(thread)}
-                    >
-                      <Trash width={16} height={16} />
-                    </button>
-                  </div>
-                </div>
-
-                {sozinha && isOpen && (
-                  <EmailDetail
-                    email={sozinha}
-                    onClose={() => setOpenKey(null)}
-                    onChanged={onChanged}
-                    onSeenChanged={onSeenChanged}
-                    appliedTags={tags}
-                  />
-                )}
-
-                {/* A conversa aberta mostra as mensagens na ordem em que
-                    aconteceram; clicar numa delas abre o corpo. */}
-                {!sozinha && isOpen && (
-                  <ul className="ml-9 border-l border-line-soft">
-                    {thread.messages.map((m) => {
-                      const aberta = key(m) === openKey;
-                      return (
-                        <li key={key(m)} className={cn(aberta && 'bg-brand-tint')}>
-                          <button
-                            type="button"
-                            // `thread-row` and `row-unread` stay as behavioural
-                            // markers: the suite finds the messages of a conversation
-                            // and their unread state through them.
-                            className={cn(
-                              'thread-row flex w-full cursor-pointer items-baseline gap-3 px-3 py-2 text-left transition-colors duration-100 ease-brand motion-reduce:transition-none',
-                              aberta ? 'bg-brand-tint text-ink' : 'hover:bg-brand-tint',
-                              m.unread && 'row-unread',
-                              focusRing,
-                            )}
-                            aria-expanded={aberta}
-                            onClick={() => setOpenKey(aberta ? null : key(m))}
-                          >
-                            <span
-                              className={cn(
-                                'min-w-0 flex-1 truncate',
-                                m.mailbox === 'sent'
-                                  ? 'text-ink-dim'
-                                  : m.unread
-                                    ? 'font-medium text-ink'
-                                    : 'text-ink-mid',
-                              )}
-                            >
-                              {m.from || EM_DASH}
-                            </span>
-                            {m.mailbox === 'sent' && (
-                              <Badge variant="secondary" className="shrink-0">
-                                enviada
-                              </Badge>
-                            )}
-                            <span className={cn('shrink-0 type-caption text-ink-dim', tabular)}>
-                              {relativeTime(m.date) || EM_DASH}
-                            </span>
-                          </button>
-                          {aberta && (
-                            <EmailDetail
-                              email={m}
-                              onClose={() => setOpenKey(null)}
-                              onChanged={onChanged}
-                              onSeenChanged={onSeenChanged}
-                              appliedTags={tags}
-                            />
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      {conteudo}
       {dialog}
+
+      {/* Em tela cheia o painel vira o aplicativo inteiro: as pastas de um
+          lado, a lista do outro, e a mensagem abre dentro dela. */}
+      <Dialog open={view.maximized} onOpenChange={(aberto) => setView({ maximized: aberto })}>
+        <DialogContent className="flex h-[calc(100dvh-2rem)] w-full flex-col gap-3 sm:max-w-[min(84rem,calc(100%-2rem))]">
+          <DialogHeader>
+            <DialogTitle className="truncate">{tituloDaPasta}</DialogTitle>
+            <DialogDescription className="sr-only">
+              E-mail em tela cheia. Esc volta ao painel.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid min-h-0 flex-1 gap-4 md:grid-cols-[16rem_minmax(0,1fr)]">
+            <div className="min-h-0 overflow-y-auto border-line-soft md:border-r md:pr-2">
+              {arvore}
+            </div>
+            <div className="flex min-h-0 flex-col gap-4 overflow-y-auto">{conteudo}</div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Section>
   );
 }

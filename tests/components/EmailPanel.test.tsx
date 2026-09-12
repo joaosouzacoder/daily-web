@@ -44,6 +44,10 @@ const items: EmailEnvelope[] = [
 // Um Response só pode ter o corpo lido uma vez: cada chamada precisa de uma
 // instância nova, senão a segunda leitura estoura "Body has already been read".
 beforeEach(() => {
+  // O que a tela mostra vive na URL. Cada teste é uma visita nova, então a
+  // URL da anterior não pode sobrar — senão um filtro clicado num teste
+  // chegaria ligado no seguinte.
+  window.history.replaceState(null, '', '/');
   vi.spyOn(global, 'fetch').mockImplementation(async () =>
     new Response(JSON.stringify({ folders: [] })),
   );
@@ -196,6 +200,8 @@ describe('EmailPanel', () => {
     expect(JSON.parse(calls[0])).toEqual({
       targets: [{ account: 'mail-1', id: '1' }],
       action: 'move',
+      // A pasta em que as mensagens estão: o uid só identifica dentro de uma.
+      folderPath: 'INBOX',
       folder: 'Recibos',
     });
     // O menu fecha e o corpo do e-mail nunca é carregado.
@@ -246,6 +252,7 @@ describe('EmailPanel', () => {
     expect(JSON.parse(bodies[0])).toEqual({
       targets: [{ account: 'mail-1', id: '1' }],
       action: 'delete',
+      folderPath: 'INBOX',
     });
   });
 
@@ -631,5 +638,93 @@ describe('ação que falhou em definitivo', () => {
     );
 
     expect(screen.getByRole('alert')).toHaveTextContent('a conta recusou a conexão');
+  });
+});
+
+describe('pastas e tela cheia', () => {
+  const ARVORE = [
+    { path: 'INBOX', name: 'INBOX', delimiter: '/', parent: null, specialUse: null, total: 9, unread: 2 },
+    { path: 'Clientes', name: 'Clientes', delimiter: '/', parent: null, specialUse: null, total: 4, unread: 1 },
+  ];
+
+  function mockarRotas(mensagens: EmailEnvelope[] = []) {
+    vi.spyOn(global, 'fetch').mockImplementation(async (url) => {
+      const endereco = String(url);
+      if (endereco.includes('/api/email/mailboxes')) {
+        return new Response(JSON.stringify({ mailboxes: ARVORE }));
+      }
+      if (endereco.includes('/api/email/messages')) {
+        return new Response(JSON.stringify({ messages: mensagens }));
+      }
+      return new Response(JSON.stringify({ folders: [] }));
+    });
+  }
+
+  function montar() {
+    render(
+      <EmailPanel
+        onSeenChanged={() => {}}
+        onRemoved={() => {}}
+        mailboxes={MAILBOXES}
+        email={{ data: items, error: null }}
+        onChanged={() => {}}
+      />,
+    );
+  }
+
+  it('abre a tela cheia e lista as pastas da conta', async () => {
+    mockarRotas();
+    montar();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir em tela cheia' }));
+
+    expect(await screen.findByRole('navigation', { name: 'Pastas' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Clientes/ })).toBeInTheDocument();
+  });
+
+  // A pasta escolhida vive na URL: recarregar e voltar caem no mesmo lugar.
+  it('escreve a pasta escolhida na URL e busca as mensagens dela', async () => {
+    mockarRotas([
+      { ...items[0], id: '31', subject: 'Contrato novo', folder: 'Clientes' },
+    ]);
+    montar();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir em tela cheia' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Clientes/ }));
+
+    await waitFor(() =>
+      expect(new URLSearchParams(window.location.search).get('mail_folder')).toBe('Clientes'),
+    );
+    expect(await screen.findAllByText('Contrato novo')).not.toHaveLength(0);
+  });
+
+  // A entrada é o padrão: ela não precisa estar escrita no link.
+  it('tira a pasta da URL ao voltar para a entrada', async () => {
+    mockarRotas();
+    window.history.replaceState(null, '', '/?mail_folder=Clientes&mail_max=1');
+    montar();
+
+    fireEvent.click(await screen.findByRole('button', { name: /INBOX/ }));
+
+    await waitFor(() =>
+      expect(new URLSearchParams(window.location.search).get('mail_folder')).toBeNull(),
+    );
+  });
+
+  it('mostra o erro quando a pasta não abre', async () => {
+    vi.spyOn(global, 'fetch').mockImplementation(async (url) => {
+      const endereco = String(url);
+      if (endereco.includes('/api/email/messages')) {
+        return new Response(JSON.stringify({ error: 'pasta não encontrada' }));
+      }
+      if (endereco.includes('/api/email/mailboxes')) {
+        return new Response(JSON.stringify({ mailboxes: ARVORE }));
+      }
+      return new Response(JSON.stringify({ folders: [] }));
+    });
+    window.history.replaceState(null, '', '/?mail_folder=Clientes');
+    montar();
+
+    expect(await screen.findByText('pasta não encontrada')).toBeInTheDocument();
   });
 });

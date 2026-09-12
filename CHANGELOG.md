@@ -8,16 +8,6 @@ Only `main` is maintained; there are no release branches.
 
 ## [Unreleased]
 
-### Changed
-- The refresh cycle no longer re-reads a whole mailbox to find out that
-  nothing changed. Messages already read from the server are kept, and each
-  cycle asks for two things over one connection: what arrived after the last
-  uid it knows, and the flags of a recent window of uids — which is how a
-  message read, labelled or deleted in another client catches up here. Nothing
-  is concluded about what lies outside that window, because nothing outside it
-  was asked. A folder's stored copy is capped, and a folder the server
-  reindexes is dropped and read again.
-
 ### Added
 - Mailboxes other than the inbox can now be read. `GET /api/email/mailboxes`
   returns the account's folder tree with the total and unread count of each
@@ -30,6 +20,16 @@ Only `main` is maintained; there are no release branches.
   folder it lives in and the numbering that folder announced, so an action
   recorded before the server reindexed a folder now fails in the open instead
   of landing on whichever message inherited the uid.
+- The e-mail panel opens full screen, with the account's folder tree beside
+  the list: a folder is picked from the tree and its messages are listed in
+  place, the same reading and acting the inbox already had.
+- What the panel is showing now lives in the URL — folder, search, unread
+  filter, account, ordering, the open message and full screen. Reloading, the
+  back button and sending yourself the link all land in the same place.
+  Changing folder or opening full screen is navigation and the back button
+  undoes it; touching a filter is not, so typing in the search box does not
+  fill the history. A default is never written to the URL, and a value that
+  makes no sense falls back to the default instead of becoming state.
 
 ### Fixed
 - A deleted e-mail no longer comes back, and neither does one that was marked
@@ -46,6 +46,14 @@ Only `main` is maintained; there are no release branches.
   failed and the message returned to the screen.
 
 ### Changed
+- The refresh cycle no longer re-reads a whole mailbox to find out that
+  nothing changed. Messages already read from the server are kept, and each
+  cycle asks for two things over one connection: what arrived after the last
+  uid it knows, and the flags of a recent window of uids — which is how a
+  message read, labelled or deleted in another client catches up here. Nothing
+  is concluded about what lies outside that window, because nothing outside it
+  was asked. A folder's stored copy is capped, and a folder the server
+  reindexes is dropped and read again.
 - The active note tab is the same band as the sidebar's active item — a brand
   tint fading out with a 3px bar — instead of a solid surface that read as a
   black block in the dark theme, with a brand bar that curved around the tab's

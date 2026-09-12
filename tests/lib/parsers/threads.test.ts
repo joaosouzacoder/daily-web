@@ -15,6 +15,7 @@ function mail(over: Partial<EmailEnvelope>): EmailEnvelope {
     references: [],
     labels: [],
     mailbox: 'inbox',
+    folder: 'INBOX',
     ...over,
   };
 }
