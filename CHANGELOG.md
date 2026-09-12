@@ -69,6 +69,22 @@ Only `main` is maintained; there are no release branches.
   scroll where they were. Two opens at once share one sync per account.
 
 ### Fixed
+- Dragging an e-mail works again — onto the action targets in the dashboard
+  card and onto a folder in the modal. Our own dragstart handler was marking
+  the row and applying the bundle's gather transform while the browser was
+  still deciding whether to open a drag session; repainting the drag source
+  there makes Chromium abandon the drag without an error. Every state change
+  now waits for the frame after dragstart. The component tests had passed
+  throughout because a dispatched DragEvent never asks for a drag session, so
+  it could not notice one was being refused.
+- A drop onto a folder of another account is refused with a message instead of
+  moving the message inside its own account. IMAP moves within an account;
+  copying and deleting across two is a different operation.
+- A note created from an e-mail now shows up in the notes panel straight away,
+  and the confirmation's button opens that note, using the panel's documented
+  change event.
+
+### Fixed
 - Selecting another folder now changes the listed messages. The listing is
   keyed by the (account, folder) pair — the path alone is not an identity,
   since two accounts each have their own INBOX — a folder already read is shown

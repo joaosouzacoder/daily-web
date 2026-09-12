@@ -1353,6 +1353,54 @@ describe('criar nota ou tarefa a partir de um e-mail', () => {
     expect(chamadas[0].corpo).not.toHaveProperty('folderId');
   });
 
+  // O painel de notas lê a lista uma vez, ao montar: sem o aviso a nota só
+  // apareceria depois de recarregar a página inteira.
+  it('avisa o painel de notas, pedindo para abrir a nota criada', async () => {
+    const { NOTES_CHANGED_EVENT } = await import('@/lib/notesBus');
+    const avisos: unknown[] = [];
+    const ouvinte = (e: Event) => avisos.push((e as CustomEvent).detail);
+    window.addEventListener(NOTES_CHANGED_EVENT, ouvinte);
+
+    montar();
+    const menu = await abrirMenu();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /Criar nota/ }));
+
+    await waitFor(() => expect(avisos).toEqual([{ activate: 'nota-1' }]));
+    window.removeEventListener(NOTES_CHANGED_EVENT, ouvinte);
+  });
+
+  it('não avisa o painel de notas quando o que nasceu foi uma tarefa', async () => {
+    const { NOTES_CHANGED_EVENT } = await import('@/lib/notesBus');
+    const avisos: unknown[] = [];
+    const ouvinte = (e: Event) => avisos.push((e as CustomEvent).detail);
+    window.addEventListener(NOTES_CHANGED_EVENT, ouvinte);
+
+    montar();
+    const menu = await abrirMenu();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /Criar tarefa/ }));
+
+    await waitFor(() => expect(chamadas).toHaveLength(1));
+    expect(avisos).toEqual([]);
+    window.removeEventListener(NOTES_CHANGED_EVENT, ouvinte);
+  });
+
+  it('o botão da confirmação abre aquela nota', async () => {
+    const { NOTES_CHANGED_EVENT } = await import('@/lib/notesBus');
+    const avisos: unknown[] = [];
+    const ouvinte = (e: Event) => avisos.push((e as CustomEvent).detail);
+
+    montar();
+    const menu = await abrirMenu();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /Criar nota/ }));
+    const aviso = await screen.findByRole('status');
+
+    window.addEventListener(NOTES_CHANGED_EVENT, ouvinte);
+    fireEvent.click(within(aviso).getByRole('button', { name: 'Abrir a nota' }));
+
+    expect(avisos).toEqual([{ activate: 'nota-1' }]);
+    window.removeEventListener(NOTES_CHANGED_EVENT, ouvinte);
+  });
+
   it('confirma e oferece abrir o que foi criado', async () => {
     montar();
     const menu = await abrirMenu();
@@ -1361,7 +1409,7 @@ describe('criar nota ou tarefa a partir de um e-mail', () => {
     const aviso = await screen.findByRole('status');
     expect(aviso).toHaveTextContent('Nota criada');
     expect(aviso).toHaveTextContent('Revisão do PR #481');
-    expect(within(aviso).getByRole('button', { name: 'Abrir notas' })).toBeInTheDocument();
+    expect(within(aviso).getByRole('button', { name: 'Abrir a nota' })).toBeInTheDocument();
   });
 
   // Enquanto a criação está em voo o menu não responde: dois cliques não

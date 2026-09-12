@@ -8,6 +8,7 @@ import type {
 } from 'react';
 import { useEmailView } from '@/lib/hooks/useEmailView';
 import { useReducedMotion } from '@/lib/hooks/useReducedMotion';
+import { notesChanged } from '@/lib/notesBus';
 import {
   FolderTree,
   EMAIL_DRAG_TYPE,
@@ -236,7 +237,9 @@ export function EmailPanel({
   // responde — e o servidor ainda devolve a mesma criação se dois pedidos
   // saírem juntos.
   const [criando, setCriando] = useState<string | null>(null);
-  const [criado, setCriado] = useState<{ kind: CreateKind; titulo: string } | null>(null);
+  const [criado, setCriado] = useState<{ kind: CreateKind; titulo: string; id: string } | null>(
+    null,
+  );
   const [folders, setFolders] = useState<string[]>([]);
   const [targetFolder, setTargetFolder] = useState('');
 
@@ -619,9 +622,13 @@ export function EmailPanel({
         );
         return;
       }
-      setCriado({ kind, titulo: mensagem.subject || '(sem assunto)' });
-      // A tarefa entra na lista do painel ao lado; a nota, na dele.
-      if (kind === 'task') onChanged();
+      const id = kind === 'note' ? String(data.noteId ?? '') : String(data.taskId ?? '');
+      setCriado({ kind, titulo: mensagem.subject || '(sem assunto)', id });
+      // O painel de notas lê a lista uma vez, ao montar: sem o aviso, a nota
+      // só apareceria depois de recarregar a página.
+      if (kind === 'note') notesChanged({ activate: id });
+      // A tarefa entra na lista do painel ao lado.
+      else onChanged();
     } catch {
       setBatchError('Não deu para falar com o servidor');
     } finally {
@@ -629,11 +636,12 @@ export function EmailPanel({
     }
   };
 
-  /** Leva à tela onde o que foi criado está. O painel de notas guarda a aba
-   *  ativa por conta própria, então o que dá para fazer é chegar até ele. */
+  /** Abre o que foi criado. A nota é aberta no painel dela pelo aviso do
+   *  contrato; a tarefa não tem equivalente, e aí a tela vai até o painel. */
   const abrirPainelDoCriado = () => {
     if (!criado) return;
     setView({ maximized: false });
+    if (criado.kind === 'note' && criado.id) notesChanged({ activate: criado.id });
     const alvo = document.getElementById(`painel-${criado.kind === 'note' ? 'notes' : 'tasks'}`);
     alvo?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     alvo?.focus?.();
@@ -884,7 +892,7 @@ export function EmailPanel({
               onClick={abrirPainelDoCriado}
               className="underline underline-offset-2 hover:no-underline"
             >
-              {criado.kind === 'note' ? 'Abrir notas' : 'Abrir tarefas'}
+              {criado.kind === 'note' ? 'Abrir a nota' : 'Abrir tarefas'}
             </button>
             <button
               type="button"
