@@ -1204,3 +1204,168 @@ describe('alvos de ação no arraste', () => {
     });
   });
 });
+
+describe('criar nota ou tarefa a partir de um e-mail', () => {
+  const lista: EmailEnvelope[] = [
+    {
+      id: '42', account: 'mail-1', accountLabel: 'Trabalho', from: 'Milton Yoshida',
+      subject: 'Revisão do PR #481', unread: true, date: '2026-09-12T10:00:00Z',
+      messageId: '<a@x>', references: [], labels: [], mailbox: 'inbox' as const, folder: 'INBOX',
+    },
+  ];
+
+  let chamadas: { url: string; corpo: unknown }[];
+  let resposta: () => Response;
+
+  function montar(props: Partial<Parameters<typeof EmailPanel>[0]> = {}) {
+    render(
+      <EmailPanel
+        onSeenChanged={() => {}}
+        onRemoved={() => {}}
+        mailboxes={[{ id: 'mail-1', label: 'Trabalho' }]}
+        email={{ data: lista, error: null }}
+        onChanged={() => {}}
+        {...props}
+      />,
+    );
+  }
+
+  beforeEach(() => {
+    chamadas = [];
+    resposta = () => new Response(JSON.stringify({ noteId: 'nota-1', taskId: 'tarefa-1' }));
+    vi.spyOn(global, 'fetch').mockImplementation(async (url, init) => {
+      const endereco = String(url);
+      if (endereco.includes('/api/notes/folders')) {
+        return new Response(
+          JSON.stringify({
+            folders: [
+              { id: 'p-1', name: 'Trabalho', parentId: null, position: 0, updatedAt: '' },
+            ],
+          }),
+        );
+      }
+      if (endereco.includes('/api/email/to-')) {
+        chamadas.push({ url: endereco, corpo: JSON.parse(String(init?.body ?? '{}')) });
+        return resposta();
+      }
+      return new Response(JSON.stringify({ folders: [] }));
+    });
+  });
+
+  // O menu do sistema de design abre no ponteiro e no teclado. O teclado é o
+  // caminho que interessa garantir, e é o que o jsdom reproduz fielmente.
+  const abrirMenu = async () => {
+    const gatilho = screen.getByRole('button', { name: 'Ações de Revisão do PR #481' });
+    gatilho.focus();
+    fireEvent.keyDown(gatilho, { key: 'Enter' });
+    return screen.findByRole('menu');
+  };
+
+  it('oferece criar nota e criar tarefa num menu', async () => {
+    montar();
+    const menu = await abrirMenu();
+
+    expect(within(menu).getByRole('menuitem', { name: /Criar nota/ })).toBeInTheDocument();
+    expect(within(menu).getByRole('menuitem', { name: /Criar tarefa/ })).toBeInTheDocument();
+  });
+
+  // O menu é do sistema de design: abre pelo teclado e anda com as setas.
+  it('abre pelo teclado', async () => {
+    montar();
+    const gatilho = screen.getByRole('button', { name: 'Ações de Revisão do PR #481' });
+    gatilho.focus();
+    fireEvent.keyDown(gatilho, { key: 'ArrowDown' });
+
+    const menu = await screen.findByRole('menu');
+    expect(within(menu).getAllByRole('menuitem')).toHaveLength(2);
+  });
+
+  it('abre pelo ponteiro', async () => {
+    montar();
+    fireEvent.pointerDown(
+      screen.getByRole('button', { name: 'Ações de Revisão do PR #481' }),
+      { button: 0, ctrlKey: false, pointerType: 'mouse' },
+    );
+
+    expect(await screen.findByRole('menu')).toBeInTheDocument();
+  });
+
+  it('cria a nota sem pasta por padrão', async () => {
+    montar();
+    const menu = await abrirMenu();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /Criar nota/ }));
+
+    await waitFor(() => expect(chamadas).toHaveLength(1));
+    expect(chamadas[0].url).toContain('/api/email/to-note');
+    expect(chamadas[0].corpo).toMatchObject({ account: 'mail-1', id: '42', folderId: null });
+  });
+
+  it('cria a nota na pasta escolhida', async () => {
+    montar();
+    const menu = await abrirMenu();
+    fireEvent.change(within(menu).getByLabelText('Pasta da nota'), { target: { value: 'p-1' } });
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /Criar nota/ }));
+
+    await waitFor(() => expect(chamadas).toHaveLength(1));
+    expect(chamadas[0].corpo).toMatchObject({ folderId: 'p-1' });
+  });
+
+  it('cria a tarefa sem mandar pasta nenhuma', async () => {
+    montar();
+    const menu = await abrirMenu();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /Criar tarefa/ }));
+
+    await waitFor(() => expect(chamadas).toHaveLength(1));
+    expect(chamadas[0].url).toContain('/api/email/to-task');
+    expect(chamadas[0].corpo).not.toHaveProperty('folderId');
+  });
+
+  it('confirma e oferece abrir o que foi criado', async () => {
+    montar();
+    const menu = await abrirMenu();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /Criar nota/ }));
+
+    const aviso = await screen.findByRole('status');
+    expect(aviso).toHaveTextContent('Nota criada');
+    expect(aviso).toHaveTextContent('Revisão do PR #481');
+    expect(within(aviso).getByRole('button', { name: 'Abrir notas' })).toBeInTheDocument();
+  });
+
+  // Enquanto a criação está em voo o menu não responde: dois cliques não
+  // podem virar duas notas.
+  it('trava o menu enquanto a criação está em voo', async () => {
+    let liberar: (r: Response) => void = () => {};
+    resposta = () => {
+      throw new Error('não usado');
+    };
+    vi.spyOn(global, 'fetch').mockImplementation(async (url, init) => {
+      const endereco = String(url);
+      if (endereco.includes('/api/email/to-')) {
+        chamadas.push({ url: endereco, corpo: JSON.parse(String(init?.body ?? '{}')) });
+        return new Promise<Response>((r) => (liberar = r));
+      }
+      return new Response(JSON.stringify({ folders: [] }));
+    });
+
+    montar();
+    const menu = await abrirMenu();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /Criar nota/ }));
+    await waitFor(() => expect(chamadas).toHaveLength(1));
+
+    const segundo = await abrirMenu();
+    fireEvent.click(within(segundo).getByRole('menuitem', { name: /Criar nota/ }));
+    await new Promise((r) => setTimeout(r, 30));
+
+    expect(chamadas).toHaveLength(1);
+    liberar(new Response(JSON.stringify({ noteId: 'nota-1' })));
+  });
+
+  it('mostra o erro quando a criação falha', async () => {
+    resposta = () => new Response(JSON.stringify({ error: 'o limite é de 20 notas' }), { status: 400 });
+    montar();
+    const menu = await abrirMenu();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /Criar nota/ }));
+
+    expect(await screen.findByText('o limite é de 20 notas')).toBeInTheDocument();
+  });
+});

@@ -14,6 +14,7 @@ import {
   type FolderSelection,
 } from '@/components/email/FolderTree';
 import { ActionDropTargets, type DropAction } from '@/components/email/ActionDropTargets';
+import { CreateFromEmailMenu, type CreateKind } from '@/components/email/CreateFromEmailMenu';
 import { useMailboxGroups } from '@/lib/hooks/useMailboxGroups';
 import { useFolderMessages } from '@/lib/hooks/useFolderMessages';
 import {
@@ -29,7 +30,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Maximize2, Minimize2 } from 'lucide-react';
-import type { MailboxNode } from '@/lib/types';
+import type { MailboxNode, NoteFolder } from '@/lib/types';
 import { FolderInput, Mail, MailOpen, Trash2 } from 'lucide-react';
 import { IconAction } from '@/components/data/IconAction';
 import { Label, Trash } from 'iconoir-react';
@@ -51,11 +52,7 @@ import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import { cn } from '@/lib/utils';
 import { EM_DASH } from '@/lib/format';
-import { focusRing, tabular } from '@/lib/theme';
-
-/** A single-line native control kept native: the batch actions read its change event. */
-const selectClass =
-  'h-8 shrink-0 rounded-full border bg-glass px-3 text-sm text-ink shadow-e1 outline-none transition-colors duration-100 ease-brand motion-reduce:transition-none';
+import { focusRing, selectClass, tabular } from '@/lib/theme';
 
 interface Props {
   email: PanelResult<EmailEnvelope[]>;
@@ -232,6 +229,14 @@ export function EmailPanel({
   // O que a última ação não conseguiu fazer. Fica na tela com o motivo e um
   // botão para tentar de novo só esses.
   const [naoProcessados, setNaoProcessados] = useState<BatchTargetResult[]>([]);
+  // As pastas de notas, buscadas quando o primeiro menu abre: pedir por linha
+  // seria uma ida ao servidor por e-mail na tela.
+  const [noteFolders, setNoteFolders] = useState<NoteFolder[]>([]);
+  // A mensagem cuja criação está em voo. Enquanto está, o menu dela não
+  // responde — e o servidor ainda devolve a mesma criação se dois pedidos
+  // saírem juntos.
+  const [criando, setCriando] = useState<string | null>(null);
+  const [criado, setCriado] = useState<{ kind: CreateKind; titulo: string } | null>(null);
   const [folders, setFolders] = useState<string[]>([]);
   const [targetFolder, setTargetFolder] = useState('');
 
@@ -572,6 +577,68 @@ export function EmailPanel({
     onChanged();
   };
 
+  const carregarPastasDeNota = async () => {
+    if (noteFolders.length > 0) return;
+    const res = await fetch('/api/notes/folders');
+    if (!res.ok) return;
+    const data = await res.json();
+    setNoteFolders((data.folders ?? []) as NoteFolder[]);
+  };
+
+  /**
+   * Vira nota ou vira tarefa. O botão fica travado enquanto o pedido está em
+   * voo; o servidor cobre o resto, devolvendo a mesma criação quando dois
+   * pedidos saem antes de a primeira resposta voltar.
+   */
+  const criarDoEmail = async (
+    mensagem: EmailEnvelope,
+    kind: CreateKind,
+    folderId: string | null,
+  ) => {
+    const chave = key(mensagem);
+    if (criando) return;
+    setCriando(chave);
+    setBatchError(null);
+    setCriado(null);
+
+    try {
+      const res = await fetch(`/api/email/to-${kind === 'note' ? 'note' : 'task'}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          account: mensagem.account,
+          id: mensagem.id,
+          folder: mensagem.folder,
+          ...(kind === 'note' ? { folderId } : {}),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setBatchError(
+          data.error ?? (kind === 'note' ? 'Não deu para criar a nota' : 'Não deu para criar a tarefa'),
+        );
+        return;
+      }
+      setCriado({ kind, titulo: mensagem.subject || '(sem assunto)' });
+      // A tarefa entra na lista do painel ao lado; a nota, na dele.
+      if (kind === 'task') onChanged();
+    } catch {
+      setBatchError('Não deu para falar com o servidor');
+    } finally {
+      setCriando(null);
+    }
+  };
+
+  /** Leva à tela onde o que foi criado está. O painel de notas guarda a aba
+   *  ativa por conta própria, então o que dá para fazer é chegar até ele. */
+  const abrirPainelDoCriado = () => {
+    if (!criado) return;
+    setView({ maximized: false });
+    const alvo = document.getElementById(`painel-${criado.kind === 'note' ? 'notes' : 'tasks'}`);
+    alvo?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    alvo?.focus?.();
+  };
+
   /** O assunto de quem não foi processado, para o aviso dizer quais. */
   const assuntoDe = (account: string, id: string) =>
     all.find((m) => m.account === account && m.id === id)?.subject || '(sem assunto)';
@@ -786,6 +853,29 @@ export function EmailPanel({
           </PanelError>
         )}
         {batchError && <PanelError>{batchError}</PanelError>}
+
+        {criado && (
+          <p
+            role="status"
+            className="flex flex-wrap items-center gap-2 rounded-md border border-brand-edge bg-brand-tint px-3 py-2 text-sm text-brand"
+          >
+            {criado.kind === 'note' ? 'Nota criada' : 'Tarefa criada'} a partir de “{criado.titulo}”.
+            <button
+              type="button"
+              onClick={abrirPainelDoCriado}
+              className="underline underline-offset-2 hover:no-underline"
+            >
+              {criado.kind === 'note' ? 'Abrir notas' : 'Abrir tarefas'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setCriado(null)}
+              className="ml-auto text-ink-dim underline underline-offset-2 hover:no-underline"
+            >
+              dispensar
+            </button>
+          </p>
+        )}
 
         {naoProcessados.length > 0 && (
           <PanelError>
@@ -1049,6 +1139,18 @@ export function EmailPanel({
                       >
                         <Trash width={16} height={16} />
                       </button>
+                      {/* A conversa vira nota ou tarefa a partir da mensagem
+                          recebida mais recente, que é a que se está olhando. */}
+                      <CreateFromEmailMenu
+                        subject={titulo}
+                        folders={noteFolders}
+                        busy={criando !== null}
+                        onOpen={() => void carregarPastasDeNota()}
+                        onCreate={(kind, folderId) => {
+                          const alvo = recebidas(thread).at(-1) ?? thread.messages[0];
+                          void criarDoEmail(alvo, kind, folderId);
+                        }}
+                      />
                     </div>
                   </div>
 

@@ -82,7 +82,9 @@ async function connectAndRun<T>(conn: Connection, fn: (client: ImapFlow) => Prom
   }
 }
 
-function addressLabel(from: { name?: string; address?: string } | undefined): string {
+/** O nome de quem escreveu, com o endereço no lugar dele quando o remetente
+ *  não mandou nome nenhum. */
+export function addressLabel(from: { name?: string; address?: string } | undefined): string {
   if (!from) return '';
   return from.name?.trim() ? from.name.trim() : (from.address ?? '');
 }
@@ -282,6 +284,35 @@ async function bodyOf(client: ImapFlow, uid: string): Promise<string> {
   // HTML — que `readable` ainda precisa limpar — quando ele não existe.
   if (parsed.text?.trim()) return readable(parsed.text);
   return parsed.html ? readable(parsed.html) : '';
+}
+
+export interface BodyParts {
+  text: string;
+  html: string;
+}
+
+/**
+ * O corpo em texto e em HTML, como o remetente mandou.
+ *
+ * `fetchBody` entrega o texto já achatado, que é o que a leitura na tela quer.
+ * A nota quer o HTML: é dele que saem os links e a formatação.
+ */
+export async function fetchBodyParts(
+  conn: Connection,
+  uid: string,
+  mailbox: string = INBOX_PATH,
+): Promise<BodyParts> {
+  return withClient(conn, async (client) => {
+    const lock = await client.getMailboxLock(mailbox);
+    try {
+      const message = await client.fetchOne(uid, { source: true }, { uid: true });
+      if (!message || !message.source) return { text: '', html: '' };
+      const parsed = await simpleParser(message.source);
+      return { text: parsed.text ?? '', html: parsed.html || '' };
+    } finally {
+      lock.release();
+    }
+  });
 }
 
 export interface BodyRequest {

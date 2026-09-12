@@ -80,3 +80,8 @@ export const tabular = 'tabular-nums';
  */
 export const focusRing =
   'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-offset-1 focus-visible:ring-offset-background';
+
+/** Um select nativo, mantido nativo: as ações em lote leem o evento de
+ *  mudança dele. Compartilhado por quem precisa do mesmo controle. */
+export const selectClass =
+  'h-8 shrink-0 rounded-full border bg-glass px-3 text-sm text-ink shadow-e1 outline-none transition-colors duration-100 ease-brand motion-reduce:transition-none';

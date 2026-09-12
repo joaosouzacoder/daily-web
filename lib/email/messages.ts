@@ -180,3 +180,21 @@ export function pruneFolder(
     )
     .run(userId, account, folder, uidvalidity, userId, account, folder, uidvalidity, keep).changes;
 }
+
+/** Uma mensagem guardada, pelo par que a identifica. Nula quando a pasta ainda
+ *  não foi sincronizada ou a mensagem saiu dela. */
+export function getStoredMessage(
+  userId: string,
+  account: string,
+  folder: string,
+  uidvalidity: string,
+  uid: string,
+): EmailEnvelope | null {
+  const row = getDb()
+    .prepare(
+      `SELECT * FROM email_messages
+       WHERE user_id = ? AND account = ? AND folder = ? AND uidvalidity = ? AND uid = ?`,
+    )
+    .get(userId, account, folder, uidvalidity, Number(uid)) as Row | undefined;
+  return row ? toEnvelope(row) : null;
+}

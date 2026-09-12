@@ -228,6 +228,10 @@ export function DashboardGrid({ layout, panels, onSave }: Props) {
           {visible.map((p) => (
             <div
               key={p.i}
+              // Id estável: é por ele que uma confirmação de outro painel
+              // consegue trazer a tela até aqui.
+              id={`painel-${p.i}`}
+              tabIndex={-1}
               data-slot="grid-panel"
               className={cn(cardSurface, 'flex min-w-0 flex-col overflow-hidden')}
               data-grid={{ ...p, minW: MIN_PANEL_WIDTH, minH: MIN_PANEL_HEIGHT }}

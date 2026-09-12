@@ -9,6 +9,22 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Added
+- An e-mail can become a note or a task, from an actions menu on its row — in
+  the dashboard card and in the full-screen panel alike. The menu is the design
+  system's, so it opens and is walked with the keyboard.
+  The note takes the subject as its title and the message as its text,
+  converted from the mail's HTML to Markdown: paragraphs, headings, lists,
+  quotes, code, bold, italic, links and images survive, and no markup does —
+  the body of a stranger's e-mail is never injected as HTML into a note that is
+  later rendered, and an address that is not http, https or mailto keeps its
+  text and loses its link. The destination folder is chosen in the menu and
+  defaults to "Sem pasta".
+  The task takes the subject and the sender's name, falling back to the address
+  when the sender sent no name, and nothing of the body.
+  Creating confirms on screen and offers to go to the panel where the note or
+  the task now is. A repeated click cannot create two: the menu is locked while
+  the request is in flight, and the server answers a second request for the same
+  message with the first creation for a minute afterwards.
 - Several e-mails can be selected in the dashboard card and dragged onto one
   of three targets — mark as read, mark as unread, delete — which appear when
   the drag starts, carry the count of what is being dragged, and say what they
