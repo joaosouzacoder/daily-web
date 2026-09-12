@@ -9,6 +9,31 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Added
+- A whole folder can be marked as read from the folder tree, including the
+  messages too old to have been synced here — one intent recorded for the
+  folder, one search and one flag command on the server, never one per
+  message. A tentative touches at most a capped number of messages and what
+  is left over goes to the next one, and a folder with many unread asks for
+  confirmation first.
+- Messages are moved between folders by dragging them onto the folder tree.
+  The move is a real IMAP move, it goes through the same durable log as every
+  other action — the message leaves the source folder as soon as the intent is
+  recorded, and a move that runs out of attempts brings it back with the error
+  on its row. A move onto the folder the message is already in is refused, and
+  so is one onto a folder the server never announced.
+- The message list selects like a file manager: a click replaces the
+  selection, ctrl/cmd+click adds or removes one, shift+click takes the range
+  from the anchor, and the checkbox always toggles. The list takes focus, so
+  the arrows walk it, shift extends, space toggles, ctrl/cmd+A takes
+  everything visible and Esc clears — without closing the full screen behind
+  it. The row under the keyboard carries a ring so the arrows are not blind.
+- Dragging one row of a selection drags the whole selection, and dropping it
+  moves the batch in a single operation. The selected rows gather into a stack
+  while the drag is on and the cursor carries a bundle with a count, so it is
+  visible that the operation is a batch. None of that happens for a reader who
+  asked for less motion.
+
+### Added
 - Mailboxes other than the inbox can now be read. `GET /api/email/mailboxes`
   returns the account's folder tree with the total and unread count of each
   folder, and `GET /api/email/messages` lists one folder at a time under an
@@ -46,6 +71,12 @@ Only `main` is maintained; there are no release branches.
   failed and the message returned to the screen.
 
 ### Changed
+- Applying a label is now its own action, separate from moving. Both used to
+  travel as "move" while only ever copying, which is what a Gmail label is;
+  moving a message out of a folder had no way to be asked for.
+- The e-mail panel no longer renders its list twice while full screen. The
+  copy behind the dialog duplicated every row in the accessibility tree and
+  made both copies fetch the same folder.
 - The inbox and the sent folder are fetched over one connection again. The
   login is the expensive part of a round trip to Gmail, and opening a second
   one per account each cycle cost more than the whole fetch saved.

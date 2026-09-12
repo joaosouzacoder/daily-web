@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
-import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
 import { EmailPanel } from '@/components/EmailPanel';
 import type { EmailEnvelope, MailboxRef } from '@/lib/types';
 
@@ -199,7 +199,8 @@ describe('EmailPanel', () => {
     // uma conexão IMAP só para todas elas.
     expect(JSON.parse(calls[0])).toEqual({
       targets: [{ account: 'mail-1', id: '1' }],
-      action: 'move',
+      // Etiquetar é copiar para a pasta: a mensagem fica onde está.
+      action: 'tag',
       // A pasta em que as mensagens estão: o uid só identifica dentro de uma.
       folderPath: 'INBOX',
       folder: 'Recibos',
@@ -361,18 +362,20 @@ describe('seleção por intervalo com Shift', () => {
 
   // O intervalo assume o estado do alvo: se o alvo ia ser desmarcado, a
   // faixa toda é desmarcada.
-  it('desmarca a faixa quando o alvo já estava marcado', () => {
+  // A âncora fica parada no último clique sem Shift: encolher a faixa é
+  // clicar mais perto dela, e não começar outra faixa de onde se clicou por
+  // último. É assim que um gerenciador de arquivos se comporta.
+  it('refaz a faixa a partir da mesma âncora', () => {
     montar();
     fireEvent.click(caixa(1));
     fireEvent.click(caixa(4), { shiftKey: true });
     expect(caixa(3).checked).toBe(true);
 
-    // A âncora agora é o 4, então a faixa desmarcada é 3–4; o 2, fora dela,
-    // continua marcado.
     fireEvent.click(caixa(3), { shiftKey: true });
-    expect(caixa(3).checked).toBe(false);
-    expect(caixa(4).checked).toBe(false);
+    expect(caixa(1).checked).toBe(true);
     expect(caixa(2).checked).toBe(true);
+    expect(caixa(3).checked).toBe(true);
+    expect(caixa(4).checked).toBe(false);
   });
 
   it('sem âncora, o Shift marca só o item clicado', () => {
@@ -485,8 +488,9 @@ describe('conversas', () => {
   it('marcar a conversa marca todas as mensagens dela', () => {
     montar();
     fireEvent.click(screen.getByLabelText('selecionar teste assunto'));
-    // Duas: a enviada não entra nas ações, que falam com a caixa de entrada.
-    expect(screen.getByText('2 selecionados')).toBeInTheDocument();
+    // A seleção é de conversas; o lote é o que se desdobra em mensagens, e a
+    // enviada fica de fora porque as ações falam com a pasta de origem.
+    expect(screen.getByText('1 conversa')).toBeInTheDocument();
   });
 
   it('a conversa aparece como não lida quando qualquer mensagem está', () => {
@@ -564,7 +568,7 @@ describe('mensagens enviadas na conversa', () => {
   it('a enviada não entra na seleção nem nas ações', () => {
     montarCom(fioComEnviada);
     fireEvent.click(screen.getByLabelText('selecionar Proposta'));
-    expect(screen.getByText('1 selecionados')).toBeInTheDocument();
+    expect(screen.getByText('1 conversa')).toBeInTheDocument();
   });
 
   // O uid é por caixa: buscar o corpo de uma enviada dentro da entrada traria
@@ -679,7 +683,7 @@ describe('pastas e tela cheia', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Abrir em tela cheia' }));
 
     expect(await screen.findByRole('navigation', { name: 'Pastas' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Clientes/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Clientes,/ })).toBeInTheDocument();
   });
 
   // A pasta escolhida vive na URL: recarregar e voltar caem no mesmo lugar.
@@ -690,7 +694,7 @@ describe('pastas e tela cheia', () => {
     montar();
 
     fireEvent.click(screen.getByRole('button', { name: 'Abrir em tela cheia' }));
-    fireEvent.click(await screen.findByRole('button', { name: /Clientes/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Clientes,/ }));
 
     await waitFor(() =>
       expect(new URLSearchParams(window.location.search).get('mail_folder')).toBe('Clientes'),
@@ -704,7 +708,7 @@ describe('pastas e tela cheia', () => {
     window.history.replaceState(null, '', '/?mail_folder=Clientes&mail_max=1');
     montar();
 
-    fireEvent.click(await screen.findByRole('button', { name: /INBOX/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^INBOX,/ }));
 
     await waitFor(() =>
       expect(new URLSearchParams(window.location.search).get('mail_folder')).toBeNull(),
@@ -726,5 +730,182 @@ describe('pastas e tela cheia', () => {
     montar();
 
     expect(await screen.findByText('pasta não encontrada')).toBeInTheDocument();
+  });
+});
+
+describe('seleção múltipla, arraste e ações de pasta', () => {
+  const ARVORE = [
+    { path: 'INBOX', name: 'INBOX', delimiter: '/', parent: null, specialUse: null, total: 9, unread: 2 },
+    { path: 'Arquivo', name: 'Arquivo', delimiter: '/', parent: null, specialUse: null, total: 4, unread: 40 },
+  ];
+
+  const lista: EmailEnvelope[] = [1, 2, 3, 4].map((n) => ({
+    id: String(n),
+    account: 'mail-1',
+    accountLabel: 'Trabalho',
+    from: 'Remetente',
+    subject: `Mensagem ${n}`,
+    unread: true,
+    date: `2026-08-2${n}T10:00:00Z`,
+    messageId: `<${n}@x>`,
+    references: [],
+    labels: [],
+    mailbox: 'inbox' as const,
+    folder: 'INBOX',
+  }));
+
+  const corpos: string[] = [];
+
+  function mockarRotas() {
+    corpos.length = 0;
+    vi.spyOn(global, 'fetch').mockImplementation(async (url, init) => {
+      const endereco = String(url);
+      if (init?.body) corpos.push(String(init.body));
+      if (endereco.includes('/api/email/mailboxes')) {
+        return new Response(JSON.stringify({ mailboxes: ARVORE }));
+      }
+      if (endereco.includes('/api/email/batch')) {
+        return new Response(JSON.stringify({ results: [] }));
+      }
+      return new Response(JSON.stringify({ folders: [], ok: true, messages: [] }));
+    });
+  }
+
+  /** O jsdom não traz DataTransfer; o arraste só precisa do que o código usa. */
+  function transferencia() {
+    const dados = new Map<string, string>();
+    return {
+      effectAllowed: '',
+      dropEffect: '',
+      get types() {
+        return [...dados.keys()];
+      },
+      setData: (tipo: string, valor: string) => dados.set(tipo, valor),
+      getData: (tipo: string) => dados.get(tipo) ?? '',
+      setDragImage: vi.fn(),
+    };
+  }
+
+  function montar() {
+    render(
+      <EmailPanel
+        onSeenChanged={() => {}}
+        onRemoved={() => {}}
+        mailboxes={[{ id: 'mail-1', label: 'Trabalho' }]}
+        email={{ data: lista, error: null }}
+        onChanged={() => {}}
+      />,
+    );
+  }
+
+  const caixaDe = (n: number) =>
+    screen.getByLabelText(`selecionar Mensagem ${n}`) as HTMLInputElement;
+  const liDe = (n: number) => caixaDe(n).closest('li')!;
+  // O botão do título é o único da linha que anuncia se está aberto.
+  const linhaDe = (n: number) => within(liDe(n)).getAllByRole('button')[0];
+
+  beforeEach(() => mockarRotas());
+
+  it('ctrl+clique soma à seleção sem tirar o que já estava', () => {
+    montar();
+    fireEvent.click(caixaDe(1));
+    fireEvent.click(linhaDe(3), { ctrlKey: true });
+
+    expect(caixaDe(1).checked).toBe(true);
+    expect(caixaDe(3).checked).toBe(true);
+    expect(caixaDe(2).checked).toBe(false);
+  });
+
+  it('anda pela lista com as setas e estende com shift', () => {
+    montar();
+    const listbox = screen.getByRole('listbox', { name: 'conversas' });
+
+    fireEvent.keyDown(listbox, { key: 'ArrowDown' });
+    fireEvent.keyDown(listbox, { key: 'ArrowDown', shiftKey: true });
+
+    // A lista começa pela mais recente: 4 e depois 3.
+    expect(caixaDe(4).checked).toBe(true);
+    expect(caixaDe(3).checked).toBe(true);
+    expect(caixaDe(2).checked).toBe(false);
+  });
+
+  it('seleciona tudo com ctrl+A e limpa com Esc', () => {
+    montar();
+    const listbox = screen.getByRole('listbox', { name: 'conversas' });
+
+    fireEvent.keyDown(listbox, { key: 'a', ctrlKey: true });
+    expect(screen.getByText('4 conversas')).toBeInTheDocument();
+
+    fireEvent.keyDown(listbox, { key: 'Escape' });
+    expect(screen.queryByText('4 conversas')).toBeNull();
+  });
+
+  // Arrastar uma linha da seleção arrasta o lote inteiro.
+  it('leva a seleção inteira no arraste', () => {
+    montar();
+    fireEvent.click(caixaDe(1));
+    fireEvent.click(caixaDe(2));
+
+    const dataTransfer = transferencia();
+    fireEvent.dragStart(liDe(2), { dataTransfer });
+
+    const carga = JSON.parse(dataTransfer.getData('application/x-daily-web-email'));
+    expect(carga.map((m: { id: string }) => m.id).sort()).toEqual(['1', '2']);
+  });
+
+  // Arrastar uma linha de fora da seleção passa a ser a seleção: arrastar uma
+  // coisa e mover outra seria surpresa.
+  it('arrasta só a linha quando ela não estava selecionada', () => {
+    montar();
+    fireEvent.click(caixaDe(1));
+
+    const dataTransfer = transferencia();
+    fireEvent.dragStart(liDe(3), { dataTransfer });
+
+    const carga = JSON.parse(dataTransfer.getData('application/x-daily-web-email'));
+    expect(carga.map((m: { id: string }) => m.id)).toEqual(['3']);
+  });
+
+  it('soltar na pasta move o lote inteiro numa operação', async () => {
+    montar();
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir em tela cheia' }));
+    await screen.findByRole('navigation', { name: 'Pastas' });
+
+    fireEvent.click(caixaDe(1));
+    fireEvent.click(caixaDe(2));
+
+    const dataTransfer = transferencia();
+    fireEvent.dragStart(liDe(2), { dataTransfer });
+    const pasta = screen.getByRole('button', { name: /^Arquivo,/ }).closest('li')!;
+    fireEvent.dragOver(pasta, { dataTransfer });
+    fireEvent.drop(pasta, { dataTransfer });
+
+    await waitFor(() => expect(corpos.some((c) => c.includes('"action":"move"'))).toBe(true));
+    const corpo = JSON.parse(corpos.find((c) => c.includes('"action":"move"'))!);
+    expect(corpo.folder).toBe('Arquivo');
+    expect(corpo.folderPath).toBe('INBOX');
+    expect(corpo.targets.map((t: { id: string }) => t.id).sort()).toEqual(['1', '2']);
+  });
+
+  // Uma pasta grande merece a pergunta: não há como desfazer mensagem a
+  // mensagem depois.
+  it('pergunta antes de marcar uma pasta grande como lida', async () => {
+    montar();
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir em tela cheia' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Marcar Arquivo como lida' }));
+
+    expect(await screen.findByText(/Marcar 40 mensagens como lidas\?/)).toBeInTheDocument();
+    expect(corpos.some((c) => c.includes('folder'))).toBe(false);
+  });
+
+  it('marca a pasta como lida depois da confirmação', async () => {
+    montar();
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir em tela cheia' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Marcar Arquivo como lida' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Marcar como lidas' }));
+
+    await waitFor(() =>
+      expect(corpos.some((c) => c.includes('"folder":"Arquivo"'))).toBe(true),
+    );
   });
 });

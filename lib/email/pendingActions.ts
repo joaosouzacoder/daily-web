@@ -8,7 +8,21 @@ import { getDb } from '@/lib/db';
  * porque a escrita falhou — desfazia a exclusão, e o reinício do serviço
  * apagava tudo que ainda não tinha chegado ao servidor.
  */
-export type PendingKind = 'delete' | 'seen' | 'unseen' | 'move';
+export type PendingKind =
+  | 'delete'
+  | 'seen'
+  | 'unseen'
+  /** Cópia para outra pasta, que no Gmail é o que aplicar uma etiqueta faz:
+   *  a mensagem continua onde estava e ganha mais um rótulo. */
+  | 'tag'
+  /** Mudança de pasta de verdade: a mensagem deixa a origem. */
+  | 'move'
+  /** Vale para a pasta inteira, não para uma mensagem. O `uid` fica vazio. */
+  | 'read_folder';
+
+/** As ações que valem para a pasta toda. Elas não têm uid, e por isso não
+ *  casam com mensagem nenhuma na reconciliação — valem para todas. */
+export const FOLDER_KINDS: PendingKind[] = ['read_folder'];
 
 export type PendingState = 'pending' | 'failed';
 
@@ -23,7 +37,7 @@ export interface PendingAction {
   uidvalidity: string;
   uid: string;
   kind: PendingKind;
-  /** Pasta de destino, no `move`. Nulo nas demais. */
+  /** Pasta de destino, no `tag` e no `move`. Nulo nas demais. */
   payload: string | null;
   createdAt: string;
   /** Quando a escrita chegou ao servidor. Nulo enquanto não chegou. */

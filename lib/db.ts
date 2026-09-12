@@ -354,6 +354,12 @@ function addEmailMessages(instance: Database.Database): void {
   `);
 }
 
+// `move` passou a ser mudança de pasta de verdade; a cópia que o Gmail chama
+// de etiqueta virou `tag`. O que já estava gravado era cópia.
+function renameCopyActionToTag(instance: Database.Database): void {
+  instance.exec("UPDATE email_pending_actions SET action = 'tag' WHERE action = 'move'");
+}
+
 const MIGRATIONS: ((instance: Database.Database) => void)[] = [
   addUserScope,
   addConnections,
@@ -366,6 +372,7 @@ const MIGRATIONS: ((instance: Database.Database) => void)[] = [
   addEmailPendingActions,
   addEmailMailboxes,
   addEmailMessages,
+  renameCopyActionToTag,
 ];
 
 function migrate(instance: Database.Database): void {

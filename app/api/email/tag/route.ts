@@ -34,7 +34,8 @@ export async function POST(request: NextRequest) {
       userId: guard.value.user.id,
       account: guard.value.connection.id,
       uid: body.id,
-      kind: 'move',
+      // Etiquetar é copiar para a pasta: a mensagem fica onde está.
+      kind: 'tag',
       payload: body.tag,
       mailbox,
       // O uid só vale enquanto a numeração da pasta não é reiniciada.

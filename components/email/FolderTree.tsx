@@ -1,6 +1,16 @@
 'use client';
 
-import { Inbox, Send, Trash2, FileText, Archive, AlertOctagon, Folder } from 'lucide-react';
+import { useState } from 'react';
+import {
+  Inbox,
+  Send,
+  Trash2,
+  FileText,
+  Archive,
+  AlertOctagon,
+  Folder,
+  MailOpen,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { MailboxNode } from '@/lib/types';
 
@@ -23,15 +33,33 @@ export function depthOf(node: MailboxNode): number {
   return node.path.split(node.delimiter).length - 1;
 }
 
+/** O tipo que viaja no arraste. Um tipo próprio é o que faz a pasta aceitar a
+ *  soltura de uma linha de e-mail e recusar qualquer outra coisa. */
+export const EMAIL_DRAG_TYPE = 'application/x-daily-web-email';
+
 interface Props {
   mailboxes: MailboxNode[];
   selected: string;
   onSelect: (path: string) => void;
+  /** Soltar as mensagens arrastadas nesta pasta. Ausente, a árvore não aceita
+   *  soltura — é o que vale quando não há nada arrastável na tela. */
+  onDropMessages?: (path: string) => void;
+  onMarkRead?: (node: MailboxNode) => void;
   loading?: boolean;
   error?: string | null;
 }
 
-export function FolderTree({ mailboxes, selected, onSelect, loading = false, error = null }: Props) {
+export function FolderTree({
+  mailboxes,
+  selected,
+  onSelect,
+  onDropMessages,
+  onMarkRead,
+  loading = false,
+  error = null,
+}: Props) {
+  const [alvo, setAlvo] = useState<string | null>(null);
+
   if (error) {
     return (
       <p role="alert" className="px-2 py-3 type-caption text-danger">
@@ -49,11 +77,47 @@ export function FolderTree({ mailboxes, selected, onSelect, loading = false, err
       <ul className="flex flex-col gap-0.5 text-sm">
         {mailboxes.map((node) => {
           const ativa = node.path === selected;
+          const recebendo = alvo === node.path;
           return (
-            <li key={node.path}>
+            <li
+              key={node.path}
+              className={cn(
+                'group/pasta relative flex items-center rounded-md',
+                // A pasta sob o cursor durante o arraste se anuncia: sem isso
+                // não dá para saber onde a soltura vai cair.
+                recebendo && 'bg-brand-tint ring-1 ring-brand-edge',
+              )}
+              onDragOver={
+                onDropMessages
+                  ? (e) => {
+                      // Sem impedir o padrão, o navegador recusa a soltura.
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'move';
+                      setAlvo(node.path);
+                    }
+                  : undefined
+              }
+              onDragLeave={onDropMessages ? () => setAlvo((a) => (a === node.path ? null : a)) : undefined}
+              onDrop={
+                onDropMessages
+                  ? (e) => {
+                      e.preventDefault();
+                      setAlvo(null);
+                      if (e.dataTransfer.types.includes(EMAIL_DRAG_TYPE)) onDropMessages(node.path);
+                    }
+                  : undefined
+              }
+            >
               <button
                 type="button"
                 aria-current={ativa ? 'true' : undefined}
+                // O nome acessível vem daqui: a contagem ao lado é um número
+                // solto, que lido em voz alta não diz o que é.
+                aria-label={
+                  node.unread > 0
+                    ? `${node.name || node.path}, ${node.unread} não lidas`
+                    : node.name || node.path
+                }
                 onClick={() => onSelect(node.path)}
                 style={{ paddingLeft: `${0.5 + depthOf(node) * 0.75}rem` }}
                 className={cn(
@@ -69,6 +133,24 @@ export function FolderTree({ mailboxes, selected, onSelect, loading = false, err
                   </span>
                 )}
               </button>
+              {/* Marcar a pasta inteira como lida. Fica escondido até a pasta
+                  receber o cursor ou o foco, para a árvore não virar uma
+                  parede de botões. */}
+              {onMarkRead && node.unread > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onMarkRead(node)}
+                  title={`Marcar ${node.name || node.path} como lida`}
+                  aria-label={`Marcar ${node.name || node.path} como lida`}
+                  className={cn(
+                    'absolute right-1 rounded-sm p-1 text-ink-dim opacity-0 transition-opacity',
+                    'hover:bg-neutral-tint hover:text-ink focus-visible:opacity-100',
+                    'group-hover/pasta:opacity-100 motion-reduce:transition-none',
+                  )}
+                >
+                  <MailOpen className="size-3.5" />
+                </button>
+              )}
             </li>
           );
         })}

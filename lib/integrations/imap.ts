@@ -653,6 +653,61 @@ async function fetchByUid(
   return envelopes;
 }
 
+/**
+ * Muda a mensagem de pasta de verdade — ela deixa a origem. É o que o arraste
+ * para a árvore de pastas faz, e o contrário de `applyTag`, que copia.
+ */
+export async function moveEmails(
+  conn: Connection,
+  uids: string[],
+  from: string,
+  to: string,
+): Promise<void> {
+  if (from === to) throw new Error('a mensagem já está nessa pasta');
+  const blocos = sequenceSets(uids);
+  await withClient(conn, async (client) => {
+    const lock = await client.getMailboxLock(from);
+    try {
+      for (const bloco of blocos) await client.messageMove(bloco, to, { uid: true });
+    } finally {
+      lock.release();
+    }
+  });
+}
+
+/**
+ * Marca como lida toda a pasta, e não só o que foi trazido para cá: quem pede
+ * isso quer a pasta zerada, inclusive o que está velho demais para ter sido
+ * sincronizado.
+ *
+ * São dois comandos — procurar as não lidas e marcar o conjunto —, nunca um
+ * por mensagem. `limit` é o teto de uma tentativa: o que passar dele fica para
+ * a tentativa seguinte, em vez de segurar a conexão da conta numa rodada só.
+ * Devolve quantas foram marcadas.
+ */
+export async function markFolderRead(
+  conn: Connection,
+  folder: string,
+  limit: number,
+): Promise<number> {
+  return withClient(conn, async (client) => {
+    const lock = await client.getMailboxLock(folder);
+    try {
+      const naoLidas = await client.search({ seen: false }, { uid: true });
+      if (!naoLidas || naoLidas.length === 0) return 0;
+
+      const alvo = naoLidas.slice(0, limit).map(String);
+      for (const bloco of sequenceSets(alvo)) {
+        await client.messageFlagsAdd(bloco, ['\\Seen'], { uid: true });
+      }
+      return alvo.length;
+    } finally {
+      lock.release();
+    }
+  });
+}
+
+
 export interface ReplyTarget {
   to: string;
   subject: string;

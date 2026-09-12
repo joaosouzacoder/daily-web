@@ -3,7 +3,7 @@ import { requireConnection, upstreamError } from '@/lib/api/context';
 import { getMailboxes, isKnownMailbox } from '@/lib/email/mailboxes';
 import { listPendingActions } from '@/lib/email/pendingActions';
 import { syncFolder } from '@/lib/email/sync';
-import { reconcileEnvelopes } from '@/lib/email/reconcile';
+import { confirmAgainstSnapshot, reconcileEnvelopes } from '@/lib/email/reconcile';
 
 /** Teto por leitura. A caixa inteira não cabe numa resposta nem numa tela. */
 const MAX_LIMIT = 100;
@@ -37,7 +37,17 @@ export async function GET(request: NextRequest) {
     // Por diferença: o que chegou desde a última leitura desta pasta, mais a
     // reconferência da janela recente. A pasta inteira não é relida — e uma
     // reindexação do servidor invalida ali as ações que dependiam dos uids.
+    const retratoIniciadoEm = new Date();
     const page = await syncFolder(user.id, connection, folder, limitFrom(params.get('limit')));
+
+    // Abrir a pasta também fecha o ciclo das ações dela: o que o servidor já
+    // reflete sai do caminho, e o que ele contradiz volta para a fila.
+    confirmAgainstSnapshot(
+      user.id,
+      page.envelopes,
+      listPendingActions(user.id),
+      retratoIniciadoEm,
+    );
 
     return NextResponse.json({
       messages: reconcileEnvelopes(page.envelopes, listPendingActions(user.id)),

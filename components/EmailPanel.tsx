@@ -1,8 +1,19 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type {
+  CSSProperties,
+  DragEvent as ReactDragEvent,
+  KeyboardEvent as ReactKeyboardEvent,
+} from 'react';
 import { useEmailView } from '@/lib/hooks/useEmailView';
-import { FolderTree } from '@/components/email/FolderTree';
+import { useReducedMotion } from '@/lib/hooks/useReducedMotion';
+import { FolderTree, EMAIL_DRAG_TYPE } from '@/components/email/FolderTree';
+import {
+  EMPTY_SELECTION,
+  selectionReducer,
+  type SelectionState,
+} from '@/lib/emailSelection';
 import {
   Dialog,
   DialogContent,
@@ -64,6 +75,72 @@ type Sort = 'recent' | 'oldest';
  *  padrão, e o padrão não vai para o link. */
 const INBOX_PATH = 'INBOX';
 
+/** Acima disto, marcar a pasta como lida passa pela confirmação: é uma ação
+ *  que não tem como ser desfeita mensagem por mensagem. */
+const CONFIRMA_ACIMA_DE = 20;
+
+/**
+ * Onde cada linha do maço se recolhe: em direção à que está sendo arrastada,
+ * com um teto para uma seleção longa não atravessar a tela inteira. Quanto
+ * mais longe a linha está, mais fundo ela fica na pilha.
+ */
+function deslocamentoDoMaco(indice: number, arrastada: number): CSSProperties {
+  if (arrastada === -1) return {};
+  const distancia = arrastada - indice;
+  const deslocamento = Math.max(Math.min(distancia * 10, 28), -28);
+  const profundidade = Math.min(Math.abs(distancia), 3);
+  return {
+    transform: `translateY(${deslocamento}px) scale(${1 - profundidade * 0.012})`,
+    zIndex: 10 - profundidade,
+  };
+}
+
+/**
+ * A imagem que segue o cursor: um maço com o assunto de cima e a contagem.
+ * O navegador tira uma foto do elemento no momento da chamada, então ele
+ * precisa estar no documento — e some logo depois.
+ */
+function mocoDeArraste(quantidade: number, titulo: string): [HTMLElement, number, number] {
+  const maco = document.createElement('div');
+  maco.setAttribute('aria-hidden', 'true');
+  maco.style.cssText = [
+    'position:fixed',
+    'top:-1000px',
+    'left:-1000px',
+    'display:flex',
+    'align-items:center',
+    'gap:8px',
+    'max-width:20rem',
+    'padding:8px 12px',
+    'border-radius:10px',
+    'font:500 13px/1.2 system-ui,sans-serif',
+    'color:var(--ink)',
+    'background:var(--surface,#fff)',
+    'border:1px solid var(--brand-edge)',
+    // As duas sombras deslocadas são as folhas de baixo do maço.
+    'box-shadow:0 10px 24px rgba(0,0,0,.18),6px 6px 0 -2px var(--surface,#fff),6px 6px 0 -1px var(--brand-edge),12px 12px 0 -4px var(--surface,#fff),12px 12px 0 -3px var(--brand-edge)',
+  ].join(';');
+
+  const nome = document.createElement('span');
+  nome.textContent = titulo;
+  nome.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+  maco.append(nome);
+
+  if (quantidade > 1) {
+    const contador = document.createElement('span');
+    contador.textContent = String(quantidade);
+    contador.style.cssText =
+      'flex:none;border-radius:999px;background:var(--brand);color:#fff;padding:1px 8px;font-size:12px';
+    maco.append(contador);
+  }
+
+  document.body.append(maco);
+  // A foto é tirada de forma síncrona no dragstart; depois dela o elemento
+  // não serve mais para nada.
+  setTimeout(() => maco.remove(), 0);
+  return [maco, 16, 16];
+}
+
 type AccountFilter = 'all' | string;
 
 function key(m: EmailEnvelope): string {
@@ -96,7 +173,7 @@ async function postJson(url: string, body: unknown) {
 // sucesso ou falha geral da chamada.
 async function postBatch(
   targets: { account: string; id: string }[],
-  action: 'read' | 'unread' | 'delete' | 'move',
+  action: 'read' | 'unread' | 'delete' | 'move' | 'tag',
   folder: string | undefined,
   // A pasta em que as mensagens estão. O uid só identifica dentro de uma.
   folderPath: string,
@@ -124,7 +201,13 @@ export function EmailPanel({
   loading = false,
 }: Props) {
   const { confirm, dialog } = useConfirm();
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  // A seleção é de conversas e vive num redutor puro: clique troca,
+  // ctrl/cmd+clique soma, Shift marca a faixa, e as setas andam pela lista.
+  const [sel, setSel] = useState<SelectionState>(EMPTY_SELECTION);
+  // A conversa sendo arrastada. Enquanto ela existe, as selecionadas se
+  // juntam num maço, para ficar claro que a operação é do lote inteiro.
+  const [arrastando, setArrastando] = useState<string | null>(null);
+  const semMovimento = useReducedMotion();
 
   // Pasta, busca, filtro, ordenação, mensagem aberta e tela cheia vivem na
   // URL: recarregar, voltar e mandar o link para si mesmo caem no mesmo lugar.
@@ -165,6 +248,9 @@ export function EmailPanel({
   const [remote, setRemote] = useState<EmailEnvelope[] | null>(null);
   const [remoteLoading, setRemoteLoading] = useState(false);
   const [remoteError, setRemoteError] = useState<string | null>(null);
+  // Sobe depois de uma ação para a pasta aberta ser lida de novo: a lista dela
+  // não passa pelo ciclo do painel.
+  const [folderNonce, setFolderNonce] = useState(0);
 
   // A pasta que a tela está mostrando, no caminho que o servidor usa.
   const pastaDasMensagens = view.folder || INBOX_PATH;
@@ -194,7 +280,7 @@ export function EmailPanel({
     onSeenChanged(alvos, true);
     setTagMenuKey(null);
 
-    const failed = (await postBatch(alvos, 'move', tag, pastaDasMensagens)).filter((r) => !r.ok);
+    const failed = (await postBatch(alvos, 'tag', tag, pastaDasMensagens)).filter((r) => !r.ok);
     if (failed.length > 0) {
       setBatchError(failed[0].error ?? 'Falha ao aplicar etiqueta');
       onChanged();
@@ -313,7 +399,7 @@ export function EmailPanel({
     return () => {
       cancelado = true;
     };
-  }, [pastaAtual, treeAccount]);
+  }, [pastaAtual, treeAccount, folderNonce]);
 
   const all = useMemo(
     () => (pastaAtual ? (remote ?? []) : (email.data ?? [])),
@@ -347,6 +433,17 @@ export function EmailPanel({
     );
   }, [visible, sort]);
 
+  // A ordem da lista é o que dá sentido a "a faixa daqui até ali".
+  const ordemThreads = useMemo(() => threads.map((t) => t.id), [threads]);
+
+  // O ciclo traz mensagens novas e leva as que sumiram: o que não está mais
+  // na tela sai da seleção em vez de mandar o lote para o vazio.
+  useEffect(() => {
+    setSel((atual) => selectionReducer(atual, { type: 'sync' }, ordemThreads));
+  }, [ordemThreads]);
+
+  const selecionadas = useMemo(() => new Set(sel.selected), [sel.selected]);
+
   const activeFilters: ActiveFilter[] = [
     ...(query.trim() ? [{ id: 'query', label: `Busca: ${query.trim()}` }] : []),
     ...(onlyUnread ? [{ id: 'unread', label: 'Não lidos' }] : []),
@@ -367,60 +464,78 @@ export function EmailPanel({
     setAccount('all');
   };
 
-  // Âncora do intervalo: no Gmail, Shift+clique marca do último clicado até
-  // aqui. Sem guardar qual foi o último, não há de onde partir.
-  const ancora = useRef<string | null>(null);
-
-  // Marcar uma conversa marca as mensagens dela: a seleção continua sendo de
-  // mensagens, que é o que as ações do lote recebem.
+  // Marcar uma conversa marca as mensagens dela: as ações do lote recebem
+  // mensagens, que é o que o servidor sabe endereçar.
   //
-  // Só as recebidas. As ações do lote falam com a INBOX, e o uid dos enviados
-  // aponta para outra mensagem lá dentro — além de que apagar a conversa não
-  // deve apagar a sua própria cópia do que você escreveu.
+  // Só as recebidas. O uid dos enviados aponta para outra mensagem dentro da
+  // pasta de origem — e apagar a conversa não deve apagar a sua própria cópia
+  // do que você escreveu.
   const recebidas = (t: EmailThread) => t.messages.filter((m) => m.mailbox === 'inbox');
   const threadKeys = (t: EmailThread) => recebidas(t).map(key);
 
-  const toggleSelect = (thread: EmailThread, shift: boolean) => {
-    const indice = threads.findIndex((t) => t.id === thread.id);
-    // A âncora é lida agora, e não dentro do updater: o React chama o updater
-    // depois, quando `ancora.current` já é o item recém-clicado — e aí o
-    // intervalo teria só um item.
-    const inicio = ancora.current === null ? -1 : threads.findIndex((t) => t.id === ancora.current);
+  const selectedKeys = useMemo(() => {
+    const chaves = new Set<string>();
+    for (const t of threads) {
+      if (!selecionadas.has(t.id)) continue;
+      for (const k of threadKeys(t)) chaves.add(k);
+    }
+    return chaves;
+  }, [threads, selecionadas]);
 
-    setSelected((prev) => {
-      const next = new Set(prev);
-      const marcar = !threadKeys(thread).every((k) => next.has(k));
-      const aplicar = (t: EmailThread) => {
-        for (const k of threadKeys(t)) {
-          if (marcar) next.add(k);
-          else next.delete(k);
-        }
-      };
+  const despachar = (evento: Parameters<typeof selectionReducer>[1]) => {
+    setSel((atual) => selectionReducer(atual, evento, ordemThreads));
+  };
 
-      if (shift && inicio !== -1 && indice !== -1) {
-        // O intervalo assume o estado do alvo, como no Gmail: marcar um não
-        // marcado marca a faixa toda, desmarcar desmarca a faixa toda.
-        const [de, ate] = inicio <= indice ? [inicio, indice] : [indice, inicio];
-        for (let i = de; i <= ate; i += 1) aplicar(threads[i]);
-        return next;
-      }
+  // O checkbox sempre alterna; Shift nele continua marcando a faixa.
+  const aoMarcar = (thread: EmailThread, e: { shiftKey: boolean }) => {
+    if (e.shiftKey) despachar({ type: 'click', id: thread.id, shift: true });
+    else despachar({ type: 'toggle', id: thread.id });
+  };
 
-      aplicar(thread);
-      return next;
+  const aoClicarNaLinha = (
+    thread: EmailThread,
+    e: { shiftKey: boolean; metaKey: boolean; ctrlKey: boolean },
+  ) => {
+    despachar({
+      type: 'click',
+      id: thread.id,
+      shift: e.shiftKey,
+      meta: e.metaKey || e.ctrlKey,
     });
+  };
 
-    // A âncora anda mesmo com Shift, para intervalos encadeados funcionarem.
-    ancora.current = thread.id;
+  const aoTeclar = (e: ReactKeyboardEvent<HTMLUListElement>) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      despachar({ type: 'move', direction: e.key === 'ArrowDown' ? 1 : -1, extend: e.shiftKey });
+      return;
+    }
+    if (e.key === ' ' && sel.cursor) {
+      e.preventDefault();
+      despachar({ type: 'toggle', id: sel.cursor });
+      return;
+    }
+    if (e.key.toLowerCase() === 'a' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      despachar({ type: 'all' });
+      return;
+    }
+    if (e.key === 'Escape' && sel.selected.length > 0) {
+      // Com algo selecionado, Esc limpa a seleção e para aí: deixá-lo subir
+      // fecharia a tela cheia junto, que não foi o que se pediu.
+      e.stopPropagation();
+      despachar({ type: 'clear' });
+    }
   };
 
   useEffect(() => {
-    if (selected.size === 0) {
+    if (selectedKeys.size === 0) {
       setFolders([]);
       setTargetFolder('');
       return;
     }
     const accounts = Array.from(
-      new Set(all.filter((m) => selected.has(key(m))).map((m) => m.account)),
+      new Set(all.filter((m) => selectedKeys.has(key(m))).map((m) => m.account)),
     );
     let cancelled = false;
     Promise.all(
@@ -444,18 +559,22 @@ export function EmailPanel({
     return () => {
       cancelled = true;
     };
-  }, [selected, all]);
+  }, [selectedKeys, all]);
 
-  const runBatch = async (action: 'read' | 'unread' | 'delete' | 'move', folder?: string) => {
+  const runBatch = async (
+    action: 'read' | 'unread' | 'delete' | 'move' | 'tag',
+    folder?: string,
+  ) => {
     const targets = all
-      .filter((m) => selected.has(key(m)))
+      .filter((m) => selectedKeys.has(key(m)))
       .map((m) => ({ account: m.account, id: m.id }));
     if (targets.length === 0) return;
 
     // A seleção reage na hora; o que falhar volta na correção abaixo.
     if (action === 'read') onSeenChanged(targets, true);
     else if (action === 'unread') onSeenChanged(targets, false);
-    else if (action === 'delete') onRemoved(targets);
+    // Movida deixa a pasta de origem; etiquetada é uma cópia e fica.
+    else if (action === 'delete' || action === 'move') onRemoved(targets);
     else onSeenChanged(targets, true);
 
     const results = await postBatch(targets, action, folder, pastaDasMensagens);
@@ -466,21 +585,104 @@ export function EmailPanel({
           .map((f) => `${f.account}:${f.id}${f.error ? ` (${f.error})` : ''}`)
           .join(', ')}`,
       );
-      setSelected(new Set(failed.map((f) => `${f.account}:${f.id}`)));
+      // Volta selecionado o que não foi feito: é o que se tenta de novo.
+      const chavesComFalha = new Set(failed.map((f) => `${f.account}:${f.id}`));
+      const comFalha = threads
+        .filter((t) => threadKeys(t).some((k) => chavesComFalha.has(k)))
+        .map((t) => t.id);
+      setSel({ selected: comFalha, anchor: comFalha[0] ?? null, cursor: comFalha[0] ?? null });
       // Alguma coisa não foi feita: o servidor é quem sabe o estado real.
       onChanged();
       return;
     }
     setBatchError(null);
-    setSelected(new Set());
+    setSel(EMPTY_SELECTION);
+    // A pasta aberta não passa pelo ciclo do painel: ela é relida aqui.
+    if (pastaAtual) setFolderNonce((n) => n + 1);
   };
+
+  /**
+   * Arrastar uma linha arrasta o lote. Uma linha de fora da seleção passa a
+   * ser a seleção — arrastar uma coisa e mover outra seria surpresa.
+   */
+  const aoComecarArraste = (thread: EmailThread, e: ReactDragEvent<HTMLElement>) => {
+    let alvos = sel.selected;
+    if (!selecionadas.has(thread.id)) {
+      alvos = [thread.id];
+      despachar({ type: 'click', id: thread.id });
+    }
+
+    const mensagens = threads
+      .filter((t) => alvos.includes(t.id))
+      .flatMap((t) => recebidas(t))
+      .map((m) => ({ account: m.account, id: m.id }));
+    if (mensagens.length === 0) {
+      e.preventDefault();
+      return;
+    }
+
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData(EMAIL_DRAG_TYPE, JSON.stringify(mensagens));
+    e.dataTransfer.setDragImage(...mocoDeArraste(alvos.length, thread.subject || '(sem assunto)'));
+    setArrastando(thread.id);
+  };
+
+  const aoTerminarArraste = () => setArrastando(null);
+
+  const soltarNaPasta = async (destino: string) => {
+    const anterior = arrastando;
+    setArrastando(null);
+    if (destino === pastaDasMensagens) {
+      setBatchError('A mensagem já está nessa pasta.');
+      return;
+    }
+    // A soltura usa o mesmo caminho de lote das demais ações: o pedido fica
+    // gravado antes de sair daqui, e uma falha aparece na linha.
+    if (anterior && !selecionadas.has(anterior)) despachar({ type: 'click', id: anterior });
+    await runBatch('move', destino);
+  };
+
+  const marcarPastaLida = async (node: MailboxNode) => {
+    // Uma pasta grande merece a pergunta: é uma ação que não tem como desfazer
+    // mensagem por mensagem.
+    if (node.unread >= CONFIRMA_ACIMA_DE) {
+      const ok = await confirm({
+        title: `Marcar ${node.unread} mensagens como lidas?`,
+        description: `Vale para a pasta ${node.name || node.path} inteira, inclusive o que ainda não foi carregado aqui.`,
+        confirmLabel: 'Marcar como lidas',
+      });
+      if (!ok) return;
+    }
+
+    setBatchError(null);
+    const res = await fetch('/api/email/folder/read', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account: treeAccount, folder: node.path }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setBatchError(data.error ?? 'Não deu para marcar a pasta como lida');
+      return;
+    }
+    setMailboxNodes((atual) =>
+      atual.map((m) => (m.path === node.path ? { ...m, unread: 0 } : m)),
+    );
+    if (pastaAtual === node.path) setFolderNonce((n) => n + 1);
+    onChanged();
+  };
+
+  // A linha que puxa o maço. As outras selecionadas se recolhem até ela.
+  const indiceArrastada = arrastando === null ? -1 : ordemThreads.indexOf(arrastando);
 
   const openMessageData = all.find((m) => key(m) === openKey) ?? null;
 
   const acoesEmLote =
-    selected.size > 0 ? (
+    sel.selected.length > 0 ? (
       <>
-        <span className={cn('text-sm text-ink-dim', tabular)}>{selected.size} selecionados</span>
+        <span className={cn('text-sm text-ink-dim', tabular)}>
+          {sel.selected.length} {sel.selected.length === 1 ? 'conversa' : 'conversas'}
+        </span>
         <IconAction
           variant="outline"
           label="Marcar lido"
@@ -589,21 +791,51 @@ export function EmailPanel({
         )}
 
         {threads.length > 0 && (
-          <ul className="text-sm">
-            {threads.map((thread) => {
+          <ul
+            className={cn('text-sm', focusRing)}
+            // A lista inteira recebe o foco: daí as setas andam, o espaço
+            // marca e Ctrl/Cmd+A pega tudo que está visível.
+            tabIndex={0}
+            role="listbox"
+            aria-multiselectable
+            aria-label="conversas"
+            onKeyDown={aoTeclar}
+          >
+            {threads.map((thread, indice) => {
               // Uma conversa de uma mensagem abre direto no corpo: expandir para
               // clicar de novo seria um passo a mais para o caso mais comum.
               const sozinha = thread.messages.length === 1 ? thread.messages[0] : null;
               const enviadas = thread.messages.length - recebidas(thread).length;
               const isOpen = sozinha ? key(sozinha) === openKey : expanded.has(thread.id);
-              const marcada = threadKeys(thread).every((k) => selected.has(k));
+              const marcada = selecionadas.has(thread.id);
               const titulo = thread.subject || '(sem assunto)';
               const tags = threadTags(thread, appliedTags[thread.id] ?? []);
               // A ação que esgotou as tentativas não some em silêncio: a mensagem
               // continua na caixa do servidor e o erro é o que explica por quê.
               const acaoComErro = thread.messages.find((m) => m.actionError)?.actionError ?? null;
+              const noMaco = arrastando !== null && marcada;
+              const cursorAqui = sel.cursor === thread.id;
               return (
-                <li key={thread.id} className={cn('rounded-lg', isOpen && 'bg-brand-tint')}>
+                <li
+                  key={thread.id}
+                  className={cn(
+                    'rounded-lg',
+                    isOpen && 'bg-brand-tint',
+                    // Durante o arraste as selecionadas se recolhem umas sobre
+                    // as outras: o que sai da tela é um maço, não uma linha.
+                    'transition-transform duration-150 ease-brand motion-reduce:transition-none',
+                  )}
+                  // Quem pediu menos movimento não recebe o recolhimento: a
+                  // seleção continua visível pela cor e pelo anel.
+                  style={
+                    noMaco && !semMovimento
+                      ? deslocamentoDoMaco(indice, indiceArrastada)
+                      : undefined
+                  }
+                  draggable
+                  onDragStart={(e) => aoComecarArraste(thread, e)}
+                  onDragEnd={aoTerminarArraste}
+                >
                   <div
                     className={cn(
                       // `row` and `row-unread` stay as behavioural markers: the suite
@@ -611,6 +843,10 @@ export function EmailPanel({
                       'row flex items-center gap-3 border-b border-line-soft px-2 py-3 transition-colors duration-100 ease-brand even:bg-muted/25 motion-reduce:transition-none',
                       isOpen ? 'bg-brand-tint' : 'hover:bg-brand-tint',
                       thread.unreadCount > 0 && 'row-unread',
+                      marcada && 'bg-brand-tint/70',
+                      // Onde o teclado está, para a seta não andar às cegas.
+                      cursorAqui && 'ring-1 ring-inset ring-brand-edge',
+                      noMaco && 'opacity-70 shadow-e2',
                     )}
                   >
                     <span
@@ -627,7 +863,7 @@ export function EmailPanel({
                       onChange={() => {}}
                       // O checkbox nativo não conta se o Shift estava
                       // pressionado no `change`; o clique, sim.
-                      onClick={(e) => toggleSelect(thread, e.shiftKey)}
+                      onClick={(e) => aoMarcar(thread, e)}
                       aria-label={`selecionar ${titulo}`}
                     />
                     <button
@@ -637,7 +873,13 @@ export function EmailPanel({
                         focusRing,
                       )}
                       aria-expanded={isOpen}
-                      onClick={() => {
+                      onClick={(e) => {
+                        // Com modificador o clique é seleção; sem ele, a linha
+                        // abre a mensagem como sempre abriu.
+                        if (e.shiftKey || e.metaKey || e.ctrlKey) {
+                          aoClicarNaLinha(thread, e);
+                          return;
+                        }
                         if (sozinha) {
                           setOpenKey(isOpen ? null : key(sozinha));
                           if (!isOpen) void loadTagFolders(sozinha.account);
@@ -840,6 +1082,8 @@ export function EmailPanel({
       mailboxes={mailboxNodes}
       selected={view.folder || INBOX_PATH}
       onSelect={abrirPasta}
+      onDropMessages={(path) => void soltarNaPasta(path)}
+      onMarkRead={(node) => void marcarPastaLida(node)}
       loading={foldersLoading}
       error={foldersError}
     />
@@ -851,13 +1095,30 @@ export function EmailPanel({
       count={activeFilters.length > 0 ? `${visible.length} de ${all.length}` : undefined}
       actions={actions}
     >
-      {conteudo}
+      {/* Em tela cheia o conteúdo vive no diálogo. Montá-lo aqui também
+          duplicaria a lista inteira na árvore de acessibilidade e faria as
+          duas cópias buscarem a mesma pasta. */}
+      {view.maximized ? (
+        <p className="type-caption text-ink-dim">A caixa está aberta em tela cheia.</p>
+      ) : (
+        conteudo
+      )}
       {dialog}
 
       {/* Em tela cheia o painel vira o aplicativo inteiro: as pastas de um
           lado, a lista do outro, e a mensagem abre dentro dela. */}
       <Dialog open={view.maximized} onOpenChange={(aberto) => setView({ maximized: aberto })}>
-        <DialogContent className="flex h-[calc(100dvh-2rem)] w-full flex-col gap-3 sm:max-w-[min(84rem,calc(100%-2rem))]">
+        <DialogContent
+          className="flex h-[calc(100dvh-2rem)] w-full flex-col gap-3 sm:max-w-[min(84rem,calc(100%-2rem))]"
+          // Com algo selecionado, Esc limpa a seleção e para aí. O diálogo
+          // ouve a tecla na captura, no documento: só o gancho dele consegue
+          // chegar antes.
+          onEscapeKeyDown={(e) => {
+            if (sel.selected.length === 0) return;
+            e.preventDefault();
+            despachar({ type: 'clear' });
+          }}
+        >
           <DialogHeader>
             <DialogTitle className="truncate">{tituloDaPasta}</DialogTitle>
             <DialogDescription className="sr-only">

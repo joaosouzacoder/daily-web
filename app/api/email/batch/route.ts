@@ -15,15 +15,21 @@ interface Target {
   id: unknown;
 }
 
-const VALID_ACTIONS = ['read', 'unread', 'move', 'delete'] as const;
+// `move` tira a mensagem da pasta de origem; `tag` é a cópia que o Gmail
+// chama de etiqueta, e que deixa a mensagem onde estava.
+const VALID_ACTIONS = ['read', 'unread', 'move', 'tag', 'delete'] as const;
 type Action = (typeof VALID_ACTIONS)[number];
 
 const KIND: Record<Action, PendingKind> = {
   read: 'seen',
   unread: 'unseen',
   move: 'move',
+  tag: 'tag',
   delete: 'delete',
 };
+
+/** As ações que precisam de uma pasta de destino. */
+const PRECISA_DESTINO: Action[] = ['move', 'tag'];
 
 interface BatchTargetResult {
   account: string;
@@ -49,7 +55,7 @@ export async function POST(request: NextRequest) {
   if (!(VALID_ACTIONS as readonly string[]).includes(action)) {
     return NextResponse.json({ error: 'ação inválida' }, { status: 400 });
   }
-  if (action === 'move' && !isValidFolder(folder)) {
+  if (PRECISA_DESTINO.includes(action) && !isValidFolder(folder)) {
     return NextResponse.json({ error: 'pasta obrigatória' }, { status: 400 });
   }
 
@@ -87,12 +93,26 @@ export async function POST(request: NextRequest) {
       continue;
     }
 
+    // O destino também vem da tela: só uma pasta que o servidor declarou.
+    if (
+      PRECISA_DESTINO.includes(action) &&
+      !isKnownMailbox(auth.value.id, connection.id, folder as string)
+    ) {
+      results.push({ account, id, ok: false, error: 'pasta de destino não encontrada' });
+      continue;
+    }
+    // Mover para onde a mensagem já está não é uma operação.
+    if (action === 'move' && folder === mailbox) {
+      results.push({ account, id, ok: false, error: 'a mensagem já está nessa pasta' });
+      continue;
+    }
+
     recordPendingAction({
       userId: auth.value.id,
       account: connection.id,
       uid: id,
       kind: KIND[action],
-      payload: action === 'move' ? (folder as string) : null,
+      payload: PRECISA_DESTINO.includes(action) ? (folder as string) : null,
       mailbox,
       // O uid só vale enquanto a numeração da pasta não é reiniciada.
       uidvalidity: getMailboxUidValidity(auth.value.id, connection.id, mailbox),
