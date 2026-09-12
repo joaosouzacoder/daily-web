@@ -51,7 +51,7 @@ import { MarkdownView } from './MarkdownView';
 import { NoteTree, ALL_KEY, NONE_KEY, type Scope } from './notes/NoteTree';
 import { NoteSearchResults } from './notes/NoteSearchResults';
 import { searchNotes } from '@/lib/notesSearch';
-import { descendantIds } from '@/lib/notesTree';
+import { descendantIds, folderPath } from '@/lib/notesTree';
 import {
   applyEdit,
   continueList,
@@ -399,6 +399,9 @@ export function NotesPanel() {
     setRascunho('');
     // A nota nova precisa estar à vista para ser renomeada.
     abrir(nota.folderId ?? NONE_KEY);
+    // Criar uma nota é para escrever nela: o foco vai ao texto assim que o
+    // campo existir, no painel ou no diálogo.
+    requestAnimationFrame(() => campoAtual()?.focus());
   };
 
   const apagar = async (note: Note) => {
@@ -690,10 +693,48 @@ export function NotesPanel() {
     </p>
   );
 
+  /** Criar pasta e criar nota. Ficam no cabeçalho do cartão e, em tela
+   *  cheia, no topo da árvore — de onde o diálogo não sai para ninguém
+   *  alcançar o cabeçalho que ficou atrás dele. Uma cópia de cada vez: as
+   *  duas montadas ao mesmo tempo seriam dois alvos para o mesmo atalho. */
+  const acoes = (
+    <div className="flex items-center gap-1">
+      <IconAction
+        variant="outline"
+        label="Nova pasta"
+        onClick={() => void criarPasta(pastaDoEscopo)}
+        icon={<FolderPlus className="size-4" />}
+      />
+      <IconAction
+        variant="outline"
+        label="Nova nota"
+        onClick={() => void criar()}
+        icon={<Plus className="size-4" />}
+      />
+    </div>
+  );
+
+  /** Onde a nota ou a pasta nova vai cair, dito com todas as letras: o
+   *  cabeçalho do cartão não aparece em tela cheia, e sem isto a criação
+   *  seria às cegas. */
+  const contexto =
+    escopo.kind === 'folder'
+      ? (folderPath(folders, escopo.id).join(' / ') || 'Sem pasta')
+      : 'Sem pasta';
+
   /** A barra lateral: busca em cima, e embaixo a árvore ou os resultados.
-   *  Só ela rola — o painel inteiro fica parado. */
-  const lateral = (
+   *  Só ela rola — o painel inteiro fica parado. `comAcoes` acrescenta o
+   *  cabeçalho de criar, que é o que falta em tela cheia. */
+  const lateral = (comAcoes: boolean) => (
     <aside className="flex max-h-[45vh] min-h-0 flex-col gap-2 overflow-hidden md:max-h-full md:border-r md:border-line-soft md:pr-2">
+      {comAcoes && (
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line-soft pb-2">
+          <p className="min-w-0 truncate type-caption text-ink-dim">
+            Criar em: <span className="text-ink-mid">{contexto}</span>
+          </p>
+          {acoes}
+        </div>
+      )}
       <div className="flex shrink-0 flex-col gap-1">
         {/* O campo é feito para uma barra horizontal: a base dele é largura,
             e numa coluna viraria altura. */}
@@ -749,23 +790,6 @@ export function NotesPanel() {
     </aside>
   );
 
-  const acoes = (
-    <div className="flex items-center gap-1">
-      <IconAction
-        variant="outline"
-        label="Nova pasta"
-        onClick={() => void criarPasta(pastaDoEscopo)}
-        icon={<FolderPlus className="size-4" />}
-      />
-      <IconAction
-        variant="outline"
-        label="Nova nota"
-        onClick={() => void criar()}
-        icon={<Plus className="size-4" />}
-      />
-    </div>
-  );
-
   const vazio = !carregando && notes.length === 0 && folders.length === 0;
 
   return (
@@ -773,7 +797,7 @@ export function NotesPanel() {
       className="min-h-0"
       eyebrow="Notas rápidas"
       count={notes.length > 0 ? String(notes.length) : undefined}
-      actions={acoes}
+      actions={maximizada ? undefined : acoes}
     >
       {erro && <PanelError>{erro}</PanelError>}
 
@@ -792,7 +816,7 @@ export function NotesPanel() {
         >
           {/* Em tela cheia a lista é a do diálogo: duas iguais na mesma
               página seriam dois alvos para a mesma ação. */}
-          {barraAberta && !maximizada && lateral}
+          {barraAberta && !maximizada && lateral(false)}
 
           <div className="flex min-h-0 flex-col gap-2 overflow-hidden">
             {barra(false)}
@@ -835,13 +859,16 @@ export function NotesPanel() {
               Nota em tela cheia. Esc volta ao painel.
             </DialogDescription>
           </DialogHeader>
+          {/* O mesmo aviso do cartão: um limite estourado ao criar aqui
+              dentro não pode aparecer só atrás do diálogo. */}
+          {erro && <PanelError>{erro}</PanelError>}
           <div
             className={cn(
               'grid min-h-0 flex-1 gap-4 overflow-hidden',
               barraAberta && 'md:grid-cols-[minmax(220px,20rem)_1fr]',
             )}
           >
-            {barraAberta && lateral}
+            {barraAberta && lateral(true)}
             <div className="flex min-h-0 flex-col gap-2 overflow-hidden">
               {barra(true)}
               {corpo(true)}

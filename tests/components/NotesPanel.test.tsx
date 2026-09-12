@@ -440,6 +440,130 @@ describe('NotesPanel', () => {
     });
   });
 
+  describe('criar de dentro da tela cheia', () => {
+    async function abrirTelaCheia() {
+      await screen.findByLabelText('texto de Ideias');
+      fireEvent.click(screen.getByRole('button', { name: 'Maximizar' }));
+      return screen.findByRole('dialog');
+    }
+
+    it('as ações de criar vão para o diálogo, e o cartão atrás não fica com uma segunda cópia', async () => {
+      responder([nota({ id: '1', title: 'Ideias' })]);
+      render(<NotesPanel />);
+      const dialogo = await abrirTelaCheia();
+
+      expect(within(dialogo).getByRole('button', { name: 'Nova nota' })).toBeInTheDocument();
+      expect(within(dialogo).getByRole('button', { name: 'Nova pasta' })).toBeInTheDocument();
+      // Uma cópia de cada, não duas: o cabeçalho do cartão devolve as suas
+      // enquanto o diálogo está aberto.
+      expect(screen.getAllByRole('button', { name: 'Nova nota' })).toHaveLength(1);
+      expect(screen.getAllByRole('button', { name: 'Nova pasta' })).toHaveLength(1);
+    });
+
+    it('a nota criada no diálogo nasce na pasta selecionada e vira a nota aberta', async () => {
+      responder([nota({ id: '1', title: 'Ideias' })], undefined, [
+        pasta({ id: 'p1', name: 'Trabalho' }),
+      ]);
+      render(<NotesPanel />);
+      const dialogo = await abrirTelaCheia();
+
+      fireEvent.click(within(dialogo).getByRole('button', { name: 'Trabalho' }));
+      fireEvent.click(within(dialogo).getByRole('button', { name: 'Nova nota' }));
+
+      await waitFor(() =>
+        expect(chamadas.find((c) => c.url === '/api/notes' && c.method === 'POST')?.body).toEqual({
+          title: 'Nota 2',
+          folderId: 'p1',
+        }),
+      );
+      // O diálogo continua aberto, agora com a nota nova.
+      expect(await within(dialogo).findByLabelText('texto de Nota 2')).toBeInTheDocument();
+    });
+
+    it('sem pasta selecionada, a nota nasce em "Sem pasta"', async () => {
+      responder([nota({ id: '1', title: 'Ideias' })], undefined, [pasta({ id: 'p1' })]);
+      render(<NotesPanel />);
+      const dialogo = await abrirTelaCheia();
+
+      fireEvent.click(within(dialogo).getByRole('button', { name: 'Nova nota' }));
+
+      await waitFor(() =>
+        expect(
+          (chamadas.find((c) => c.url === '/api/notes' && c.method === 'POST')?.body as {
+            folderId: string | null;
+          }).folderId,
+        ).toBeNull(),
+      );
+    });
+
+    it('criar no diálogo grava antes o que estava sendo digitado', async () => {
+      responder([nota({ id: '1', title: 'Ideias' })]);
+      render(<NotesPanel />);
+      const dialogo = await abrirTelaCheia();
+
+      fireEvent.change(within(dialogo).getByLabelText('texto de Ideias'), {
+        target: { value: 'não pode sumir' },
+      });
+      fireEvent.click(within(dialogo).getByRole('button', { name: 'Nova nota' }));
+
+      await waitFor(() => {
+        const patch = chamadas.find((c) => c.method === 'PATCH');
+        expect(patch?.url).toContain('/1');
+        expect(patch?.body).toEqual({ body: 'não pode sumir' });
+      });
+    });
+
+    it('a pasta criada no diálogo nasce sob a selecionada e já abre para o nome', async () => {
+      responder([nota({ id: '1', title: 'Ideias' })], undefined, [
+        pasta({ id: 'p1', name: 'Trabalho' }),
+      ]);
+      render(<NotesPanel />);
+      const dialogo = await abrirTelaCheia();
+
+      fireEvent.click(within(dialogo).getByRole('button', { name: 'Trabalho' }));
+      fireEvent.click(within(dialogo).getByRole('button', { name: 'Nova pasta' }));
+
+      await waitFor(() =>
+        expect(chamadas.find((c) => c.url === '/api/notes/folders')?.body).toEqual({
+          name: 'Nova pasta',
+          parentId: 'p1',
+        }),
+      );
+      expect(await within(dialogo).findByLabelText('renomear pasta Nova pasta')).toBeInTheDocument();
+    });
+
+    it('o limite estourado ao criar aparece dentro do diálogo', async () => {
+      responder([nota({ id: '1', title: 'Ideias' })]);
+      const original = globalThis.fetch as typeof fetch;
+      vi.stubGlobal('fetch', async (input: RequestInfo, init?: RequestInit) => {
+        if (String(input) === '/api/notes/folders' && init?.method === 'POST') {
+          return new Response(JSON.stringify({ error: 'o limite é de 100 pastas' }), {
+            status: 400,
+          });
+        }
+        return original(input, init);
+      });
+      render(<NotesPanel />);
+      const dialogo = await abrirTelaCheia();
+
+      fireEvent.click(within(dialogo).getByRole('button', { name: 'Nova pasta' }));
+
+      expect(await within(dialogo).findByText(/o limite é de 100 pastas/)).toBeInTheDocument();
+    });
+
+    it('diz em qual pasta a criação vai cair', async () => {
+      responder([nota({ id: '1', title: 'Ideias' })], undefined, [
+        pasta({ id: 'p1', name: 'Trabalho' }),
+      ]);
+      render(<NotesPanel />);
+      const dialogo = await abrirTelaCheia();
+
+      expect(within(dialogo).getByText(/Criar em:/)).toHaveTextContent('Sem pasta');
+      fireEvent.click(within(dialogo).getByRole('button', { name: 'Trabalho' }));
+      expect(within(dialogo).getByText(/Criar em:/)).toHaveTextContent('Trabalho');
+    });
+  });
+
   describe('tela cheia', () => {
     it('maximizar abre a nota num diálogo, com editor e barra', async () => {
       responder([nota({ id: '1', title: 'Ideias', body: 'texto' })]);

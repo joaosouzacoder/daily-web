@@ -8,6 +8,20 @@ Only `main` is maintained; there are no release branches.
 
 ## [Unreleased]
 
+### Added
+- A note and a folder can be created from inside the maximized notes view.
+  The tree in the dialog now has a header with the same two actions the card
+  has, and a line saying where the new thing will land — "Criar em: Trabalho /
+  Clientes" — because the card's header is behind the dialog and the creation
+  would otherwise be blind. The note is created in the selected folder, or
+  with no folder when the context is "Todas as notas" or "Sem pasta"; it
+  becomes the active note with the cursor already in the text, and the dialog
+  stays open. The folder is created under the selected one, or at the root,
+  and opens for its name right away, with the same limits and the same errors
+  as the card — which are now also shown inside the dialog. Whatever was being
+  typed is saved before the new note takes over. While the dialog is open the
+  card hands its own two buttons over, so there is one of each on screen.
+
 ### Fixed
 - A note created outside the notes panel — from an e-mail, today — now shows
   up in the panel without reloading the page. The panel reads `/api/notes`
