@@ -129,6 +129,21 @@ function Field({
   );
 }
 
+/**
+ * A superfície dos cartões internos — a conexão listada e o formulário. Vidro
+ * sobre o fundo em degradê, e não uma cor sólida: no tema escuro `surface-1`
+ * é quase preto e transformava cada cartão num retângulo cego dentro do
+ * painel. O mesmo recorte serve a todos os módulos, então E-mail, Agenda,
+ * Jira e o resto ficam iguais entre si.
+ */
+const innerSurface =
+  'rounded-lg border border-line-soft bg-glass shadow-e1 backdrop-blur-sm backdrop-saturate-150 transition-[background-color,border-color] duration-100 ease-brand motion-reduce:transition-none';
+
+/** O cartão reage ao cursor e ao foco de qualquer controle dentro dele — sem
+ *  isso, a borda de foco do botão era a única pista de onde se está. */
+const innerSurfaceInteractive =
+  'hover:border-line-strong hover:bg-glass-strong focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/40';
+
 export function IntegrationsPanel() {
   const { confirm, dialog } = useConfirm();
   const [payload, setPayload] = useState<Payload | null>(null);
@@ -426,7 +441,11 @@ export function IntegrationsPanel() {
                   return (
                     <li
                       key={conn.id}
-                      className="flex flex-wrap items-center gap-3 rounded-lg border bg-surface-1 p-3"
+                      className={cn(
+                        'flex flex-wrap items-center gap-3 p-3',
+                        innerSurface,
+                        innerSurfaceInteractive,
+                      )}
                     >
                       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                         <span className="text-sm font-medium text-ink">{conn.label}</span>
@@ -540,7 +559,7 @@ export function IntegrationsPanel() {
 
             {isEditing ? (
               <form
-                className="flex max-w-3xl flex-col gap-3 rounded-lg border border-line-strong bg-surface-1 p-4"
+                className={cn('flex max-w-3xl flex-col gap-3 p-4', innerSurface)}
                 onSubmit={(e) => {
                   e.preventDefault();
                   void save();
