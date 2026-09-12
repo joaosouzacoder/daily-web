@@ -645,93 +645,221 @@ describe('ação que falhou em definitivo', () => {
   });
 });
 
-describe('pastas e tela cheia', () => {
-  const ARVORE = [
-    { path: 'INBOX', name: 'INBOX', delimiter: '/', parent: null, specialUse: null, total: 9, unread: 2 },
-    { path: 'Clientes', name: 'Clientes', delimiter: '/', parent: null, specialUse: null, total: 4, unread: 1 },
+describe('pastas por conta, cache e listagem', () => {
+  const CONTAS: MailboxRef[] = [
+    { id: 'mail-1', label: 'Pessoal' },
+    { id: 'mail-2', label: 'Work' },
   ];
 
-  function mockarRotas(mensagens: EmailEnvelope[] = []) {
+  const guardadas = {
+    'mail-1': [
+      { path: 'INBOX', name: 'INBOX', delimiter: '/', parent: null, specialUse: null, total: 9, unread: 2 },
+      { path: 'Clientes', name: 'Clientes', delimiter: '/', parent: null, specialUse: null, total: 4, unread: 1 },
+    ],
+    'mail-2': [
+      { path: 'INBOX', name: 'INBOX', delimiter: '/', parent: null, specialUse: null, total: 3, unread: 7 },
+    ],
+  };
+
+  interface Cenario {
+    sincronizadas?: Record<string, unknown[]>;
+    erroDeSync?: string[];
+    mensagens?: Record<string, EmailEnvelope[]>;
+    atrasar?: (url: string) => number;
+  }
+
+  function mockarRotas(cenario: Cenario = {}) {
     vi.spyOn(global, 'fetch').mockImplementation(async (url) => {
       const endereco = String(url);
+      const espera = cenario.atrasar?.(endereco) ?? 0;
+      if (espera > 0) await new Promise((r) => setTimeout(r, espera));
+
       if (endereco.includes('/api/email/mailboxes')) {
-        return new Response(JSON.stringify({ mailboxes: ARVORE }));
+        const conta = new URL(endereco, 'http://x').searchParams.get('account')!;
+        const sincronizando = endereco.includes('sync=1');
+        if (sincronizando && cenario.erroDeSync?.includes(conta)) {
+          return new Response(JSON.stringify({ error: 'caixa fora do ar' }), { status: 502 });
+        }
+        const lista = sincronizando
+          ? (cenario.sincronizadas?.[conta] ?? guardadas[conta as keyof typeof guardadas])
+          : guardadas[conta as keyof typeof guardadas];
+        return new Response(JSON.stringify({ mailboxes: lista, cached: !sincronizando }));
       }
       if (endereco.includes('/api/email/messages')) {
-        return new Response(JSON.stringify({ messages: mensagens }));
+        const params = new URL(endereco, 'http://x').searchParams;
+        const chave = `${params.get('account')} ${params.get('folder')}`;
+        return new Response(JSON.stringify({ messages: cenario.mensagens?.[chave] ?? [] }));
       }
-      return new Response(JSON.stringify({ folders: [] }));
+      return new Response(JSON.stringify({ folders: [], ok: true }));
     });
   }
 
-  function montar() {
+  function montar(contas: MailboxRef[] = CONTAS) {
     render(
       <EmailPanel
         onSeenChanged={() => {}}
         onRemoved={() => {}}
-        mailboxes={MAILBOXES}
+        mailboxes={contas}
         email={{ data: items, error: null }}
         onChanged={() => {}}
       />,
     );
   }
 
-  it('abre a tela cheia e lista as pastas da conta', async () => {
+  const abrirTelaCheia = async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir em tela cheia' }));
+    await screen.findByRole('navigation', { name: 'Pastas' });
+  };
+
+  function mensagem(id: string, subject: string, folder: string, account = 'mail-1'): EmailEnvelope {
+    return {
+      id, account, accountLabel: 'Pessoal', from: 'Alguém', subject,
+      unread: true, date: '2026-09-12T10:00:00Z', messageId: `<${id}@x>`,
+      references: [], labels: [], mailbox: 'inbox', folder,
+    };
+  }
+
+  it('agrupa as pastas por conta', async () => {
     mockarRotas();
     montar();
+    await abrirTelaCheia();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Abrir em tela cheia' }));
-
-    expect(await screen.findByRole('navigation', { name: 'Pastas' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Clientes,/ })).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Pessoal' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Work' })).toBeInTheDocument();
   });
 
-  // A pasta escolhida vive na URL: recarregar e voltar caem no mesmo lugar.
-  it('escreve a pasta escolhida na URL e busca as mensagens dela', async () => {
-    mockarRotas([
-      { ...items[0], id: '31', subject: 'Contrato novo', folder: 'Clientes' },
-    ]);
-    montar();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Abrir em tela cheia' }));
-    fireEvent.click(await screen.findByRole('button', { name: /^Clientes,/ }));
-
-    await waitFor(() =>
-      expect(new URLSearchParams(window.location.search).get('mail_folder')).toBe('Clientes'),
-    );
-    expect(await screen.findAllByText('Contrato novo')).not.toHaveLength(0);
-  });
-
-  // A entrada é o padrão: ela não precisa estar escrita no link.
-  it('tira a pasta da URL ao voltar para a entrada', async () => {
+  // Duas contas têm a sua própria INBOX: quem lê a tela precisa saber de qual
+  // delas está falando.
+  it('distingue pastas homônimas de contas diferentes', async () => {
     mockarRotas();
-    window.history.replaceState(null, '', '/?mail_folder=Clientes&mail_max=1');
     montar();
+    await abrirTelaCheia();
 
-    fireEvent.click(await screen.findByRole('button', { name: /^INBOX,/ }));
-
-    await waitFor(() =>
-      expect(new URLSearchParams(window.location.search).get('mail_folder')).toBeNull(),
-    );
+    expect(await screen.findByRole('button', { name: /^INBOX em Pessoal, 2 não lidas/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^INBOX em Work, 7 não lidas/ })).toBeInTheDocument();
   });
 
-  it('mostra o erro quando a pasta não abre', async () => {
-    vi.spyOn(global, 'fetch').mockImplementation(async (url) => {
-      const endereco = String(url);
-      if (endereco.includes('/api/email/messages')) {
-        return new Response(JSON.stringify({ error: 'pasta não encontrada' }));
-      }
-      if (endereco.includes('/api/email/mailboxes')) {
-        return new Response(JSON.stringify({ mailboxes: ARVORE }));
-      }
-      return new Response(JSON.stringify({ folders: [] }));
+  // Contar mensagem é uma ida ao servidor por pasta: a tela abre com o que já
+  // está guardado e a leitura vem por cima.
+  it('mostra o que está guardado antes de sincronizar', async () => {
+    mockarRotas({
+      sincronizadas: {
+        'mail-1': [
+          { path: 'INBOX', name: 'INBOX', delimiter: '/', parent: null, specialUse: null, total: 9, unread: 2 },
+          { path: 'Fornecedores', name: 'Fornecedores', delimiter: '/', parent: null, specialUse: null, total: 1, unread: 0 },
+        ],
+      },
+      atrasar: (u) => (u.includes('sync=1') ? 60 : 0),
     });
-    window.history.replaceState(null, '', '/?mail_folder=Clientes');
-    montar();
+    montar([CONTAS[0]]);
+    await abrirTelaCheia();
 
-    expect(await screen.findByText('pasta não encontrada')).toBeInTheDocument();
+    // A pasta guardada aparece antes de a sincronização terminar…
+    expect(await screen.findByRole('button', { name: /^Clientes em Pessoal/ })).toBeInTheDocument();
+    // …e a criada no servidor entra sem ninguém recarregar a tela.
+    expect(await screen.findByRole('button', { name: /^Fornecedores em Pessoal/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Clientes em Pessoal/ })).toBeNull();
+  });
+
+  // Uma caixa fora do ar mostra o erro dela e deixa as outras em paz.
+  it('isola a falha de uma conta e oferece tentar de novo', async () => {
+    mockarRotas({ erroDeSync: ['mail-2'] });
+    montar();
+    await abrirTelaCheia();
+
+    expect(await screen.findByText('caixa fora do ar')).toBeInTheDocument();
+    // O que estava guardado continua na tela, nas duas contas.
+    expect(screen.getByRole('button', { name: /^INBOX em Work/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Clientes em Pessoal/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'tentar de novo' })).toBeInTheDocument();
+  });
+
+  it('escreve a conta e a pasta escolhidas na URL', async () => {
+    mockarRotas({ mensagens: { 'mail-2 INBOX': [mensagem('9', 'Do trabalho', 'INBOX', 'mail-2')] } });
+    montar();
+    await abrirTelaCheia();
+
+    fireEvent.click(await screen.findByRole('button', { name: /^INBOX em Work/ }));
+
+    await waitFor(() => {
+      const params = new URLSearchParams(window.location.search);
+      expect(params.get('mail_folder')).toBe('INBOX');
+      expect(params.get('mail_facct')).toBe('mail-2');
+    });
+    expect(await screen.findByText('Do trabalho')).toBeInTheDocument();
+  });
+
+  // O mesmo caminho em contas diferentes é outra caixa: a listagem tem de
+  // seguir o par, não só a pasta.
+  it('lista a pasta da conta escolhida, não a homônima da outra', async () => {
+    mockarRotas({
+      mensagens: {
+        'mail-1 Clientes': [mensagem('1', 'Da conta pessoal', 'Clientes')],
+        'mail-2 INBOX': [mensagem('2', 'Da conta do trabalho', 'INBOX', 'mail-2')],
+      },
+    });
+    montar();
+    await abrirTelaCheia();
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Clientes em Pessoal/ }));
+    expect(await screen.findByText('Da conta pessoal')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^INBOX em Work/ }));
+    expect(await screen.findByText('Da conta do trabalho')).toBeInTheDocument();
+    expect(screen.queryByText('Da conta pessoal')).toBeNull();
+  });
+
+  // Trocar de pasta antes de a anterior responder acontece o tempo todo. A
+  // resposta atrasada não pode escrever por cima do que está na tela.
+  it('ignora a resposta atrasada da pasta anterior', async () => {
+    mockarRotas({
+      mensagens: {
+        'mail-1 Clientes': [mensagem('1', 'Da pasta lenta', 'Clientes')],
+        'mail-2 INBOX': [mensagem('2', 'Da pasta rápida', 'INBOX', 'mail-2')],
+      },
+      atrasar: (u) => (u.includes('folder=Clientes') ? 150 : 0),
+    });
+    montar();
+    await abrirTelaCheia();
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Clientes em Pessoal/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^INBOX em Work/ }));
+
+    expect(await screen.findByText('Da pasta rápida')).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 250));
+    expect(screen.queryByText('Da pasta lenta')).toBeNull();
+    expect(screen.getByText('Da pasta rápida')).toBeInTheDocument();
+  });
+
+  it('mostra o vazio e o erro da pasta', async () => {
+    mockarRotas({ mensagens: {} });
+    montar([CONTAS[0]]);
+    await abrirTelaCheia();
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Clientes em Pessoal/ }));
+    expect(await screen.findByText('Nenhum e-mail nesta pasta.')).toBeInTheDocument();
+  });
+
+  // Trocar de pasta zera a seleção: o lote fala da pasta que está na tela.
+  it('limpa a seleção ao trocar de pasta', async () => {
+    mockarRotas({
+      mensagens: {
+        'mail-1 Clientes': [mensagem('1', 'Uma da pasta', 'Clientes')],
+        'mail-2 INBOX': [mensagem('2', 'Outra conta', 'INBOX', 'mail-2')],
+      },
+    });
+    montar();
+    await abrirTelaCheia();
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Clientes em Pessoal/ }));
+    fireEvent.click(await screen.findByLabelText('selecionar Uma da pasta'));
+    expect(screen.getByText('1 conversa')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^INBOX em Work/ }));
+    await waitFor(() => expect(screen.queryByText('1 conversa')).toBeNull());
   });
 });
+
 
 describe('seleção múltipla, arraste e ações de pasta', () => {
   const ARVORE = [
@@ -876,7 +1004,7 @@ describe('seleção múltipla, arraste e ações de pasta', () => {
 
     const dataTransfer = transferencia();
     fireEvent.dragStart(liDe(2), { dataTransfer });
-    const pasta = screen.getByRole('button', { name: /^Arquivo,/ }).closest('li')!;
+    const pasta = screen.getByRole('button', { name: /^Arquivo em Trabalho/ }).closest('li')!;
     fireEvent.dragOver(pasta, { dataTransfer });
     fireEvent.drop(pasta, { dataTransfer });
 
@@ -892,7 +1020,7 @@ describe('seleção múltipla, arraste e ações de pasta', () => {
   it('pergunta antes de marcar uma pasta grande como lida', async () => {
     montar();
     fireEvent.click(screen.getByRole('button', { name: 'Abrir em tela cheia' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Marcar Arquivo como lida' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Marcar a pasta Arquivo de Trabalho como lida' }));
 
     expect(await screen.findByText(/Marcar 40 mensagens como lidas\?/)).toBeInTheDocument();
     expect(corpos.some((c) => c.includes('folder'))).toBe(false);
@@ -901,7 +1029,7 @@ describe('seleção múltipla, arraste e ações de pasta', () => {
   it('marca a pasta como lida depois da confirmação', async () => {
     montar();
     fireEvent.click(screen.getByRole('button', { name: 'Abrir em tela cheia' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Marcar Arquivo como lida' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Marcar a pasta Arquivo de Trabalho como lida' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Marcar como lidas' }));
 
     await waitFor(() =>

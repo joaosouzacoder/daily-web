@@ -9,6 +9,35 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Added
+- The folder sidebar is grouped by account. Each account carries its own
+  folders, counters and state, collapses on its own, and two folders with the
+  same name are told apart by the account they belong to. An account whose
+  sync fails shows its error and a retry beside its own heading, and the other
+  accounts keep working.
+- The folder list of each account is served from the database, so the panel
+  opens with what it already knows instead of waiting for one round trip per
+  folder. A background sync runs on open, announces itself with a discreet
+  spinner in the account's heading, and replaces the tree in place — a created,
+  renamed or deleted folder appears with no reload, no closing and no
+  interruption, keeping the selected folder, the collapsed accounts and the
+  scroll where they were. Two opens at once share one sync per account.
+
+### Fixed
+- Selecting another folder now changes the listed messages. The listing is
+  keyed by the (account, folder) pair — the path alone is not an identity,
+  since two accounts each have their own INBOX — a folder already read is shown
+  from cache while it refreshes behind, and a late answer for the folder you
+  just left can no longer replace the one you are looking at. Changing folder
+  clears the message selection and the list fades in without holding anything
+  back. An empty folder, a folder that fails to open and a folder still loading
+  now each say so.
+- The "mark folder as read" button no longer sits on top of the unread count.
+  Name, counter and action each have their own column, at any width, and the
+  button explains in a tooltip that it marks that folder in that account —
+  including what was never loaded here — which is not the same as marking the
+  selected conversations.
+
+### Added
 - A whole folder can be marked as read from the folder tree, including the
   messages too old to have been synced here — one intent recorded for the
   folder, one search and one flag command on the server, never one per

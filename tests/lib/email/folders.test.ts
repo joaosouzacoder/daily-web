@@ -71,6 +71,8 @@ beforeEach(async () => {
 
   const { getDb } = await import('@/lib/db');
   getDb();
+  const { resetMailboxSyncForTests } = await import('@/lib/email/mailboxes');
+  resetMailboxSyncForTests();
   const { saveConnection } = await import('@/lib/vault/connections');
   mailId = saveConnection(ME.id, 'email', 'Trabalho', {
     preset: 'gmail',
@@ -95,7 +97,7 @@ afterEach(() => {
 
 describe('GET /api/email/mailboxes', () => {
   it('devolve a árvore com os totais de cada pasta', async () => {
-    const res = await mailboxesRoute(get(`account=${mailId}`));
+    const res = await mailboxesRoute(get(`account=${mailId}&sync=1`));
     const data = await res.json();
 
     expect(res.status).toBe(200);
@@ -103,28 +105,64 @@ describe('GET /api/email/mailboxes', () => {
     expect(data.mailboxes[0]).toMatchObject({ path: 'INBOX', total: 12, unread: 3 });
   });
 
-  // Contar mensagem é uma ida ao servidor por pasta. Abrir o painel de novo
-  // não pode repetir isso.
-  it('reaproveita a árvore guardada em vez de voltar ao servidor', async () => {
-    await mailboxesRoute(get(`account=${mailId}`));
-    await mailboxesRoute(get(`account=${mailId}`));
+  // Contar mensagem é uma ida ao servidor por pasta. Abrir o painel precisa
+  // ser instantâneo, então a leitura normal responde do banco.
+  it('responde do banco sem tocar no servidor', async () => {
+    await mailboxesRoute(get(`account=${mailId}&sync=1`));
+    vi.mocked(listMailboxes).mockClear();
+
+    const data = await (await mailboxesRoute(get(`account=${mailId}`))).json();
+
+    expect(listMailboxes).not.toHaveBeenCalled();
+    expect(data.cached).toBe(true);
+    expect(data.mailboxes).toHaveLength(3);
+    expect(data.syncedAt).toBeTruthy();
+  });
+
+  // Uma caixa fora do ar não pode apagar a árvore que já existe: a tela
+  // continua mostrando o que tinha e oferece tentar de novo.
+  it('mantém a árvore guardada quando a sincronização falha', async () => {
+    await mailboxesRoute(get(`account=${mailId}&sync=1`));
+    vi.mocked(listMailboxes).mockRejectedValue(new Error('caixa fora do ar'));
+
+    const falha = await mailboxesRoute(get(`account=${mailId}&sync=1`));
+    expect(falha.status).toBe(502);
+
+    const data = await (await mailboxesRoute(get(`account=${mailId}`))).json();
+    expect(data.mailboxes).toHaveLength(3);
+  });
+
+  // Duas aberturas ao mesmo tempo pediriam a mesma árvore duas vezes, e cada
+  // pedido é uma ida ao servidor por pasta.
+  it('junta sincronizações simultâneas da mesma conta numa só', async () => {
+    let liberar: (v: unknown) => void = () => {};
+    vi.mocked(listMailboxes).mockImplementation(
+      () => new Promise((resolve) => (liberar = resolve as (v: unknown) => void)) as never,
+    );
+
+    const { syncMailboxes } = await import('@/lib/email/mailboxes');
+    const { findConnection } = await import('@/lib/vault/connections');
+    const conn = findConnection(ME.id, mailId)!;
+
+    const a = syncMailboxes(ME.id, conn);
+    const b = syncMailboxes(ME.id, conn);
+    liberar(ARVORE);
+    await Promise.all([a, b]);
 
     expect(listMailboxes).toHaveBeenCalledTimes(1);
   });
 
-  // Uma caixa fora do ar não pode apagar a árvore que já existe.
-  it('mantém a árvore guardada quando o servidor falha', async () => {
-    await mailboxesRoute(get(`account=${mailId}`));
+  it('anuncia a pasta criada e a que sumiu', async () => {
+    await mailboxesRoute(get(`account=${mailId}&sync=1`));
 
-    const { putMailboxes, getStoredMailboxes } = await import('@/lib/email/mailboxes');
-    // Envelhece o que está guardado para forçar a volta ao servidor.
-    putMailboxes(ME.id, mailId, ARVORE, new Date(Date.now() - 60 * 60 * 1000));
-    vi.mocked(listMailboxes).mockRejectedValue(new Error('caixa fora do ar'));
+    vi.mocked(listMailboxes).mockResolvedValue([
+      ARVORE[0],
+      { ...ARVORE[2], path: 'Fornecedores', name: 'Fornecedores' },
+    ]);
+    const data = await (await mailboxesRoute(get(`account=${mailId}&sync=1`))).json();
 
-    const res = await mailboxesRoute(get(`account=${mailId}`));
-
-    expect(res.status).toBe(200);
-    expect(getStoredMailboxes(ME.id, mailId)).toHaveLength(3);
+    expect(data.added).toEqual(['Fornecedores']);
+    expect(data.removed.sort()).toEqual(['Clientes', '[Gmail]/E-mails enviados']);
   });
 
   it('recusa a conta de outra pessoa', async () => {
@@ -135,7 +173,7 @@ describe('GET /api/email/mailboxes', () => {
 
 describe('GET /api/email/messages', () => {
   it('lista as mensagens da pasta pedida', async () => {
-    await mailboxesRoute(get(`account=${mailId}`));
+    await mailboxesRoute(get(`account=${mailId}&sync=1`));
     const res = await messagesRoute(get(`account=${mailId}&folder=Clientes`));
     const data = await res.json();
 
@@ -159,14 +197,14 @@ describe('GET /api/email/messages', () => {
 
   // Nada sem limite: a caixa inteira não cabe numa resposta nem numa tela.
   it('prende o limite pedido ao teto', async () => {
-    await mailboxesRoute(get(`account=${mailId}`));
+    await mailboxesRoute(get(`account=${mailId}&sync=1`));
     await messagesRoute(get(`account=${mailId}&folder=Clientes&limit=9999`));
 
     expect(vi.mocked(fetchFolderChanges).mock.calls[0][4]).toBe(100);
   });
 
   it('esconde da pasta a mensagem com exclusão pendente', async () => {
-    await mailboxesRoute(get(`account=${mailId}`));
+    await mailboxesRoute(get(`account=${mailId}&sync=1`));
     await batchRoute(
       new NextRequest('http://localhost/api', {
         method: 'POST',
@@ -186,7 +224,7 @@ describe('GET /api/email/messages', () => {
   // O servidor reindexou a caixa: todo uid guardado antes aponta para outra
   // mensagem agora, e aplicá-lo acertaria quem não foi escolhido.
   it('invalida as ações pendentes quando o uidvalidity muda', async () => {
-    await mailboxesRoute(get(`account=${mailId}`));
+    await mailboxesRoute(get(`account=${mailId}&sync=1`));
     // A pasta é aberta uma vez: é daí que sai o número que a ação guarda.
     await messagesRoute(get(`account=${mailId}&folder=Clientes`));
     await batchRoute(

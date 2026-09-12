@@ -103,7 +103,7 @@ beforeEach(async () => {
   vi.mocked(markFolderRead).mockResolvedValue(3);
 
   // A árvore precisa existir: só um caminho que o servidor declarou é aceito.
-  await mailboxesRoute(get(`account=${mailId}`));
+  await mailboxesRoute(get(`account=${mailId}&sync=1`));
 });
 
 afterEach(() => {

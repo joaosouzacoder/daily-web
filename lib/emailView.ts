@@ -12,6 +12,9 @@ export interface EmailViewState {
   /** Caminho da pasta no servidor. Vazio é a caixa de entrada do painel, que
    *  vem pronta do ciclo e não custa uma ida ao servidor. */
   folder: string;
+  /** Conta dona da pasta aberta. O caminho sozinho não identifica: duas contas
+   *  têm a sua própria "INBOX", e cada uma numera os uids do seu jeito. */
+  folderAccount: string;
   query: string;
   onlyUnread: boolean;
   /** Id da conta, ou vazio para todas. */
@@ -24,6 +27,7 @@ export interface EmailViewState {
 
 export const DEFAULT_EMAIL_VIEW: EmailViewState = {
   folder: '',
+  folderAccount: '',
   query: '',
   onlyUnread: false,
   account: '',
@@ -35,6 +39,7 @@ export const DEFAULT_EMAIL_VIEW: EmailViewState = {
 const PREFIX = 'mail_';
 const KEYS = {
   folder: `${PREFIX}folder`,
+  folderAccount: `${PREFIX}facct`,
   query: `${PREFIX}q`,
   onlyUnread: `${PREFIX}unread`,
   account: `${PREFIX}account`,
@@ -56,6 +61,7 @@ export function parseEmailView(params: URLSearchParams): EmailViewState {
   const sort = params.get(KEYS.sort);
   return {
     folder: text(params.get(KEYS.folder)),
+    folderAccount: text(params.get(KEYS.folderAccount)),
     query: text(params.get(KEYS.query)),
     onlyUnread: params.get(KEYS.onlyUnread) === '1',
     account: text(params.get(KEYS.account)),
@@ -80,6 +86,7 @@ export function emailViewToParams(
   };
 
   put(KEYS.folder, view.folder, DEFAULT_EMAIL_VIEW.folder);
+  put(KEYS.folderAccount, view.folderAccount, DEFAULT_EMAIL_VIEW.folderAccount);
   put(KEYS.query, view.query, DEFAULT_EMAIL_VIEW.query);
   put(KEYS.onlyUnread, view.onlyUnread ? '1' : '0', '0');
   put(KEYS.account, view.account, DEFAULT_EMAIL_VIEW.account);
@@ -95,5 +102,9 @@ export function emailViewToParams(
  * encheria o histórico.
  */
 export function isNavigation(anterior: EmailViewState, proximo: EmailViewState): boolean {
-  return anterior.folder !== proximo.folder || anterior.maximized !== proximo.maximized;
+  return (
+    anterior.folder !== proximo.folder ||
+    anterior.folderAccount !== proximo.folderAccount ||
+    anterior.maximized !== proximo.maximized
+  );
 }

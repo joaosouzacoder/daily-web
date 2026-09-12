@@ -8,7 +8,13 @@ import type {
 } from 'react';
 import { useEmailView } from '@/lib/hooks/useEmailView';
 import { useReducedMotion } from '@/lib/hooks/useReducedMotion';
-import { FolderTree, EMAIL_DRAG_TYPE } from '@/components/email/FolderTree';
+import {
+  FolderTree,
+  EMAIL_DRAG_TYPE,
+  type FolderSelection,
+} from '@/components/email/FolderTree';
+import { useMailboxGroups } from '@/lib/hooks/useMailboxGroups';
+import { useFolderMessages } from '@/lib/hooks/useFolderMessages';
 import {
   EMPTY_SELECTION,
   selectionReducer,
@@ -240,21 +246,6 @@ export function EmailPanel({
   // para o seletor de etiqueta já abrir pronto.
   const [tagFolders, setTagFolders] = useState<Record<string, string[]>>({});
 
-  // A árvore de pastas e a listagem de uma pasta que não é a entrada. A
-  // entrada vem pronta do ciclo do painel e não custa uma ida ao servidor.
-  const [mailboxNodes, setMailboxNodes] = useState<MailboxNode[]>([]);
-  const [foldersLoading, setFoldersLoading] = useState(false);
-  const [foldersError, setFoldersError] = useState<string | null>(null);
-  const [remote, setRemote] = useState<EmailEnvelope[] | null>(null);
-  const [remoteLoading, setRemoteLoading] = useState(false);
-  const [remoteError, setRemoteError] = useState<string | null>(null);
-  // Sobe depois de uma ação para a pasta aberta ser lida de novo: a lista dela
-  // não passa pelo ciclo do painel.
-  const [folderNonce, setFolderNonce] = useState(0);
-
-  // A pasta que a tela está mostrando, no caminho que o servidor usa.
-  const pastaDasMensagens = view.folder || INBOX_PATH;
-
   const loadTagFolders = async (acc: Account) => {
     if (tagFolders[acc]) return;
     const res = await fetch(`/api/email/folders?account=${acc}`);
@@ -330,76 +321,48 @@ export function EmailPanel({
     }
   };
 
-  // A conta cuja árvore é mostrada: a escolhida no filtro, ou a primeira.
-  const treeAccount = view.account || mailboxes[0]?.id || '';
+  // As pastas de todas as contas, cada uma com o próprio estado. Só são
+  // buscadas quando a tela cheia abre: o cartão do painel não precisa delas.
+  const { groups, retry: repetirPastas } = useMailboxGroups(mailboxes, view.maximized);
+
+  // A pasta aberta é um par: o caminho sozinho não identifica, porque duas
+  // contas têm a sua própria "INBOX".
+  const selecaoDePasta: FolderSelection | null =
+    view.folder && view.folderAccount
+      ? { account: view.folderAccount, path: view.folder }
+      : null;
+
+  const {
+    messages: remote,
+    loading: remoteLoading,
+    error: remoteError,
+    reload: recarregarPasta,
+  } = useFolderMessages(selecaoDePasta);
+
   const pastaAtual = view.folder;
 
-  const tituloDaPasta = pastaAtual
-    ? (mailboxNodes.find((m) => m.path === pastaAtual)?.name ?? pastaAtual)
-    : 'Inbox';
+  const nodeDaPasta = selecaoDePasta
+    ? groups
+        .find((g) => g.account.id === selecaoDePasta.account)
+        ?.mailboxes.find((m) => m.path === selecaoDePasta.path)
+    : undefined;
+  const tituloDaPasta = selecaoDePasta ? (nodeDaPasta?.name ?? selecaoDePasta.path) : 'Inbox';
 
-  const abrirPasta = (path: string) => {
-    // A entrada tem o caminho vazio na URL: ela é o padrão e o link fica limpo.
-    setView({ folder: path === INBOX_PATH ? '' : path, open: '' });
+  // A pasta que a tela está mostrando, no caminho que o servidor usa.
+  const pastaDasMensagens = view.folder || INBOX_PATH;
+
+  const abrirPasta = (selecao: FolderSelection) => {
+    // A entrada do painel é o padrão e não vai para o link. Trocar de pasta
+    // limpa a seleção: o lote precisa falar da pasta que está na tela.
+    const ehEntradaDoPainel = selecao.path === INBOX_PATH && mailboxes.length === 1;
+    setSel(EMPTY_SELECTION);
+    setView({
+      folder: ehEntradaDoPainel ? '' : selecao.path,
+      folderAccount: ehEntradaDoPainel ? '' : selecao.account,
+      open: '',
+    });
   };
 
-  useEffect(() => {
-    if (!view.maximized || !treeAccount) return;
-    let cancelado = false;
-    setFoldersLoading(true);
-    setFoldersError(null);
-    void fetch(`/api/email/mailboxes?account=${encodeURIComponent(treeAccount)}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (cancelado) return;
-        if (data.error) setFoldersError(String(data.error));
-        else setMailboxNodes((data.mailboxes ?? []) as MailboxNode[]);
-      })
-      .catch(() => {
-        if (!cancelado) setFoldersError('Não deu para listar as pastas');
-      })
-      .finally(() => {
-        if (!cancelado) setFoldersLoading(false);
-      });
-    return () => {
-      cancelado = true;
-    };
-  }, [view.maximized, treeAccount]);
-
-  useEffect(() => {
-    if (!pastaAtual || !treeAccount) {
-      setRemote(null);
-      setRemoteError(null);
-      return;
-    }
-    let cancelado = false;
-    setRemoteLoading(true);
-    setRemoteError(null);
-    void fetch(
-      `/api/email/messages?account=${encodeURIComponent(treeAccount)}&folder=${encodeURIComponent(pastaAtual)}`,
-    )
-      .then((r) => r.json())
-      .then((data) => {
-        if (cancelado) return;
-        if (data.error) {
-          setRemoteError(String(data.error));
-          setRemote([]);
-        } else {
-          setRemote((data.messages ?? []) as EmailEnvelope[]);
-        }
-      })
-      .catch(() => {
-        if (cancelado) return;
-        setRemoteError('Não deu para abrir a pasta');
-        setRemote([]);
-      })
-      .finally(() => {
-        if (!cancelado) setRemoteLoading(false);
-      });
-    return () => {
-      cancelado = true;
-    };
-  }, [pastaAtual, treeAccount, folderNonce]);
 
   const all = useMemo(
     () => (pastaAtual ? (remote ?? []) : (email.data ?? [])),
@@ -598,7 +561,7 @@ export function EmailPanel({
     setBatchError(null);
     setSel(EMPTY_SELECTION);
     // A pasta aberta não passa pelo ciclo do painel: ela é relida aqui.
-    if (pastaAtual) setFolderNonce((n) => n + 1);
+    if (selecaoDePasta) recarregarPasta();
   };
 
   /**
@@ -629,20 +592,20 @@ export function EmailPanel({
 
   const aoTerminarArraste = () => setArrastando(null);
 
-  const soltarNaPasta = async (destino: string) => {
+  const soltarNaPasta = async (destino: FolderSelection) => {
     const anterior = arrastando;
     setArrastando(null);
-    if (destino === pastaDasMensagens) {
+    if (destino.path === pastaDasMensagens) {
       setBatchError('A mensagem já está nessa pasta.');
       return;
     }
     // A soltura usa o mesmo caminho de lote das demais ações: o pedido fica
     // gravado antes de sair daqui, e uma falha aparece na linha.
     if (anterior && !selecionadas.has(anterior)) despachar({ type: 'click', id: anterior });
-    await runBatch('move', destino);
+    await runBatch('move', destino.path);
   };
 
-  const marcarPastaLida = async (node: MailboxNode) => {
+  const marcarPastaLida = async (contaDaPasta: string, node: MailboxNode) => {
     // Uma pasta grande merece a pergunta: é uma ação que não tem como desfazer
     // mensagem por mensagem.
     if (node.unread >= CONFIRMA_ACIMA_DE) {
@@ -658,17 +621,18 @@ export function EmailPanel({
     const res = await fetch('/api/email/folder/read', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ account: treeAccount, folder: node.path }),
+      body: JSON.stringify({ account: contaDaPasta, folder: node.path }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       setBatchError(data.error ?? 'Não deu para marcar a pasta como lida');
       return;
     }
-    setMailboxNodes((atual) =>
-      atual.map((m) => (m.path === node.path ? { ...m, unread: 0 } : m)),
-    );
-    if (pastaAtual === node.path) setFolderNonce((n) => n + 1);
+    // A contagem da pasta zera na tela e a leitura de fundo confirma.
+    repetirPastas(contaDaPasta);
+    if (selecaoDePasta?.path === node.path && selecaoDePasta.account === contaDaPasta) {
+      recarregarPasta();
+    }
     onChanged();
   };
 
@@ -776,13 +740,30 @@ export function EmailPanel({
 
         <ActiveFilters filters={activeFilters} onRemove={clearFilter} onClearAll={clearAll} />
 
-        {!pastaAtual && email.error && <PanelError>{email.error}</PanelError>}
-        {remoteError && <PanelError>{remoteError}</PanelError>}
+        {!selecaoDePasta && email.error && <PanelError>{email.error}</PanelError>}
+        {remoteError && (
+          <PanelError>
+            {remoteError}{' '}
+            <button
+              type="button"
+              onClick={recarregarPasta}
+              className="underline underline-offset-2 hover:no-underline"
+            >
+              tentar de novo
+            </button>
+          </PanelError>
+        )}
         {batchError && <PanelError>{batchError}</PanelError>}
 
         {(loading || remoteLoading) && all.length === 0 && <SkeletonRows count={6} />}
 
-        {!loading && all.length === 0 && !email.error && (
+        {/* Pasta aberta e vazia é outra coisa de caixa de entrada limpa: ali
+            não há nada a limpar, é só uma pasta sem e-mail. */}
+        {selecaoDePasta && !remoteLoading && !remoteError && all.length === 0 && (
+          <EmptyState title="Nenhum e-mail nesta pasta." />
+        )}
+
+        {!selecaoDePasta && !loading && all.length === 0 && !email.error && (
           <EmptyState title="Caixa de entrada limpa." />
         )}
 
@@ -792,7 +773,14 @@ export function EmailPanel({
 
         {threads.length > 0 && (
           <ul
-            className={cn('text-sm', focusRing)}
+            // A troca de pasta reaparece com uma transição curta. A chave é o
+            // par, então a lista é remontada — e a animação é de entrada, sem
+            // segurar nada: os dados já estão aqui quando ela começa.
+            key={selecaoDePasta ? `${selecaoDePasta.account} ${selecaoDePasta.path}` : 'inbox'}
+            className={cn(
+              'text-sm motion-safe:animate-in motion-safe:fade-in motion-safe:duration-150',
+              focusRing,
+            )}
             // A lista inteira recebe o foco: daí as setas andam, o espaço
             // marca e Ctrl/Cmd+A pega tudo que está visível.
             tabIndex={0}
@@ -1079,13 +1067,14 @@ export function EmailPanel({
 
   const arvore = (
     <FolderTree
-      mailboxes={mailboxNodes}
-      selected={view.folder || INBOX_PATH}
+      groups={groups}
+      selected={
+        selecaoDePasta ?? { account: mailboxes[0]?.id ?? '', path: INBOX_PATH }
+      }
       onSelect={abrirPasta}
-      onDropMessages={(path) => void soltarNaPasta(path)}
-      onMarkRead={(node) => void marcarPastaLida(node)}
-      loading={foldersLoading}
-      error={foldersError}
+      onDropMessages={(selecao) => void soltarNaPasta(selecao)}
+      onMarkRead={(conta, node) => void marcarPastaLida(conta, node)}
+      onRetry={repetirPastas}
     />
   );
 

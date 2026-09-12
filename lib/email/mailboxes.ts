@@ -121,13 +121,72 @@ export async function getMailboxes(
   }
 
   try {
-    const nodes = await listMailboxes(connection);
-    putMailboxes(userId, connection.id, nodes, now);
-    return nodes;
+    return (await syncMailboxes(userId, connection, now)).mailboxes;
   } catch (err) {
     if (guardadas.length > 0) return guardadas;
     throw err;
   }
+}
+
+/** Quando a árvore desta conta foi lida do servidor pela última vez. */
+export function storedSyncedAt(userId: string, account: string): string | null {
+  const row = getDb()
+    .prepare(
+      'SELECT MIN(synced_at) AS oldest FROM email_mailboxes WHERE user_id = ? AND account = ?',
+    )
+    .get(userId, account) as { oldest: string | null } | undefined;
+  return row?.oldest ?? null;
+}
+
+export interface MailboxSync {
+  mailboxes: MailboxNode[];
+  /** Pastas que não existiam na última leitura. */
+  added: string[];
+  /** Pastas que sumiram do servidor. Uma pasta renomeada aparece aqui e em
+   *  `added`: o IMAP não conta que houve renome, só o antes e o depois. */
+  removed: string[];
+}
+
+// Duas aberturas do painel ao mesmo tempo pediriam a mesma árvore duas vezes,
+// e cada pedido é uma ida ao servidor por pasta. Quem chega no meio de uma
+// sincronização recebe o resultado da que já está em curso.
+const SYNC_KEY = Symbol.for('daily-web.email.mailboxSync');
+const emCurso: Map<string, Promise<MailboxSync>> = ((
+  globalThis as Record<symbol, unknown>
+)[SYNC_KEY] ??= new Map<string, Promise<MailboxSync>>()) as Map<string, Promise<MailboxSync>>;
+
+/**
+ * Lê a árvore do servidor e grava. Devolve o que mudou desde a última leitura,
+ * para quem chamou saber se a tela precisa reagir a mais do que números.
+ */
+export function syncMailboxes(
+  userId: string,
+  connection: Connection,
+  now: Date = new Date(),
+): Promise<MailboxSync> {
+  const chave = `${userId} ${connection.id}`;
+  const jaEmCurso = emCurso.get(chave);
+  if (jaEmCurso) return jaEmCurso;
+
+  const promessa = (async () => {
+    const antes = new Set(getStoredMailboxes(userId, connection.id).map((m) => m.path));
+    const mailboxes = await listMailboxes(connection);
+    putMailboxes(userId, connection.id, mailboxes, now);
+
+    const depois = new Set(mailboxes.map((m) => m.path));
+    return {
+      mailboxes,
+      added: [...depois].filter((p) => !antes.has(p)),
+      removed: [...antes].filter((p) => !depois.has(p)),
+    };
+  })().finally(() => emCurso.delete(chave));
+
+  emCurso.set(chave, promessa);
+  return promessa;
+}
+
+export function resetMailboxSyncForTests(): void {
+  emCurso.clear();
 }
 
 /** O caminho existe nesta conta? A pasta vem da tela, que é entrada não

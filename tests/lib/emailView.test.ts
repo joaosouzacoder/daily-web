@@ -10,12 +10,13 @@ describe('estado da tela de e-mail na URL', () => {
   it('lê pasta, busca, filtro, ordenação e mensagem aberta', () => {
     const view = parseEmailView(
       new URLSearchParams(
-        'mail_folder=Clientes&mail_q=nota&mail_unread=1&mail_sort=oldest&mail_open=mail-1:7&mail_max=1',
+        'mail_folder=Clientes&mail_facct=mail-2&mail_q=nota&mail_unread=1&mail_sort=oldest&mail_open=mail-1:7&mail_max=1',
       ),
     );
 
     expect(view).toEqual({
       folder: 'Clientes',
+      folderAccount: 'mail-2',
       query: 'nota',
       onlyUnread: true,
       account: '',
@@ -75,6 +76,7 @@ describe('estado da tela de e-mail na URL', () => {
     const view = {
       ...DEFAULT_EMAIL_VIEW,
       folder: '[Gmail]/Importante',
+      folderAccount: 'mail-2',
       query: 'contrato',
       onlyUnread: true,
       account: 'mail-2',
@@ -92,6 +94,13 @@ describe('o que empilha no histórico', () => {
   it('conta mudança de pasta e de tela cheia como navegação', () => {
     expect(isNavigation(DEFAULT_EMAIL_VIEW, { ...DEFAULT_EMAIL_VIEW, folder: 'X' })).toBe(true);
     expect(isNavigation(DEFAULT_EMAIL_VIEW, { ...DEFAULT_EMAIL_VIEW, maximized: true })).toBe(true);
+    // Trocar de conta é trocar de caixa, ainda que o caminho seja o mesmo.
+    expect(
+      isNavigation(
+        { ...DEFAULT_EMAIL_VIEW, folder: 'INBOX', folderAccount: 'a' },
+        { ...DEFAULT_EMAIL_VIEW, folder: 'INBOX', folderAccount: 'b' },
+      ),
+    ).toBe(true);
   });
 
   // Empilhar cada tecla digitada na busca encheria o histórico.
