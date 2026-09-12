@@ -666,13 +666,18 @@ export function EmailPanel({
   /**
    * Arrastar uma linha arrasta o lote. Uma linha de fora da seleção passa a
    * ser a seleção — arrastar uma coisa e mover outra seria surpresa.
+   *
+   * Nada de estado muda aqui dentro. O navegador só abre a sessão de arraste
+   * se a origem continuar de pé enquanto o `dragstart` corre: uma repintura
+   * no meio dele — e marcar a linha ou aplicar o recolhimento do maço são
+   * repinturas — faz o Chromium desistir do arraste sem avisar. Foi isto que
+   * deixou o arraste sem funcionar no app de verdade enquanto passava nos
+   * testes de componente, onde o `dragstart` é sintético e não abre sessão
+   * nenhuma. As mudanças de estado vão para o quadro seguinte.
    */
   const aoComecarArraste = (thread: EmailThread, e: ReactDragEvent<HTMLElement>) => {
-    let alvos = sel.selected;
-    if (!selecionadas.has(thread.id)) {
-      alvos = [thread.id];
-      despachar({ type: 'click', id: thread.id });
-    }
+    const jaSelecionada = selecionadas.has(thread.id);
+    const alvos = jaSelecionada ? sel.selected : [thread.id];
 
     const mensagens = threads
       .filter((t) => alvos.includes(t.id))
@@ -686,7 +691,14 @@ export function EmailPanel({
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData(EMAIL_DRAG_TYPE, JSON.stringify(mensagens));
     e.dataTransfer.setDragImage(...mocoDeArraste(alvos.length, thread.subject || '(sem assunto)'));
-    setArrastando(thread.id);
+
+    // Depois que o navegador tirou a foto e assumiu o arraste.
+    const aplicar = () => {
+      if (!jaSelecionada) despachar({ type: 'click', id: thread.id });
+      setArrastando(thread.id);
+    };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(aplicar);
+    else setTimeout(aplicar, 0);
   };
 
   const aoTerminarArraste = () => setArrastando(null);
@@ -696,6 +708,13 @@ export function EmailPanel({
     setArrastando(null);
     if (destino.path === pastaDasMensagens) {
       setBatchError('A mensagem já está nessa pasta.');
+      return;
+    }
+    // O IMAP move dentro de uma conta. Entre contas seria copiar e apagar, que
+    // é outra operação — e não é a que a soltura promete.
+    const contaDeOrigem = view.folderAccount || mailboxes[0]?.id || '';
+    if (destino.account !== contaDeOrigem) {
+      setBatchError('Só dá para mover entre pastas da mesma conta.');
       return;
     }
     // A soltura usa o mesmo caminho de lote das demais ações: o pedido fica

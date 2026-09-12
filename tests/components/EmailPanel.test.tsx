@@ -970,6 +970,32 @@ describe('seleção múltipla, arraste e ações de pasta', () => {
     expect(screen.queryByText('4 conversas')).toBeNull();
   });
 
+  // O navegador só abre a sessão de arraste se a origem continuar de pé
+  // durante o `dragstart`. Marcar a linha ou recolher o maço ali dentro
+  // repinta a lista e faz o Chromium desistir do arraste sem avisar — era
+  // isso que deixava o arraste sem funcionar no app de verdade enquanto
+  // passava aqui, onde o evento é sintético e não abre sessão nenhuma.
+  it('não repinta a lista durante o dragstart', () => {
+    montar();
+    fireEvent.click(caixaDe(1));
+    fireEvent.click(caixaDe(2));
+
+    const antes = liDe(2).outerHTML;
+    fireEvent.dragStart(liDe(2), { dataTransfer: transferencia() });
+
+    // Nada pode ter mudado ainda: o que muda a tela vai para o quadro seguinte.
+    expect(liDe(2).outerHTML).toBe(antes);
+    expect(screen.queryByRole('group', { name: /Soltar/ })).toBeNull();
+  });
+
+  it('mostra o maço e os alvos no quadro seguinte ao dragstart', async () => {
+    montar();
+    fireEvent.click(caixaDe(1));
+    fireEvent.dragStart(liDe(1), { dataTransfer: transferencia() });
+
+    expect(await screen.findByRole('group', { name: /Soltar/ })).toBeInTheDocument();
+  });
+
   // Arrastar uma linha da seleção arrasta o lote inteiro.
   it('leva a seleção inteira no arraste', () => {
     montar();
@@ -1006,6 +1032,7 @@ describe('seleção múltipla, arraste e ações de pasta', () => {
 
     const dataTransfer = transferencia();
     fireEvent.dragStart(liDe(2), { dataTransfer });
+    await screen.findByRole('group', { name: /Soltar/ });
     const pasta = screen.getByRole('button', { name: /^Arquivo em Trabalho/ }).closest('li')!;
     fireEvent.dragOver(pasta, { dataTransfer });
     fireEvent.drop(pasta, { dataTransfer });
@@ -1091,33 +1118,37 @@ describe('alvos de ação no arraste', () => {
   });
 
   // Fora do arraste os alvos não existem: as três ações já estão na barra.
-  it('só mostra os alvos durante o arraste', () => {
+  it('só mostra os alvos durante o arraste', async () => {
     montar();
     fireEvent.click(caixaDe(1));
     expect(screen.queryByRole('button', { name: 'Excluir' })).not.toBeNull();
     expect(screen.queryByRole('group', { name: /Soltar/ })).toBeNull();
 
     fireEvent.dragStart(liDe(1), { dataTransfer: transferencia() });
-    expect(screen.getByRole('group', { name: 'Soltar 1 conversa em uma ação' })).toBeInTheDocument();
+    // Os alvos entram no quadro seguinte: durante o dragstart nada repinta.
+    expect(
+      await screen.findByRole('group', { name: 'Soltar 1 conversa em uma ação' }),
+    ).toBeInTheDocument();
   });
 
-  it('anuncia quantas conversas o arraste carrega', () => {
+  it('anuncia quantas conversas o arraste carrega', async () => {
     montar();
     fireEvent.click(caixaDe(1));
     fireEvent.click(caixaDe(2));
     fireEvent.dragStart(liDe(2), { dataTransfer: transferencia() });
 
     expect(
-      screen.getByRole('group', { name: 'Soltar 2 conversas em uma ação' }),
+      await screen.findByRole('group', { name: 'Soltar 2 conversas em uma ação' }),
     ).toBeInTheDocument();
   });
 
   // Passar por cima precisa dizer o que vai acontecer, não só acender.
-  it('diz o que o alvo faz quando o cursor está em cima', () => {
+  it('diz o que o alvo faz quando o cursor está em cima', async () => {
     montar();
     fireEvent.click(caixaDe(1));
     const dataTransfer = transferencia();
     fireEvent.dragStart(liDe(1), { dataTransfer });
+    await screen.findByRole('group', { name: /Soltar/ });
 
     const alvo = screen.getByRole('button', { name: 'Excluir as conversas arrastadas' });
     fireEvent.dragOver(alvo, { dataTransfer });
@@ -1137,6 +1168,7 @@ describe('alvos de ação no arraste', () => {
 
     const dataTransfer = transferencia();
     fireEvent.dragStart(liDe(2), { dataTransfer });
+    await screen.findByRole('group', { name: /Soltar/ });
     const alvo = screen.getByRole('button', { name: nome });
     fireEvent.dragOver(alvo, { dataTransfer });
     fireEvent.drop(alvo, { dataTransfer });
@@ -1151,6 +1183,7 @@ describe('alvos de ação no arraste', () => {
     montar();
     fireEvent.click(caixaDe(1));
     fireEvent.dragStart(liDe(1), { dataTransfer: transferencia() });
+    await screen.findByRole('group', { name: /Soltar/ });
     fireEvent.dragEnd(liDe(1));
 
     await waitFor(() => expect(screen.queryByRole('group', { name: /Soltar/ })).toBeNull());
