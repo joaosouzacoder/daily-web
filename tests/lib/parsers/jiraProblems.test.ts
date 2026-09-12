@@ -27,13 +27,12 @@ function story(over: Partial<JiraAuditIssue> = {}): JiraAuditIssue {
   return {
     ...item({ parent: { key: 'A-100', summary: 'Épico' } }),
     startDate: '2026-09-01',
-    resolvedAt: '',
     ...over,
   };
 }
 
 function epic(over: Partial<JiraAuditIssue> = {}): JiraAuditIssue {
-  return { ...item({ key: 'A-100', kind: 'Epic' }), startDate: '', resolvedAt: '', ...over };
+  return { ...item({ key: 'A-100', kind: 'Epic' }), startDate: '', ...over };
 }
 
 const child = (over: Partial<JiraItem>) =>
@@ -57,18 +56,16 @@ describe('findProblems: histórias', () => {
     expect(problemsOf([story({ statusCategory: 'new', startDate: '' })])).toEqual([]);
   });
 
-  it('aponta a história concluída sem data de início e sem data de conclusão', () => {
-    expect(
-      problemsOf([story({ statusCategory: 'done', startDate: '', resolvedAt: '' })]),
-    ).toEqual(['story-done-without-start', 'story-done-without-resolution']);
+  it('aponta a história concluída sem data de início', () => {
+    expect(problemsOf([story({ statusCategory: 'done', startDate: '' })])).toEqual([
+      'story-done-without-start',
+    ]);
   });
 
-  it('aceita a história concluída com as duas datas', () => {
-    expect(
-      problemsOf([
-        story({ statusCategory: 'done', resolvedAt: '2026-09-09T12:00:00.000Z' }),
-      ]),
-    ).toEqual([]);
+  // A maioria dos workflows desta instância não aplica resolução ao concluir,
+  // então a data de resolução fica vazia em história legitimamente fechada.
+  it('não cobra data de conclusão da história concluída', () => {
+    expect(problemsOf([story({ statusCategory: 'done' })])).toEqual([]);
   });
 
   it('aponta a história sem épico, em qualquer situação', () => {
@@ -78,7 +75,7 @@ describe('findProblems: histórias', () => {
   it('junta todos os problemas da mesma história numa linha só', () => {
     expect(
       problemsOf([story({ statusCategory: 'done', parent: null, startDate: '' })]),
-    ).toEqual(['story-done-without-start', 'story-done-without-resolution', 'story-without-epic']);
+    ).toEqual(['story-done-without-start', 'story-without-epic']);
   });
 
   it('reconhece a história pelo nome do tipo em português e em inglês', () => {

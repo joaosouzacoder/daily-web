@@ -117,7 +117,6 @@ export interface JiraDatedItem extends JiraItem {
 export type JiraProblem =
   | 'story-in-progress-without-start'
   | 'story-done-without-start'
-  | 'story-done-without-resolution'
   | 'story-without-epic'
   | 'epic-without-stories'
   | 'epic-in-progress-without-active-story';

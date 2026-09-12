@@ -333,14 +333,13 @@ export async function fetchProblems(conn: Connection): Promise<JiraProblemItem[]
   const auth = jiraAuth(conn);
   const startField = await startDateField(auth);
 
-  const raw = await searchAll(auth, PROBLEM_SCOPE, [...FIELDS, 'resolutiondate', startField]);
+  const raw = await searchAll(auth, PROBLEM_SCOPE, [...FIELDS, startField]);
   const scope: JiraAuditIssue[] = raw.map((issue) => {
     const fields = (issue.fields ?? {}) as Record<string, unknown>;
     const text = (value: unknown) => (typeof value === 'string' ? value : '');
     return {
       ...toJiraItem(issue, auth.baseUrl, 'assignee'),
       startDate: text(fields[startField]),
-      resolvedAt: text(fields.resolutiondate),
     };
   });
 

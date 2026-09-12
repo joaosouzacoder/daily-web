@@ -106,6 +106,15 @@ Only `main` is maintained; there are no release branches.
   on reload, and each item keeps its label in a tooltip and for screen readers.
 
 ### Fixed
+- The Jira "Problemas" tab no longer reports every closed story. The rule
+  "concluída sem data de conclusão" flagged a done story whose `resolutiondate`
+  was empty, but in this Jira instance most workflows never apply a resolution
+  on the transitions that finish a card, so that field stays null on issues
+  that are legitimately closed — 93 issues were reported for a field the
+  operation does not feed. Taking "done" from the status category instead makes
+  the rule say only "a done story is done", so it was removed along with its
+  label and the `resolutiondate` fetch, which nothing else used. The other five
+  rules are unchanged.
 - Panels can be resized again in "Organizar" mode. The rule that stops panel
   content from catching the pointer while arranging was widened to every child
   of the grid item in the Tailwind rebuild, which also caught the resize handle

@@ -271,14 +271,14 @@ describe('fetchProblems', () => {
   const epic = (key: string, over: Record<string, unknown> = {}) =>
     issue(key, { issuetype: { name: 'Epic', subtask: false }, ...over });
 
-  it('lê a data de início pelo campo descoberto e pede a data de resolução', async () => {
+  it('lê a data de início pelo campo descoberto', async () => {
     const fetchMock = stubJira([
       { issues: [story('DAD-2', { customfield_10015: null }), story('DAD-3')] },
     ]);
     const found = await fetchProblems(CONN);
 
     const [scope] = searchBodies(fetchMock);
-    expect(scope.fields).toEqual(expect.arrayContaining(['customfield_10015', 'resolutiondate']));
+    expect(scope.fields).toEqual(expect.arrayContaining(['customfield_10015']));
     expect(scope.jql).toContain('assignee = currentUser() OR reporter = currentUser()');
     expect(found.map((i) => [i.key, i.problems])).toEqual([
       ['DAD-2', ['story-in-progress-without-start']],
