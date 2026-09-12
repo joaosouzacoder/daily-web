@@ -46,6 +46,9 @@ Only `main` is maintained; there are no release branches.
   failed and the message returned to the screen.
 
 ### Changed
+- The inbox and the sent folder are fetched over one connection again. The
+  login is the expensive part of a round trip to Gmail, and opening a second
+  one per account each cycle cost more than the whole fetch saved.
 - The refresh cycle no longer re-reads a whole mailbox to find out that
   nothing changed. Messages already read from the server are kept, and each
   cycle asks for two things over one connection: what arrived after the last

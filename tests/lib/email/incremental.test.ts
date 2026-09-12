@@ -3,7 +3,10 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-vi.mock('@/lib/integrations/imap', () => ({ fetchFolderChanges: vi.fn(), listSent: vi.fn() }));
+vi.mock('@/lib/integrations/imap', () => ({
+  fetchFolderChanges: vi.fn(),
+  fetchInboxAndSent: vi.fn(),
+}));
 
 import { fetchFolderChanges } from '@/lib/integrations/imap';
 import type { Connection } from '@/lib/vault/connections';
@@ -230,5 +233,24 @@ describe('nada sem limite', () => {
 
     const { listStoredMessages } = await import('@/lib/email/messages');
     expect(listStoredMessages(ME, CONN.id, 'INBOX', '100', 1000)).toHaveLength(300);
+  });
+});
+
+describe('uma conexão por conta a cada ciclo', () => {
+  // Duas conexões por conta custavam um login a mais, e o login é a parte
+  // cara da ida: o ciclo ficou mais lento do que era antes da mudança.
+  it('traz a entrada e os enviados numa ida só', async () => {
+    const { fetchInboxAndSent } = await import('@/lib/integrations/imap');
+    vi.mocked(fetchInboxAndSent).mockResolvedValue({
+      changes: changes({ added: [envelope('10')], total: 1 }) as never,
+      sent: [envelope('99', { mailbox: 'sent', folder: 'Sent' })],
+    });
+
+    const { loadInbox } = await import('@/lib/email/inbox');
+    const lista = await loadInbox(ME, CONN, 30);
+
+    expect(fetchInboxAndSent).toHaveBeenCalledTimes(1);
+    expect(fetchFolderChanges).not.toHaveBeenCalled();
+    expect(lista.map((e) => e.id).sort()).toEqual(['10', '99']);
   });
 });

@@ -549,53 +549,90 @@ export async function fetchFolderChanges(
   windowSize: number,
   limit: number,
 ): Promise<FolderChanges> {
+  return withClient(conn, (client) => changesIn(client, conn, path, sinceUid, windowSize, limit));
+}
+
+export interface InboxSnapshot {
+  changes: FolderChanges;
+  sent: EmailEnvelope[];
+}
+
+/**
+ * A entrada e os enviados na mesma conexão.
+ *
+ * Duas conexões por conta a cada ciclo custavam um login a mais — e o login
+ * no Gmail é a parte cara da ida, não a busca. Os enviados entram para compor
+ * conversa: sem eles um fio mostra só o lado de quem escreveu para você.
+ */
+export async function fetchInboxAndSent(
+  conn: Connection,
+  sinceUid: string | null,
+  windowSize: number,
+  limit: number,
+): Promise<InboxSnapshot> {
   return withClient(conn, async (client) => {
-    const enviados = findSpecialUse(await client.list(), '\\Sent');
-    const kind: MailboxKind = path === enviados ? 'sent' : 'inbox';
-
-    const lock = await client.getMailboxLock(path);
-    try {
-      const caixa = typeof client.mailbox === 'object' ? client.mailbox : null;
-      const uidvalidity = caixa?.uidValidity !== undefined ? String(caixa.uidValidity) : '';
-      const total = caixa?.exists ?? 0;
-      const proximoUid = Number(caixa?.uidNext ?? 0);
-
-      if (total === 0) {
-        return { uidvalidity, added: [], flags: [], windowFrom: '1', total: 0 };
-      }
-
-      const desde = sinceUid === null ? null : Number(sinceUid);
-      const added =
-        desde === null
-          ? await fetchRecent(client, conn, path, kind, total, limit)
-          : // `n:*` sempre devolve ao menos a última mensagem, mesmo quando
-            // nenhuma é mais nova — daí o corte por uid depois do comando.
-            (await fetchByUid(client, conn, path, kind, `${desde + 1}:*`)).filter(
-              (e) => Number(e.id) > desde,
-            );
-
-      // A janela é de uid, não de quantidade: é o que o servidor sabe contar
-      // num comando só. Fora dela nada é concluído, para uma mensagem antiga
-      // não sumir da lista por não ter sido perguntada.
-      const inicioJanela = Math.max(proximoUid - windowSize, 1);
-      const flags: FolderFlags[] = [];
-      for await (const message of client.fetch(
-        `${inicioJanela}:*`,
-        { uid: true, flags: true, labels: true },
-        { uid: true },
-      )) {
-        flags.push({
-          uid: String(message.uid),
-          unread: kind === 'sent' ? false : !message.flags?.has('\\Seen'),
-          labels: userLabels(message.labels),
-        });
-      }
-
-      return { uidvalidity, added, flags, windowFrom: String(inicioJanela), total };
-    } finally {
-      lock.release();
-    }
+    const changes = await changesIn(client, conn, INBOX_PATH, sinceUid, windowSize, limit);
+    // Uma pasta de enviados que não existe ou não abre não pode derrubar a
+    // caixa de entrada: sem ela a conversa fica incompleta, sem a entrada não
+    // há painel nenhum.
+    const sent = await listFrom(client, conn, 'sent', limit).catch(() => []);
+    return { changes, sent };
   });
+}
+
+async function changesIn(
+  client: ImapFlow,
+  conn: Connection,
+  path: string,
+  sinceUid: string | null,
+  windowSize: number,
+  limit: number,
+): Promise<FolderChanges> {
+  const enviados = findSpecialUse(await client.list(), '\\Sent');
+  const kind: MailboxKind = path === enviados ? 'sent' : 'inbox';
+
+  const lock = await client.getMailboxLock(path);
+  try {
+    const caixa = typeof client.mailbox === 'object' ? client.mailbox : null;
+    const uidvalidity = caixa?.uidValidity !== undefined ? String(caixa.uidValidity) : '';
+    const total = caixa?.exists ?? 0;
+    const proximoUid = Number(caixa?.uidNext ?? 0);
+
+    if (total === 0) {
+      return { uidvalidity, added: [], flags: [], windowFrom: '1', total: 0 };
+    }
+
+    const desde = sinceUid === null ? null : Number(sinceUid);
+    const added =
+      desde === null
+        ? await fetchRecent(client, conn, path, kind, total, limit)
+        : // `n:*` sempre devolve ao menos a última mensagem, mesmo quando
+          // nenhuma é mais nova — daí o corte por uid depois do comando.
+          (await fetchByUid(client, conn, path, kind, `${desde + 1}:*`)).filter(
+            (e) => Number(e.id) > desde,
+          );
+
+    // A janela é de uid, não de quantidade: é o que o servidor sabe contar
+    // num comando só. Fora dela nada é concluído, para uma mensagem antiga
+    // não sumir da lista por não ter sido perguntada.
+    const inicioJanela = Math.max(proximoUid - windowSize, 1);
+    const flags: FolderFlags[] = [];
+    for await (const message of client.fetch(
+      `${inicioJanela}:*`,
+      { uid: true, flags: true, labels: true },
+      { uid: true },
+    )) {
+      flags.push({
+        uid: String(message.uid),
+        unread: kind === 'sent' ? false : !message.flags?.has('\\Seen'),
+        labels: userLabels(message.labels),
+      });
+    }
+
+    return { uidvalidity, added, flags, windowFrom: String(inicioJanela), total };
+  } finally {
+    lock.release();
+  }
 }
 
 async function fetchByUid(

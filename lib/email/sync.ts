@@ -1,4 +1,4 @@
-import { fetchFolderChanges } from '@/lib/integrations/imap';
+import { fetchFolderChanges, type FolderChanges } from '@/lib/integrations/imap';
 import type { Connection } from '@/lib/vault/connections';
 import type { EmailEnvelope } from '@/lib/types';
 import {
@@ -32,7 +32,7 @@ const INITIAL_LIMIT = 50;
 /** Largura da janela de reconferência, em uids. Ela cobre o que pode ter sido
  *  lido, etiquetado ou apagado por outro cliente; o que é mais antigo do que
  *  isso não é perguntado, e por isso também não é concluído. */
-const FLAG_WINDOW = 200;
+export const FLAG_WINDOW = 200;
 
 /** Teto do que fica guardado por pasta. Uma caixa com anos de mensagem não
  *  cabe no banco nem serve para a tela. */
@@ -49,23 +49,41 @@ export interface SyncResult {
   reindexed: boolean;
 }
 
+/**
+ * De onde a próxima leitura desta pasta parte. Nulo quando ela nunca foi lida
+ * — aí não há diferença a pedir, e sim as mensagens recentes.
+ */
+export function folderCursor(userId: string, connection: Connection, folder: string): string | null {
+  ensureMailboxRow(userId, connection.id, folder);
+  const conhecido = getMailboxUidValidity(userId, connection.id, folder);
+  const ultimoUid = getLastUid(userId, connection.id, folder);
+  return conhecido && ultimoUid > 0 ? String(ultimoUid) : null;
+}
+
 export async function syncFolder(
   userId: string,
   connection: Connection,
   folder: string,
   limit: number = INITIAL_LIMIT,
 ): Promise<SyncResult> {
-  ensureMailboxRow(userId, connection.id, folder);
+  const desde = folderCursor(userId, connection, folder);
+  const mudancas = await fetchFolderChanges(connection, folder, desde, FLAG_WINDOW, limit);
+  return applyFolderChanges(userId, connection, folder, limit, mudancas);
+}
+
+/**
+ * Grava o que o servidor contou. Separado da busca para quem já trouxe as
+ * mudanças junto de outra coisa na mesma conexão não precisar buscá-las de novo.
+ */
+export async function applyFolderChanges(
+  userId: string,
+  connection: Connection,
+  folder: string,
+  limit: number,
+  mudancas: FolderChanges,
+): Promise<SyncResult> {
   const conhecido = getMailboxUidValidity(userId, connection.id, folder);
   const ultimoUid = getLastUid(userId, connection.id, folder);
-
-  const mudancas = await fetchFolderChanges(
-    connection,
-    folder,
-    conhecido && ultimoUid > 0 ? String(ultimoUid) : null,
-    FLAG_WINDOW,
-    limit,
-  );
 
   // Numeração reiniciada: todo uid guardado passou a apontar para outra
   // mensagem. O que havia é descartado e a pasta é lida de novo, e as ações
