@@ -23,6 +23,9 @@ export interface EmailEnvelope {
    *  aponta para mensagens diferentes na entrada e nos enviados, então nenhuma
    *  operação pode usar o id sem saber de onde ele é. */
   mailbox: MailboxKind;
+  /** Erro da última ação pedida para esta mensagem, quando ela falhou em
+   *  definitivo. A mensagem continua na caixa: o erro é o que explica por quê. */
+  actionError?: string;
 }
 
 /** As duas caixas que a conversa precisa: o que chegou e o que você mandou. */

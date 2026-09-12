@@ -608,3 +608,25 @@ const fioComEnviada: EmailEnvelope[] = [
     messageId: '<q@x>', references: ['<p@x>'], labels: [], mailbox: 'inbox',
   },
 ];
+
+describe('ação que falhou em definitivo', () => {
+  // Esconder uma mensagem que continua na caixa do servidor seria mentir sobre
+  // o estado dela. Ela volta para a lista, com o motivo à vista.
+  it('mostra o erro na linha da mensagem', () => {
+    const comErro: EmailEnvelope[] = [
+      { ...items[0], actionError: 'a conta recusou a conexão' },
+      items[1],
+    ];
+    render(
+      <EmailPanel
+        onSeenChanged={() => {}}
+        onRemoved={() => {}}
+        mailboxes={MAILBOXES}
+        email={{ data: comErro, error: null }}
+        onChanged={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent('a conta recusou a conexão');
+  });
+});

@@ -8,6 +8,20 @@ Only `main` is maintained; there are no release branches.
 
 ## [Unreleased]
 
+### Fixed
+- A deleted e-mail no longer comes back, and neither does one that was marked
+  as read before being deleted. Every mailbox action is now written to a
+  durable log before it reaches the server, and each snapshot the server
+  returns is reconciled against that log instead of overwriting it: the
+  message stays out of the list until the server agrees, survives a restart of
+  the service, and is retried with bounded attempts and exponential backoff
+  when the write fails. An action that runs out of attempts brings the message
+  back with the error on its row, because it really is still in the mailbox.
+- Every IMAP operation for one account now waits its turn in that account's
+  queue. Listing holds a connection for seconds, and an action fired meanwhile
+  opened a second login that the provider refused — which is how a delete
+  failed and the message returned to the screen.
+
 ### Changed
 - The active note tab is the same band as the sidebar's active item — a brand
   tint fading out with a 3px bar — instead of a solid surface that read as a

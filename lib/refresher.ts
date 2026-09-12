@@ -1,4 +1,4 @@
-import type { DashboardState, MailboxRef, PanelResult } from '@/lib/types';
+import type { DashboardState, EmailEnvelope, MailboxRef, PanelResult } from '@/lib/types';
 import * as imap from './integrations/imap';
 import * as agendaSource from './integrations/agenda';
 import * as jiraApi from './integrations/jiraApi';
@@ -7,6 +7,9 @@ import { fetchTasks } from './tasks';
 import { combineNotifications, getNotifications } from './notifications';
 import { getPomodoroState } from './pomodoro';
 import { warmBodyCache, pruneOldBodies } from './emailCache';
+import { listPendingActions } from './email/pendingActions';
+import { reconcileEnvelopes, confirmAgainstSnapshot } from './email/reconcile';
+import { replayPendingActions } from './email/replay';
 import { listUsers } from './auth/users';
 import { enabledModules, listConnections } from './vault/connections';
 import { agendaDays, dashboardLayout, dashboardLayouts, jiraWatchedKeys } from './preferences';
@@ -161,6 +164,10 @@ async function buildState(userId: string, ciclo: symbol): Promise<DashboardState
 
   const watched = jiraConnection ? jiraWatchedKeys(userId) : [];
 
+  // O retrato do e-mail vale para este instante. Uma ação escrita depois
+  // daqui não pode ser confirmada por ele: ele é anterior à escrita.
+  const retratoIniciadoEm = new Date();
+
   const [email, agenda, pulls, jira, tasks, mentions, jiraWatched, jiraDelivered, jiraApproved, jiraProblems] =
     await Promise.all([
       has('email') ? mergeConnections(mailConnections, (c) => imap.listEnvelopes(c, EMAIL_LIMIT)) : OFF,
@@ -179,9 +186,13 @@ async function buildState(userId: string, ciclo: symbol): Promise<DashboardState
       jiraConnection ? panel(() => jiraApi.fetchProblems(jiraConnection)) : OFF,
     ]);
 
+  // O que o usuário pediu vence o retrato do servidor. As ações que o retrato
+  // já reflete saem do caminho aqui; as demais são sobrepostas a ele.
+  const emailReconciliado = reconcileEmail(userId, email, retratoIniciadoEm);
+
   // O sino soma menção do Jira, pull request aberto e e-mail não lido. As
   // três já foram buscadas acima: o aviso é derivado, não é uma quarta ida.
-  const notifications = combineNotifications(userId, mentions, pulls, email);
+  const notifications = combineNotifications(userId, mentions, pulls, emailReconciliado);
 
   const mailboxes: MailboxRef[] = mailConnections.map((c) => ({ id: c.id, label: c.label }));
 
@@ -192,7 +203,7 @@ async function buildState(userId: string, ciclo: symbol): Promise<DashboardState
     agendaDays: days,
     layout: dashboardLayout(userId),
     layouts: dashboardLayouts(userId),
-    email,
+    email: emailReconciliado,
     agenda,
     pulls,
     jira,
@@ -213,6 +224,14 @@ async function buildState(userId: string, ciclo: symbol): Promise<DashboardState
       : pendentes.reduce((acc, patch) => patch(acc), state);
   caches.set(userId, reconciliado);
 
+  // Leva ao servidor o que ainda não chegou. Em segundo plano e pela fila da
+  // conta: uma escrita que falhou volta a ser tentada, sem segurar a resposta.
+  if (mailConnections.length > 0) {
+    void replayPendingActions(userId, mailConnections).catch(() => {
+      // Cada ação já guarda o próprio erro e a própria contagem de tentativas.
+    });
+  }
+
   // Baixa os corpos que ainda faltam em segundo plano, sem segurar a
   // resposta: quando o usuário clicar, o e-mail já estará no banco.
   if (email.data && email.data.length > 0) {
@@ -224,10 +243,38 @@ async function buildState(userId: string, ciclo: symbol): Promise<DashboardState
   return reconciliado;
 }
 
+/**
+ * Sobrepõe as ações pendentes ao que veio do servidor e confirma as que ele já
+ * reflete. `snapshotStartedAt` nulo é uma releitura do cache, não um retrato
+ * novo: aí não há o que confirmar, só o que sobrepor.
+ */
+function reconcileEmail(
+  userId: string,
+  email: PanelResult<EmailEnvelope[]>,
+  snapshotStartedAt: Date | null,
+): PanelResult<EmailEnvelope[]> {
+  if (!email.data) return email;
+  const pendentes = listPendingActions(userId);
+  if (pendentes.length === 0) return email;
+
+  if (snapshotStartedAt) {
+    confirmAgainstSnapshot(userId, email.data, pendentes, snapshotStartedAt);
+    return { ...email, data: reconcileEnvelopes(email.data, listPendingActions(userId)) };
+  }
+  return { ...email, data: reconcileEnvelopes(email.data, pendentes) };
+}
+
 export function getCachedState(userId: string): DashboardState | null {
   const cache = caches.get(userId);
   if (!cache) return null;
-  return { ...cache, pomodoro: getPomodoroState(userId), nextRefreshAt: nextRefreshAt() };
+  return {
+    ...cache,
+    // Reconciliar na leitura, e não só na gravação, é o que faz a ação valer
+    // mesmo quando ela foi pedida antes de existir cache para este usuário.
+    email: reconcileEmail(userId, cache.email, null),
+    pomodoro: getPomodoroState(userId),
+    nextRefreshAt: nextRefreshAt(),
+  };
 }
 
 export function dropCache(userId: string): void {

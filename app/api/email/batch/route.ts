@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { setSeen, applyTag, deleteEmails } from '@/lib/integrations/imap';
 import { isValidEmailId, isValidFolder } from '@/lib/api/validation';
 import { requireUser } from '@/lib/api/context';
 import { findConnection, type Connection } from '@/lib/vault/connections';
-import { patchCachedState } from '@/lib/refresher';
-import { markEmailsSeen, removeEmails } from '@/lib/statePatches';
+import { recordPendingAction, type PendingKind } from '@/lib/email/pendingActions';
+import { replayPendingActions } from '@/lib/email/replay';
 
 interface Target {
   account: unknown;
@@ -14,6 +13,13 @@ interface Target {
 const VALID_ACTIONS = ['read', 'unread', 'move', 'delete'] as const;
 type Action = (typeof VALID_ACTIONS)[number];
 
+const KIND: Record<Action, PendingKind> = {
+  read: 'seen',
+  unread: 'unseen',
+  move: 'move',
+  delete: 'delete',
+};
+
 interface BatchTargetResult {
   account: string;
   id: string;
@@ -21,6 +27,11 @@ interface BatchTargetResult {
   error?: string;
 }
 
+/**
+ * A ação é aceita quando fica gravada, não quando chega ao servidor: o que o
+ * usuário pediu passa a valer na hora e a escrita é levada — e repetida, se
+ * preciso — pelo replay. Só o que nem chega a ser gravado responde erro aqui.
+ */
 export async function POST(request: NextRequest) {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
@@ -38,11 +49,7 @@ export async function POST(request: NextRequest) {
   }
 
   const results: BatchTargetResult[] = [];
-  // Os alvos válidos vão juntos por conta. O IMAP opera sobre um conjunto de
-  // mensagens num comando só; mandar uma por vez abria uma conexão por
-  // mensagem e o servidor recusava o lote com "too many simultaneous
-  // connections" — foi assim que 24 de 27 exclusões falharam.
-  const porConta = new Map<string, { connection: Connection; ids: string[] }>();
+  const conexoes = new Map<string, Connection>();
 
   for (const target of targets) {
     const account = String(target.account);
@@ -61,40 +68,22 @@ export async function POST(request: NextRequest) {
       continue;
     }
 
-    const grupo = porConta.get(account) ?? { connection, ids: [] };
-    grupo.ids.push(id);
-    porConta.set(account, grupo);
-  }
-
-  // Uma conta por vez: em paralelo, cada conta abriria a sua conexão ao mesmo
-  // tempo e o problema voltaria em escala menor.
-  for (const [account, { connection, ids }] of porConta) {
-    try {
-      if (action === 'read') await setSeen(connection, ids, true);
-      else if (action === 'unread') await setSeen(connection, ids, false);
-      else if (action === 'delete') await deleteEmails(connection, ids);
-      else if (action === 'move') await applyTag(connection, ids, folder as string);
-      for (const id of ids) results.push({ account, id, ok: true });
-    } catch (err) {
-      // O comando vale para o conjunto inteiro: se ele falhou, nenhuma
-      // mensagem daquela conta foi tocada.
-      const error = err instanceof Error ? err.message : String(err);
-      for (const id of ids) results.push({ account, id, ok: false, error });
-    }
-  }
-
-  // Só os alvos que deram certo entram na correção: um e-mail que falhou
-  // precisa continuar na tela, do jeito que está.
-  const done = results.filter((r) => r.ok).map((r) => ({ account: r.account, id: r.id }));
-  if (done.length > 0) {
-    patchCachedState(auth.value.id, (state) => {
-      if (action === 'read') return markEmailsSeen(state, done, true);
-      if (action === 'unread') return markEmailsSeen(state, done, false);
-      // Apagar tira da caixa; mover é uma cópia para a pasta escolhida, então
-      // a mensagem continua na entrada, só marcada como lida.
-      if (action === 'delete') return removeEmails(state, done);
-      return markEmailsSeen(state, done, true);
+    recordPendingAction({
+      userId: auth.value.id,
+      account: connection.id,
+      uid: id,
+      kind: KIND[action],
+      payload: action === 'move' ? (folder as string) : null,
     });
+    conexoes.set(connection.id, connection);
+    results.push({ account, id, ok: true });
+  }
+
+  if (conexoes.size > 0) {
+    // A falha aqui não volta como erro: a intenção está gravada e o ciclo
+    // seguinte tenta de novo. O que esgota as tentativas aparece na linha da
+    // mensagem, que volta para a lista — ela não foi apagada de verdade.
+    await replayPendingActions(auth.value.id, [...conexoes.values()]);
   }
 
   return NextResponse.json({ results });

@@ -463,6 +463,9 @@ export function EmailPanel({
             const marcada = threadKeys(thread).every((k) => selected.has(k));
             const titulo = thread.subject || '(sem assunto)';
             const tags = threadTags(thread, appliedTags[thread.id] ?? []);
+            // A ação que esgotou as tentativas não some em silêncio: a mensagem
+            // continua na caixa do servidor e o erro é o que explica por quê.
+            const acaoComErro = thread.messages.find((m) => m.actionError)?.actionError ?? null;
             return (
               <li key={thread.id} className={cn('rounded-lg', isOpen && 'bg-brand-tint')}>
                 <div
@@ -524,6 +527,11 @@ export function EmailPanel({
                     <span className="w-full truncate type-caption text-ink-dim">
                       {thread.participants.join(', ') || EM_DASH}
                     </span>
+                    {acaoComErro && (
+                      <span role="alert" className="w-full truncate type-caption text-danger">
+                        {acaoComErro}
+                      </span>
+                    )}
                   </button>
                   {thread.messages.length > 1 && (
                     <span

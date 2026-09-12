@@ -4,6 +4,7 @@ import nodemailer from 'nodemailer';
 import { applyMailPreset } from '@/lib/modules';
 import { readable, sortFolders } from '@/lib/parsers/mail';
 import { describeMailError } from './mailErrors';
+import { runExclusive } from '@/lib/email/queue';
 import type { Connection } from '@/lib/vault/connections';
 import type { EmailEnvelope, MailboxKind } from '@/lib/types';
 
@@ -33,7 +34,14 @@ export function mailConfig(conn: Connection): MailConfig {
   };
 }
 
+// Toda ida ao servidor passa pela fila da conta. A listagem segura a conexão
+// por segundos, e uma ação disparada nesse meio-tempo abria um segundo login:
+// o provedor recusa o excedente, a ação falhava e a mensagem voltava à tela.
 async function withClient<T>(conn: Connection, fn: (client: ImapFlow) => Promise<T>): Promise<T> {
+  return runExclusive(conn.id, () => connectAndRun(conn, fn));
+}
+
+async function connectAndRun<T>(conn: Connection, fn: (client: ImapFlow) => Promise<T>): Promise<T> {
   const config = mailConfig(conn);
   const client = new ImapFlow({
     host: config.imapHost,

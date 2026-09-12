@@ -272,6 +272,36 @@ function addNoteSync(instance: Database.Database): void {
   `);
 }
 
+// O que o usuário pediu, guardado antes de a ação chegar ao servidor. Sem
+// isto a intenção vivia num cache de memória: o retrato seguinte do IMAP
+// desfazia a exclusão e o reinício do serviço apagava o que ainda não tinha
+// chegado ao servidor. `uidvalidity` entra na chave porque o uid só tem
+// sentido enquanto ele não muda.
+function addEmailPendingActions(instance: Database.Database): void {
+  instance.exec(`
+    CREATE TABLE IF NOT EXISTS email_pending_actions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      account TEXT NOT NULL,
+      mailbox TEXT NOT NULL,
+      uidvalidity TEXT NOT NULL DEFAULT '',
+      uid TEXT NOT NULL,
+      action TEXT NOT NULL,
+      payload TEXT,
+      created_at TEXT NOT NULL,
+      applied_at TEXT,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      next_attempt_at TEXT NOT NULL,
+      state TEXT NOT NULL DEFAULT 'pending',
+      last_error TEXT
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_email_pending_key
+      ON email_pending_actions (user_id, account, mailbox, uidvalidity, uid, action);
+    CREATE INDEX IF NOT EXISTS idx_email_pending_due
+      ON email_pending_actions (user_id, state, next_attempt_at);
+  `);
+}
+
 const MIGRATIONS: ((instance: Database.Database) => void)[] = [
   addUserScope,
   addConnections,
@@ -281,6 +311,7 @@ const MIGRATIONS: ((instance: Database.Database) => void)[] = [
   addMailboxToBodyCache,
   addNotes,
   addNoteSync,
+  addEmailPendingActions,
 ];
 
 function migrate(instance: Database.Database): void {

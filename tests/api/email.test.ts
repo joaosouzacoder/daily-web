@@ -162,9 +162,10 @@ describe('POST /api/email/batch', () => {
     expect(vi.mocked(setSeen).mock.calls[0][1]).toEqual(['1', '2']);
   });
 
-  // O comando vale para o conjunto: se ele falhou, nenhuma mensagem daquela
-  // conta foi tocada, e dizer que metade deu certo seria mentira.
-  it('reporta a falha do comando em todos os alvos da conta', async () => {
+  // A ação vale quando fica gravada, não quando chega ao servidor: uma escrita
+  // que falhou continua pendente e é repetida, em vez de a mensagem voltar
+  // para a tela como se nada tivesse sido pedido.
+  it('aceita os alvos e mantém a intenção quando a escrita falha', async () => {
     vi.mocked(deleteEmails).mockRejectedValueOnce(new Error('sumiu'));
 
     const res = await batchRoute(
@@ -178,9 +179,13 @@ describe('POST /api/email/batch', () => {
     );
     const data = await res.json();
     expect(data.results).toHaveLength(2);
-    expect(data.results.every((r: { ok: boolean }) => !r.ok)).toBe(true);
-    expect(data.results[0]).toMatchObject({ id: '1', error: 'sumiu' });
-    expect(data.results[1]).toMatchObject({ id: '2', error: 'sumiu' });
+    expect(data.results.every((r: { ok: boolean }) => r.ok)).toBe(true);
+
+    const { listPendingActions } = await import('@/lib/email/pendingActions');
+    const pendentes = listPendingActions(ME.id);
+    expect(pendentes.map((a) => a.uid).sort()).toEqual(['1', '2']);
+    expect(pendentes.every((a) => a.state === 'pending' && a.appliedAt === null)).toBe(true);
+    expect(pendentes[0].lastError).toBe('sumiu');
   });
 
   // Um id fora do formato não pode arrastar o lote inteiro: ele é recusado
