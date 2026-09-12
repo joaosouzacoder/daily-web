@@ -113,7 +113,9 @@ describe('EmailPanel', () => {
     render(<EmailPanel onSeenChanged={() => {}} onRemoved={() => {}} mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={onChanged} />);
     fireEvent.click(screen.getByLabelText('selecionar Revisão do PR'));
     fireEvent.click(screen.getByRole('button', { name: 'Marcar lido' }));
-    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('falharam'));
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toContain('não foi processada'),
+    );
     expect(onChanged).toHaveBeenCalled();
   });
 
@@ -1035,5 +1037,170 @@ describe('seleção múltipla, arraste e ações de pasta', () => {
     await waitFor(() =>
       expect(corpos.some((c) => c.includes('"folder":"Arquivo"'))).toBe(true),
     );
+  });
+});
+
+describe('alvos de ação no arraste', () => {
+  const lista: EmailEnvelope[] = [1, 2, 3].map((n) => ({
+    id: String(n), account: 'mail-1', accountLabel: 'Trabalho', from: 'Remetente',
+    subject: `Mensagem ${n}`, unread: true, date: `2026-08-2${n}T10:00:00Z`,
+    messageId: `<${n}@x>`, references: [], labels: [], mailbox: 'inbox' as const, folder: 'INBOX',
+  }));
+
+  let corpos: string[];
+  let resultados: { account: string; id: string; ok: boolean; error?: string }[];
+
+  function montar(props: Partial<Parameters<typeof EmailPanel>[0]> = {}) {
+    render(
+      <EmailPanel
+        onSeenChanged={() => {}}
+        onRemoved={() => {}}
+        mailboxes={[{ id: 'mail-1', label: 'Trabalho' }]}
+        email={{ data: lista, error: null }}
+        onChanged={() => {}}
+        {...props}
+      />,
+    );
+  }
+
+  function transferencia() {
+    const dados = new Map<string, string>();
+    return {
+      effectAllowed: '', dropEffect: '',
+      get types() { return [...dados.keys()]; },
+      setData: (t: string, v: string) => dados.set(t, v),
+      getData: (t: string) => dados.get(t) ?? '',
+      setDragImage: vi.fn(),
+    };
+  }
+
+  const caixaDe = (n: number) =>
+    screen.getByLabelText(`selecionar Mensagem ${n}`) as HTMLInputElement;
+  const liDe = (n: number) => caixaDe(n).closest('li')!;
+
+  beforeEach(() => {
+    corpos = [];
+    resultados = [];
+    vi.spyOn(global, 'fetch').mockImplementation(async (url, init) => {
+      if (init?.body) corpos.push(String(init.body));
+      if (String(url).includes('/api/email/batch')) {
+        return new Response(JSON.stringify({ results: resultados }));
+      }
+      return new Response(JSON.stringify({ folders: [] }));
+    });
+  });
+
+  // Fora do arraste os alvos não existem: as três ações já estão na barra.
+  it('só mostra os alvos durante o arraste', () => {
+    montar();
+    fireEvent.click(caixaDe(1));
+    expect(screen.queryByRole('button', { name: 'Excluir' })).not.toBeNull();
+    expect(screen.queryByRole('group', { name: /Soltar/ })).toBeNull();
+
+    fireEvent.dragStart(liDe(1), { dataTransfer: transferencia() });
+    expect(screen.getByRole('group', { name: 'Soltar 1 conversa em uma ação' })).toBeInTheDocument();
+  });
+
+  it('anuncia quantas conversas o arraste carrega', () => {
+    montar();
+    fireEvent.click(caixaDe(1));
+    fireEvent.click(caixaDe(2));
+    fireEvent.dragStart(liDe(2), { dataTransfer: transferencia() });
+
+    expect(
+      screen.getByRole('group', { name: 'Soltar 2 conversas em uma ação' }),
+    ).toBeInTheDocument();
+  });
+
+  // Passar por cima precisa dizer o que vai acontecer, não só acender.
+  it('diz o que o alvo faz quando o cursor está em cima', () => {
+    montar();
+    fireEvent.click(caixaDe(1));
+    const dataTransfer = transferencia();
+    fireEvent.dragStart(liDe(1), { dataTransfer });
+
+    const alvo = screen.getByRole('button', { name: 'Excluir as conversas arrastadas' });
+    fireEvent.dragOver(alvo, { dataTransfer });
+
+    expect(alvo).toHaveAttribute('aria-current', 'true');
+    expect(alvo).toHaveTextContent('Solte para mover para a lixeira');
+  });
+
+  it.each([
+    ['Marcar como lido', 'read'],
+    ['Marcar como não lido', 'unread'],
+    ['Excluir as conversas arrastadas', 'delete'],
+  ])('soltar em %s executa a ação no lote', async (nome, action) => {
+    montar();
+    fireEvent.click(caixaDe(1));
+    fireEvent.click(caixaDe(2));
+
+    const dataTransfer = transferencia();
+    fireEvent.dragStart(liDe(2), { dataTransfer });
+    const alvo = screen.getByRole('button', { name: nome });
+    fireEvent.dragOver(alvo, { dataTransfer });
+    fireEvent.drop(alvo, { dataTransfer });
+
+    await waitFor(() => expect(corpos.some((c) => c.includes(`"action":"${action}"`))).toBe(true));
+    const corpo = JSON.parse(corpos.find((c) => c.includes(`"action":"${action}"`))!);
+    expect(corpo.targets.map((t: { id: string }) => t.id).sort()).toEqual(['1', '2']);
+  });
+
+  // Soltar no vazio é como se desiste no meio do caminho.
+  it('não executa nada quando o arraste termina fora de um alvo', async () => {
+    montar();
+    fireEvent.click(caixaDe(1));
+    fireEvent.dragStart(liDe(1), { dataTransfer: transferencia() });
+    fireEvent.dragEnd(liDe(1));
+
+    await waitFor(() => expect(screen.queryByRole('group', { name: /Soltar/ })).toBeNull());
+    expect(corpos.some((c) => c.includes('"action"'))).toBe(false);
+  });
+
+  // As mesmas três ações sem arrastar, pelos botões da barra.
+  it('executa as três ações pelo clique, sem arraste', async () => {
+    montar();
+    fireEvent.click(caixaDe(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Marcar não lido' }));
+
+    await waitFor(() => expect(corpos.some((c) => c.includes('"action":"unread"'))).toBe(true));
+  });
+
+  describe('quando parte do lote não é processada', () => {
+    beforeEach(() => {
+      resultados = [
+        { account: 'mail-1', id: '1', ok: true },
+        { account: 'mail-1', id: '2', ok: false, error: 'conta não encontrada' },
+      ];
+    });
+
+    it('diz quais mensagens ficaram de fora e por quê', async () => {
+      montar();
+      fireEvent.click(caixaDe(1));
+      fireEvent.click(caixaDe(2));
+      fireEvent.click(screen.getByRole('button', { name: 'Marcar lido' }));
+
+      const aviso = await screen.findByText(/não foi processada/);
+      expect(aviso).toHaveTextContent('Mensagem 2');
+      expect(aviso).toHaveTextContent('conta não encontrada');
+      expect(aviso).not.toHaveTextContent('Mensagem 1');
+    });
+
+    it('tenta de novo só o que ficou de fora', async () => {
+      montar();
+      fireEvent.click(caixaDe(1));
+      fireEvent.click(caixaDe(2));
+      fireEvent.click(screen.getByRole('button', { name: 'Marcar lido' }));
+      await screen.findByText(/não foi processada/);
+
+      corpos.length = 0;
+      resultados = [{ account: 'mail-1', id: '2', ok: true }];
+      fireEvent.click(screen.getByRole('button', { name: 'tentar de novo' }));
+
+      await waitFor(() => expect(corpos).toHaveLength(1));
+      const corpo = JSON.parse(corpos[0]);
+      expect(corpo.action).toBe('read');
+      expect(corpo.targets).toEqual([{ account: 'mail-1', id: '2' }]);
+    });
   });
 });

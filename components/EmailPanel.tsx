@@ -13,6 +13,7 @@ import {
   EMAIL_DRAG_TYPE,
   type FolderSelection,
 } from '@/components/email/FolderTree';
+import { ActionDropTargets, type DropAction } from '@/components/email/ActionDropTargets';
 import { useMailboxGroups } from '@/lib/hooks/useMailboxGroups';
 import { useFolderMessages } from '@/lib/hooks/useFolderMessages';
 import {
@@ -228,6 +229,9 @@ export function EmailPanel({
   const [tagMenuKey, setTagMenuKey] = useState<string | null>(null);
   const [appliedTags, setAppliedTags] = useState<Record<string, string[]>>({});
   const [batchError, setBatchError] = useState<string | null>(null);
+  // O que a última ação não conseguiu fazer. Fica na tela com o motivo e um
+  // botão para tentar de novo só esses.
+  const [naoProcessados, setNaoProcessados] = useState<BatchTargetResult[]>([]);
   const [folders, setFolders] = useState<string[]>([]);
   const [targetFolder, setTargetFolder] = useState('');
 
@@ -527,10 +531,11 @@ export function EmailPanel({
   const runBatch = async (
     action: 'read' | 'unread' | 'delete' | 'move' | 'tag',
     folder?: string,
+    somente?: { account: string; id: string }[],
   ) => {
-    const targets = all
-      .filter((m) => selectedKeys.has(key(m)))
-      .map((m) => ({ account: m.account, id: m.id }));
+    const targets =
+      somente ??
+      all.filter((m) => selectedKeys.has(key(m))).map((m) => ({ account: m.account, id: m.id }));
     if (targets.length === 0) return;
 
     // A seleção reage na hora; o que falhar volta na correção abaixo.
@@ -542,12 +547,10 @@ export function EmailPanel({
 
     const results = await postBatch(targets, action, folder, pastaDasMensagens);
     const failed = results.filter((r) => !r.ok);
+
     if (failed.length > 0) {
-      setBatchError(
-        `${failed.length} de ${results.length} ação(ões) falharam: ${failed
-          .map((f) => `${f.account}:${f.id}${f.error ? ` (${f.error})` : ''}`)
-          .join(', ')}`,
-      );
+      setBatchError(null);
+      setNaoProcessados(failed);
       // Volta selecionado o que não foi feito: é o que se tenta de novo.
       const chavesComFalha = new Set(failed.map((f) => `${f.account}:${f.id}`));
       const comFalha = threads
@@ -558,10 +561,39 @@ export function EmailPanel({
       onChanged();
       return;
     }
+
     setBatchError(null);
+    setNaoProcessados([]);
     setSel(EMPTY_SELECTION);
     // A pasta aberta não passa pelo ciclo do painel: ela é relida aqui.
     if (selecaoDePasta) recarregarPasta();
+    // A lista e as contagens vêm do estado do servidor, que já está corrigido:
+    // é uma leitura do que está em memória, não uma volta às caixas.
+    onChanged();
+  };
+
+  /** O assunto de quem não foi processado, para o aviso dizer quais. */
+  const assuntoDe = (account: string, id: string) =>
+    all.find((m) => m.account === account && m.id === id)?.subject || '(sem assunto)';
+
+  const [ultimaAcao, setUltimaAcao] = useState<{
+    action: 'read' | 'unread' | 'delete' | 'move' | 'tag';
+    folder?: string;
+  } | null>(null);
+
+  const executarLote = async (
+    action: 'read' | 'unread' | 'delete' | 'move' | 'tag',
+    folder?: string,
+  ) => {
+    setUltimaAcao({ action, folder });
+    await runBatch(action, folder);
+  };
+
+  const repetirNaoProcessados = async () => {
+    if (!ultimaAcao || naoProcessados.length === 0) return;
+    const alvos = naoProcessados.map((r) => ({ account: r.account, id: r.id }));
+    setNaoProcessados([]);
+    await runBatch(ultimaAcao.action, ultimaAcao.folder, alvos);
   };
 
   /**
@@ -602,7 +634,7 @@ export function EmailPanel({
     // A soltura usa o mesmo caminho de lote das demais ações: o pedido fica
     // gravado antes de sair daqui, e uma falha aparece na linha.
     if (anterior && !selecionadas.has(anterior)) despachar({ type: 'click', id: anterior });
-    await runBatch('move', destino.path);
+    await executarLote('move', destino.path);
   };
 
   const marcarPastaLida = async (contaDaPasta: string, node: MailboxNode) => {
@@ -650,13 +682,13 @@ export function EmailPanel({
         <IconAction
           variant="outline"
           label="Marcar lido"
-          onClick={() => void runBatch('read')}
+          onClick={() => void executarLote('read')}
           icon={<MailOpen className="size-4" />}
         />
         <IconAction
           variant="outline"
           label="Marcar não lido"
-          onClick={() => void runBatch('unread')}
+          onClick={() => void executarLote('unread')}
           icon={<Mail className="size-4" />}
         />
         {folders.length > 0 && (
@@ -676,7 +708,7 @@ export function EmailPanel({
             <IconAction
               variant="outline"
               label="Mover"
-              onClick={() => void runBatch('move', targetFolder)}
+              onClick={() => void executarLote('move', targetFolder)}
               icon={<FolderInput className="size-4" />}
             />
           </>
@@ -684,7 +716,7 @@ export function EmailPanel({
         <IconAction
           variant="destructive"
           label="Excluir"
-          onClick={() => void runBatch('delete')}
+          onClick={() => void executarLote('delete')}
           icon={<Trash2 className="size-4" />}
         />
       </>
@@ -754,6 +786,36 @@ export function EmailPanel({
           </PanelError>
         )}
         {batchError && <PanelError>{batchError}</PanelError>}
+
+        {naoProcessados.length > 0 && (
+          <PanelError>
+            {naoProcessados.length === 1
+              ? 'Uma mensagem não foi processada: '
+              : `${naoProcessados.length} mensagens não foram processadas: `}
+            {naoProcessados
+              .map((r) => `“${assuntoDe(r.account, r.id)}”${r.error ? ` (${r.error})` : ''}`)
+              .join('; ')}
+            .{' '}
+            <button
+              type="button"
+              onClick={() => void repetirNaoProcessados()}
+              className="underline underline-offset-2 hover:no-underline"
+            >
+              tentar de novo
+            </button>
+          </PanelError>
+        )}
+
+        {/* Os alvos aparecem com o arraste. As mesmas três ações estão na
+            barra do painel em botões, para quem não quiser arrastar. */}
+        <ActionDropTargets
+          count={sel.selected.length}
+          active={arrastando !== null}
+          onDrop={(acao: DropAction) => {
+            setArrastando(null);
+            void executarLote(acao);
+          }}
+        />
 
         {(loading || remoteLoading) && all.length === 0 && <SkeletonRows count={6} />}
 

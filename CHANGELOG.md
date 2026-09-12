@@ -9,6 +9,17 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Added
+- Several e-mails can be selected in the dashboard card and dragged onto one
+  of three targets — mark as read, mark as unread, delete — which appear when
+  the drag starts, carry the count of what is being dragged, and say what they
+  will do while the cursor is over them. The action runs only on a drop over a
+  target, so letting go anywhere else is how you change your mind, and the
+  same three actions stay available as buttons for anyone not dragging.
+  Deleting moves to the provider's trash, and the list and counters are re-read
+  afterwards.
+- When part of a batch is not processed, the panel now names the messages that
+  were left out and why, and offers to retry only those instead of the whole
+  batch.
 - The folder sidebar is grouped by account. Each account carries its own
   folders, counters and state, collapses on its own, and two folders with the
   same name are told apart by the account they belong to. An account whose
