@@ -23,6 +23,9 @@ export interface EmailEnvelope {
    *  aponta para mensagens diferentes na entrada e nos enviados, então nenhuma
    *  operação pode usar o id sem saber de onde ele é. */
   mailbox: MailboxKind;
+  /** Caminho real da pasta no servidor ("INBOX", "[Gmail]/Importante"). O uid
+   *  só identifica dentro dela. */
+  folder: string;
   /** Erro da última ação pedida para esta mensagem, quando ela falhou em
    *  definitivo. A mensagem continua na caixa: o erro é o que explica por quê. */
   actionError?: string;
@@ -30,6 +33,20 @@ export interface EmailEnvelope {
 
 /** As duas caixas que a conversa precisa: o que chegou e o que você mandou. */
 export type MailboxKind = 'inbox' | 'sent';
+
+/** Uma pasta do servidor, como a árvore a mostra. */
+export interface MailboxNode {
+  path: string;
+  name: string;
+  /** Separador de níveis do servidor ("/" ou "."), que monta a hierarquia. */
+  delimiter: string;
+  parent: string | null;
+  /** Uso especial declarado pelo servidor (`\\Sent`, `\\Trash`). O nome muda
+   *  por provedor e idioma; a flag não. */
+  specialUse: string | null;
+  total: number;
+  unread: number;
+}
 
 /** Uma conversa: as mensagens que se referenciam entre si, da mais antiga
  *  para a mais recente. */

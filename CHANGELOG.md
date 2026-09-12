@@ -8,6 +8,19 @@ Only `main` is maintained; there are no release branches.
 
 ## [Unreleased]
 
+### Added
+- Mailboxes other than the inbox can now be read. `GET /api/email/mailboxes`
+  returns the account's folder tree with the total and unread count of each
+  folder, and `GET /api/email/messages` lists one folder at a time under an
+  explicit cap. The tree is stored and reused for ten minutes, because
+  counting a folder costs one round trip to the server per folder, and a
+  server that fails to answer leaves the stored tree standing rather than
+  emptying the panel.
+- Mailbox actions carry the folder they act on. A message is identified by the
+  folder it lives in and the numbering that folder announced, so an action
+  recorded before the server reindexed a folder now fails in the open instead
+  of landing on whichever message inherited the uid.
+
 ### Fixed
 - A deleted e-mail no longer comes back, and neither does one that was marked
   as read before being deleted. Every mailbox action is now written to a

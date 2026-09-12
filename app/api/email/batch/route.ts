@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isValidEmailId, isValidFolder } from '@/lib/api/validation';
 import { requireUser } from '@/lib/api/context';
 import { findConnection, type Connection } from '@/lib/vault/connections';
-import { recordPendingAction, type PendingKind } from '@/lib/email/pendingActions';
+import {
+  recordPendingAction,
+  INBOX_PATH,
+  type PendingKind,
+} from '@/lib/email/pendingActions';
+import { isKnownMailbox, getMailboxUidValidity } from '@/lib/email/mailboxes';
 import { replayPendingActions } from '@/lib/email/replay';
 
 interface Target {
@@ -48,6 +53,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'pasta obrigatória' }, { status: 400 });
   }
 
+  // A pasta vem da tela: ou é a entrada, ou um caminho que o servidor já
+  // declarou para a conta do alvo.
+  const pasta: unknown = body?.folderPath;
+  if (pasta !== undefined && pasta !== null && typeof pasta !== 'string') {
+    return NextResponse.json({ error: 'pasta inválida' }, { status: 400 });
+  }
+
   const results: BatchTargetResult[] = [];
   const conexoes = new Map<string, Connection>();
 
@@ -68,12 +80,22 @@ export async function POST(request: NextRequest) {
       continue;
     }
 
+    const mailbox =
+      pasta === undefined || pasta === null || pasta === INBOX_PATH ? INBOX_PATH : pasta;
+    if (mailbox !== INBOX_PATH && !isKnownMailbox(auth.value.id, connection.id, mailbox)) {
+      results.push({ account, id, ok: false, error: 'pasta não encontrada' });
+      continue;
+    }
+
     recordPendingAction({
       userId: auth.value.id,
       account: connection.id,
       uid: id,
       kind: KIND[action],
       payload: action === 'move' ? (folder as string) : null,
+      mailbox,
+      // O uid só vale enquanto a numeração da pasta não é reiniciada.
+      uidvalidity: getMailboxUidValidity(auth.value.id, connection.id, mailbox),
     });
     conexoes.set(connection.id, connection);
     results.push({ account, id, ok: true });

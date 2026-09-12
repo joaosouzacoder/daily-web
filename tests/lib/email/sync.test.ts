@@ -51,6 +51,7 @@ function envelope(over: Record<string, unknown> = {}) {
     references: [],
     labels: [],
     mailbox: 'inbox' as const,
+    folder: 'INBOX',
     ...over,
   };
 }

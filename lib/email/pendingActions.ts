@@ -217,6 +217,9 @@ export function clearFailedAction(userId: string, id: number): void {
  * O UIDVALIDITY da pasta mudou: todo uid guardado antes passou a apontar para
  * outra mensagem. Aplicar a ação agora acertaria quem não foi escolhido, então
  * ela falha à vista em vez de ser executada.
+ *
+ * A ação gravada antes de a pasta anunciar o seu número fica de fora: ela não
+ * atravessou reindexação nenhuma, só nasceu antes de haver o que comparar.
  */
 export function invalidateForUidValidity(
   userId: string,
@@ -228,7 +231,8 @@ export function invalidateForUidValidity(
     .prepare(
       `UPDATE email_pending_actions
        SET state = 'failed', last_error = ?, applied_at = NULL
-       WHERE user_id = ? AND account = ? AND mailbox = ? AND uidvalidity <> ? AND state = 'pending'`,
+       WHERE user_id = ? AND account = ? AND mailbox = ?
+         AND uidvalidity <> '' AND uidvalidity <> ? AND state = 'pending'`,
     )
     .run(
       'a caixa foi reindexada pelo servidor e esta ação não pôde ser confirmada',

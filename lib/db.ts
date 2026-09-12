@@ -302,6 +302,29 @@ function addEmailPendingActions(instance: Database.Database): void {
   `);
 }
 
+// A árvore de pastas de cada conta, com o que cada uma tem dentro. Listar
+// pastas e contar mensagem é uma ida ao servidor por pasta: guardada aqui, a
+// árvore abre na hora e só é refeita quando envelhece.
+function addEmailMailboxes(instance: Database.Database): void {
+  instance.exec(`
+    CREATE TABLE IF NOT EXISTS email_mailboxes (
+      user_id TEXT NOT NULL,
+      account TEXT NOT NULL,
+      path TEXT NOT NULL,
+      name TEXT NOT NULL,
+      delimiter TEXT NOT NULL DEFAULT '/',
+      parent TEXT,
+      special_use TEXT,
+      uidvalidity TEXT NOT NULL DEFAULT '',
+      total INTEGER NOT NULL DEFAULT 0,
+      unread INTEGER NOT NULL DEFAULT 0,
+      position INTEGER NOT NULL DEFAULT 0,
+      synced_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, account, path)
+    );
+  `);
+}
+
 const MIGRATIONS: ((instance: Database.Database) => void)[] = [
   addUserScope,
   addConnections,
@@ -312,6 +335,7 @@ const MIGRATIONS: ((instance: Database.Database) => void)[] = [
   addNotes,
   addNoteSync,
   addEmailPendingActions,
+  addEmailMailboxes,
 ];
 
 function migrate(instance: Database.Database): void {

@@ -6,7 +6,7 @@ import { readable, sortFolders } from '@/lib/parsers/mail';
 import { describeMailError } from './mailErrors';
 import { runExclusive } from '@/lib/email/queue';
 import type { Connection } from '@/lib/vault/connections';
-import type { EmailEnvelope, MailboxKind } from '@/lib/types';
+import type { EmailEnvelope, MailboxKind, MailboxNode } from '@/lib/types';
 
 export interface MailConfig {
   imapHost: string;
@@ -154,6 +154,7 @@ function toEnvelope(
   message: FetchMessageObject,
   conn: Connection,
   mailbox: MailboxKind,
+  folder: string,
 ): EmailEnvelope {
   return {
     id: String(message.uid),
@@ -168,6 +169,7 @@ function toEnvelope(
     references: parseReferences(message.headers, message.envelope?.inReplyTo),
     labels: userLabels(message.labels),
     mailbox,
+    folder,
   };
 }
 
@@ -179,32 +181,53 @@ async function listFrom(
 ): Promise<EmailEnvelope[]> {
   const path = await mailboxPath(client, mailbox);
   if (!path) return [];
+  return listPath(client, conn, path, mailbox, limit);
+}
 
+async function listPath(
+  client: ImapFlow,
+  conn: Connection,
+  path: string,
+  mailbox: MailboxKind,
+  limit: number,
+): Promise<EmailEnvelope[]> {
   const lock = await client.getMailboxLock(path);
   try {
     const total = typeof client.mailbox === 'object' ? client.mailbox.exists : 0;
     if (total === 0) return [];
-
-    const first = Math.max(total - limit + 1, 1);
-    const envelopes: EmailEnvelope[] = [];
-    for await (const message of client.fetch(`${first}:*`, {
-      uid: true,
-      flags: true,
-      envelope: true,
-      // Sem pedir, a etiqueta não vem — e sem ela a lista só saberia das
-      // etiquetas aplicadas na própria sessão. Servidor que não as reporta
-      // devolve a mensagem sem `labels`, que vira lista vazia.
-      labels: true,
-      // O ENVELOPE traz o In-Reply-To, mas não o References — e é o
-      // References que carrega o fio inteiro, não só o degrau anterior.
-      headers: ['references'],
-    })) {
-      envelopes.push(toEnvelope(message, conn, mailbox));
-    }
-    return envelopes;
+    return await fetchRecent(client, conn, path, mailbox, total, limit);
   } finally {
     lock.release();
   }
+}
+
+/** As `limit` mensagens mais recentes da pasta já aberta. O conjunto é de
+ *  números de sequência, então o teto vale sempre — nada de caixa inteira. */
+async function fetchRecent(
+  client: ImapFlow,
+  conn: Connection,
+  path: string,
+  mailbox: MailboxKind,
+  total: number,
+  limit: number,
+): Promise<EmailEnvelope[]> {
+  const first = Math.max(total - limit + 1, 1);
+  const envelopes: EmailEnvelope[] = [];
+  for await (const message of client.fetch(`${first}:*`, {
+    uid: true,
+    flags: true,
+    envelope: true,
+    // Sem pedir, a etiqueta não vem — e sem ela a lista só saberia das
+    // etiquetas aplicadas na própria sessão. Servidor que não as reporta
+    // devolve a mensagem sem `labels`, que vira lista vazia.
+    labels: true,
+    // O ENVELOPE traz o In-Reply-To, mas não o References — e é o
+    // References que carrega o fio inteiro, não só o degrau anterior.
+    headers: ['references'],
+  })) {
+    envelopes.push(toEnvelope(message, conn, mailbox, path));
+  }
+  return envelopes;
 }
 
 /**
@@ -314,10 +337,15 @@ export async function fetchBodies(
 // só. Uma conexão por mensagem faz o servidor recusar o lote inteiro com
 // "too many simultaneous connections" — o IMAP opera sobre um conjunto de
 // mensagens num comando, e é assim que ele quer ser usado.
-export async function setSeen(conn: Connection, uids: string[], seen: boolean): Promise<void> {
+export async function setSeen(
+  conn: Connection,
+  uids: string[],
+  seen: boolean,
+  mailbox: string = INBOX_PATH,
+): Promise<void> {
   const blocos = sequenceSets(uids);
   await withClient(conn, async (client) => {
-    const lock = await client.getMailboxLock('INBOX');
+    const lock = await client.getMailboxLock(mailbox);
     try {
       for (const bloco of blocos) {
         if (seen) await client.messageFlagsAdd(bloco, ['\\Seen'], { uid: true });
@@ -351,12 +379,18 @@ export function findSpecialUse(list: ListResponse[], use: string): string | null
   return list.find((box) => box.specialUse === use)?.path ?? null;
 }
 
-export async function deleteEmails(conn: Connection, uids: string[]): Promise<void> {
+export async function deleteEmails(
+  conn: Connection,
+  uids: string[],
+  mailbox: string = INBOX_PATH,
+): Promise<void> {
   const blocos = sequenceSets(uids);
   await withClient(conn, async (client) => {
     const trash = findSpecialUse(await client.list(), '\\Trash');
     if (!trash) throw new Error('a conta não expõe uma pasta de lixeira');
-    const lock = await client.getMailboxLock('INBOX');
+    // Apagar o que já está na lixeira não tem para onde mover.
+    if (trash === mailbox) throw new Error('a mensagem já está na lixeira');
+    const lock = await client.getMailboxLock(mailbox);
     try {
       for (const bloco of blocos) await client.messageMove(bloco, trash, { uid: true });
     } finally {
@@ -369,12 +403,108 @@ export async function deleteEmails(conn: Connection, uids: string[]): Promise<vo
 // a mensagem para lá: ela continua na caixa de entrada e ganha mais um rótulo,
 // que é exatamente a semântica de label. Em outros provedores o efeito é uma
 // cópia na pasta escolhida, que é o mais próximo que o IMAP oferece.
-export async function applyTag(conn: Connection, uids: string[], folder: string): Promise<void> {
+export async function applyTag(
+  conn: Connection,
+  uids: string[],
+  folder: string,
+  mailbox: string = INBOX_PATH,
+): Promise<void> {
   const blocos = sequenceSets(uids);
   await withClient(conn, async (client) => {
-    const lock = await client.getMailboxLock('INBOX');
+    const lock = await client.getMailboxLock(mailbox);
     try {
       for (const bloco of blocos) await client.messageCopy(bloco, folder, { uid: true });
+    } finally {
+      lock.release();
+    }
+  });
+}
+
+export const INBOX_PATH = 'INBOX';
+
+/** Teto de pastas. Uma conta com milhares de etiquetas faria uma consulta de
+ *  contagem por pasta e seguraria a conexão por minutos. */
+const MAX_MAILBOXES = 300;
+
+/**
+ * A árvore de pastas com o que cada uma tem dentro. `status` é um comando por
+ * pasta, mas todos correm na mesma conexão, que já é serializada por conta.
+ * Uma pasta cuja contagem falha entra sem números em vez de derrubar a árvore.
+ */
+export async function listMailboxes(conn: Connection): Promise<MailboxNode[]> {
+  return withClient(conn, async (client) => {
+    const caixas = (await client.list())
+      .filter((box) => !box.flags?.has('\\Noselect'))
+      .slice(0, MAX_MAILBOXES);
+
+    const nodes: MailboxNode[] = [];
+    for (const box of caixas) {
+      let total = 0;
+      let unread = 0;
+      try {
+        const status = await client.status(box.path, { messages: true, unseen: true });
+        total = status.messages ?? 0;
+        unread = status.unseen ?? 0;
+      } catch {
+        // Pasta que não aceita STATUS entra sem contagem: melhor uma árvore
+        // completa com um número faltando do que nenhuma árvore.
+      }
+      nodes.push({
+        path: box.path,
+        name: box.name,
+        delimiter: box.delimiter ?? '/',
+        parent: box.parentPath || null,
+        specialUse: box.specialUse ?? null,
+        total,
+        unread,
+      });
+    }
+    return sortMailboxes(nodes);
+  });
+}
+
+/** A entrada primeiro, depois as pastas de sistema, depois o resto em ordem
+ *  alfabética — a ordem que todo cliente de e-mail mostra. */
+const SPECIAL_ORDER = ['\\Sent', '\\Drafts', '\\Junk', '\\Trash', '\\Archive'];
+
+export function sortMailboxes(nodes: MailboxNode[]): MailboxNode[] {
+  const peso = (node: MailboxNode): number => {
+    if (node.path.toUpperCase() === INBOX_PATH) return 0;
+    const especial = node.specialUse ? SPECIAL_ORDER.indexOf(node.specialUse) : -1;
+    return especial >= 0 ? 1 + especial : 100;
+  };
+  return [...nodes].sort(
+    (a, b) => peso(a) - peso(b) || a.path.localeCompare(b.path, 'pt-BR'),
+  );
+}
+
+export interface FolderPage {
+  envelopes: EmailEnvelope[];
+  /** Identifica a numeração de uid desta pasta. Se ele mudar, todo uid
+   *  guardado antes passou a apontar para outra mensagem. */
+  uidvalidity: string;
+  total: number;
+}
+
+/** As mensagens de uma pasta qualquer, as mais recentes primeiro. */
+export async function listFolder(
+  conn: Connection,
+  path: string,
+  limit: number,
+): Promise<FolderPage> {
+  return withClient(conn, async (client) => {
+    // O que você mandou nunca é novidade para você — e isso vale para a pasta
+    // de enviados de verdade, encontrada pela flag, não pelo nome.
+    const enviados = findSpecialUse(await client.list(), '\\Sent');
+    const kind: MailboxKind = path === enviados ? 'sent' : 'inbox';
+
+    const lock = await client.getMailboxLock(path);
+    try {
+      const caixa = typeof client.mailbox === 'object' ? client.mailbox : null;
+      const uidvalidity = caixa?.uidValidity !== undefined ? String(caixa.uidValidity) : '';
+      const total = caixa?.exists ?? 0;
+      const envelopes = total === 0 ? [] : await fetchRecent(client, conn, path, kind, total, limit);
+      return { envelopes, uidvalidity, total };
     } finally {
       lock.release();
     }
