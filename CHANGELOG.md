@@ -93,7 +93,13 @@ Only `main` is maintained; there are no release branches.
   it could not notice one was being refused.
 - A drop onto a folder of another account is refused with a message instead of
   moving the message inside its own account. IMAP moves within an account;
-  copying and deleting across two is a different operation.
+  copying and deleting across two is a different operation. The check reads the
+  account of the messages being dragged: it used to read the account of the
+  open folder and, in the unified inbox where no folder is open, fell back to
+  the first account configured — so every drop of a message from any other
+  account was refused even when it landed on that account's own folder. A
+  selection spanning two accounts is refused too, since one move cannot serve
+  both.
 - A note created from an e-mail now shows up in the notes panel straight away,
   and the confirmation's button opens that note, using the panel's documented
   change event.

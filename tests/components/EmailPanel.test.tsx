@@ -668,6 +668,9 @@ describe('pastas por conta, cache e listagem', () => {
     erroDeSync?: string[];
     mensagens?: Record<string, EmailEnvelope[]>;
     atrasar?: (url: string) => number;
+    /** Segura a resposta da sincronização até o teste soltar. Um atraso em
+     *  milissegundos depende da carga da máquina; um portão, não. */
+    portaoDeSync?: Promise<void>;
   }
 
   function mockarRotas(cenario: Cenario = {}) {
@@ -675,6 +678,7 @@ describe('pastas por conta, cache e listagem', () => {
       const endereco = String(url);
       const espera = cenario.atrasar?.(endereco) ?? 0;
       if (espera > 0) await new Promise((r) => setTimeout(r, espera));
+      if (cenario.portaoDeSync && endereco.includes('sync=1')) await cenario.portaoDeSync;
 
       if (endereco.includes('/api/email/mailboxes')) {
         const conta = new URL(endereco, 'http://x').searchParams.get('account')!;
@@ -744,6 +748,7 @@ describe('pastas por conta, cache e listagem', () => {
   // Contar mensagem é uma ida ao servidor por pasta: a tela abre com o que já
   // está guardado e a leitura vem por cima.
   it('mostra o que está guardado antes de sincronizar', async () => {
+    let soltarSync: () => void = () => {};
     mockarRotas({
       sincronizadas: {
         'mail-1': [
@@ -751,13 +756,19 @@ describe('pastas por conta, cache e listagem', () => {
           { path: 'Fornecedores', name: 'Fornecedores', delimiter: '/', parent: null, specialUse: null, total: 1, unread: 0 },
         ],
       },
-      atrasar: (u) => (u.includes('sync=1') ? 60 : 0),
+      // A sincronização fica presa até a asserção do cache passar: com um
+      // atraso em milissegundos, uma máquina carregada a deixava terminar
+      // antes e o teste falhava sem defeito nenhum.
+      portaoDeSync: new Promise<void>((r) => (soltarSync = r)),
     });
     montar([CONTAS[0]]);
     await abrirTelaCheia();
 
     // A pasta guardada aparece antes de a sincronização terminar…
     expect(await screen.findByRole('button', { name: /^Clientes em Pessoal/ })).toBeInTheDocument();
+
+    soltarSync();
+
     // …e a criada no servidor entra sem ninguém recarregar a tela.
     expect(await screen.findByRole('button', { name: /^Fornecedores em Pessoal/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Clientes em Pessoal/ })).toBeNull();
@@ -1448,5 +1459,166 @@ describe('criar nota ou tarefa a partir de um e-mail', () => {
     fireEvent.click(within(menu).getByRole('menuitem', { name: /Criar nota/ }));
 
     expect(await screen.findByText('o limite é de 20 notas')).toBeInTheDocument();
+  });
+});
+
+describe('soltar numa pasta com mais de uma conta na tela', () => {
+  const PESSOAL = 'mail-1';
+  const WORK = 'mail-2';
+  const CONTAS: MailboxRef[] = [
+    { id: PESSOAL, label: 'Pessoal' },
+    { id: WORK, label: 'Work' },
+  ];
+
+  // A caixa unificada do painel traz mensagens das duas contas, como em
+  // produção: é dela que a soltura parte, e nela não há pasta aberta.
+  const unificada: EmailEnvelope[] = [
+    {
+      id: '10', account: PESSOAL, accountLabel: 'Pessoal', from: 'Banco',
+      subject: 'Fatura pessoal', unread: true, date: '2026-09-13T10:00:00Z',
+      messageId: '<p@x>', references: [], labels: [], mailbox: 'inbox' as const, folder: 'INBOX',
+    },
+    {
+      id: '20', account: WORK, accountLabel: 'Work', from: 'CI',
+      subject: 'Deploy da squad', unread: true, date: '2026-09-13T11:00:00Z',
+      messageId: '<w@x>', references: [], labels: [], mailbox: 'inbox' as const, folder: 'INBOX',
+    },
+  ];
+
+  const arvore = {
+    [PESSOAL]: [
+      { path: 'INBOX', name: 'INBOX', delimiter: '/', parent: null, specialUse: null, total: 1, unread: 1 },
+      { path: 'Financeiro', name: 'Financeiro', delimiter: '/', parent: null, specialUse: null, total: 3, unread: 0 },
+    ],
+    [WORK]: [
+      { path: 'INBOX', name: 'INBOX', delimiter: '/', parent: null, specialUse: null, total: 1, unread: 1 },
+      { path: 'Squad', name: 'Squad', delimiter: '/', parent: null, specialUse: null, total: 5, unread: 0 },
+    ],
+  };
+
+  let corpos: string[];
+
+  function transferencia() {
+    const dados = new Map<string, string>();
+    return {
+      effectAllowed: '', dropEffect: '',
+      get types() { return [...dados.keys()]; },
+      setData: (t: string, v: string) => dados.set(t, v),
+      getData: (t: string) => dados.get(t) ?? '',
+      setDragImage: vi.fn(),
+    };
+  }
+
+  beforeEach(() => {
+    corpos = [];
+    vi.spyOn(global, 'fetch').mockImplementation(async (url, init) => {
+      const endereco = String(url);
+      if (init?.body) corpos.push(String(init.body));
+      if (endereco.includes('/api/email/mailboxes')) {
+        const conta = new URL(endereco, 'http://x').searchParams.get('account')!;
+        return new Response(JSON.stringify({ mailboxes: arvore[conta as keyof typeof arvore] ?? [] }));
+      }
+      if (endereco.includes('/api/email/batch')) {
+        return new Response(JSON.stringify({ results: [] }));
+      }
+      return new Response(JSON.stringify({ folders: [], messages: [] }));
+    });
+  });
+
+  function montar() {
+    render(
+      <EmailPanel
+        onSeenChanged={() => {}}
+        onRemoved={() => {}}
+        mailboxes={CONTAS}
+        email={{ data: unificada, error: null }}
+        onChanged={() => {}}
+      />,
+    );
+  }
+
+  const liDe = (assunto: string) =>
+    (screen.getByLabelText(`selecionar ${assunto}`) as HTMLInputElement).closest('li')!;
+
+  const abrirTelaCheia = async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir em tela cheia' }));
+    await screen.findByRole('navigation', { name: 'Pastas' });
+  };
+
+  async function arrastarPara(assunto: string, pasta: RegExp) {
+    const dataTransfer = transferencia();
+    fireEvent.dragStart(liDe(assunto), { dataTransfer });
+    await screen.findByRole('group', { name: /Soltar/ });
+    const alvo = (await screen.findByRole('button', { name: pasta })).closest('li')!;
+    fireEvent.dragOver(alvo, { dataTransfer });
+    fireEvent.drop(alvo, { dataTransfer });
+  }
+
+  const loteDeMove = () => corpos.filter((c) => c.includes('"action":"move"'));
+
+  // O defeito: a guarda comparava o destino com a primeira conta cadastrada,
+  // e não com a conta da mensagem arrastada. Toda soltura vinda da segunda
+  // conta era recusada, mesmo caindo na pasta certa.
+  it('move quando a pasta é da mesma conta da mensagem', async () => {
+    montar();
+    await abrirTelaCheia();
+    await arrastarPara('Deploy da squad', /^Squad em Work/);
+
+    await waitFor(() => expect(loteDeMove()).toHaveLength(1));
+    const corpo = JSON.parse(loteDeMove()[0]);
+    expect(corpo.folder).toBe('Squad');
+    expect(corpo.targets).toEqual([{ account: WORK, id: '20' }]);
+    expect(screen.queryByText(/mesma conta/)).toBeNull();
+  });
+
+  it('move também a mensagem da primeira conta para uma pasta dela', async () => {
+    montar();
+    await abrirTelaCheia();
+    await arrastarPara('Fatura pessoal', /^Financeiro em Pessoal/);
+
+    await waitFor(() => expect(loteDeMove()).toHaveLength(1));
+    expect(JSON.parse(loteDeMove()[0]).targets).toEqual([{ account: PESSOAL, id: '10' }]);
+  });
+
+  // A recusa continua valendo onde ela faz sentido.
+  it('recusa a pasta de outra conta, com a mensagem clara', async () => {
+    montar();
+    await abrirTelaCheia();
+    await arrastarPara('Deploy da squad', /^Financeiro em Pessoal/);
+
+    expect(await screen.findByText('Só dá para mover entre pastas da mesma conta.')).toBeInTheDocument();
+    expect(loteDeMove()).toHaveLength(0);
+  });
+
+  // Um lote misto não é um move só: o IMAP move dentro de uma conta.
+  it('recusa quando a seleção tem mensagens de duas contas', async () => {
+    montar();
+    await abrirTelaCheia();
+    fireEvent.click(screen.getByLabelText('selecionar Fatura pessoal'));
+    fireEvent.click(screen.getByLabelText('selecionar Deploy da squad'));
+    await arrastarPara('Deploy da squad', /^Squad em Work/);
+
+    expect(await screen.findByText(/contas diferentes/)).toBeInTheDocument();
+    expect(loteDeMove()).toHaveLength(0);
+  });
+
+  // No cartão do painel não há pastas: as três ações não podem ter herdado a
+  // guarda de conta nenhuma.
+  it('o cartão do painel segue agindo sobre a mensagem da segunda conta', async () => {
+    montar();
+    fireEvent.click(screen.getByLabelText('selecionar Deploy da squad'));
+
+    const dataTransfer = transferencia();
+    fireEvent.dragStart(liDe('Deploy da squad'), { dataTransfer });
+    await screen.findByRole('group', { name: /Soltar/ });
+    const alvo = screen.getByRole('button', { name: 'Excluir as conversas arrastadas' });
+    fireEvent.dragOver(alvo, { dataTransfer });
+    fireEvent.drop(alvo, { dataTransfer });
+
+    await waitFor(() =>
+      expect(corpos.some((c) => c.includes('"action":"delete"'))).toBe(true),
+    );
+    const corpo = JSON.parse(corpos.find((c) => c.includes('"action":"delete"'))!);
+    expect(corpo.targets).toEqual([{ account: WORK, id: '20' }]);
   });
 });

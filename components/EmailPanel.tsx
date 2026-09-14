@@ -536,14 +536,16 @@ export function EmailPanel({
     };
   }, [selectedKeys, all]);
 
+  /** As mensagens que a seleção alcança, na ordem da lista. */
+  const alvosSelecionados = () =>
+    all.filter((m) => selectedKeys.has(key(m))).map((m) => ({ account: m.account, id: m.id }));
+
   const runBatch = async (
     action: 'read' | 'unread' | 'delete' | 'move' | 'tag',
     folder?: string,
     somente?: { account: string; id: string }[],
   ) => {
-    const targets =
-      somente ??
-      all.filter((m) => selectedKeys.has(key(m))).map((m) => ({ account: m.account, id: m.id }));
+    const targets = somente ?? alvosSelecionados();
     if (targets.length === 0) return;
 
     // A seleção reage na hora; o que falhar volta na correção abaixo.
@@ -659,9 +661,10 @@ export function EmailPanel({
   const executarLote = async (
     action: 'read' | 'unread' | 'delete' | 'move' | 'tag',
     folder?: string,
+    somente?: { account: string; id: string }[],
   ) => {
     setUltimaAcao({ action, folder });
-    await runBatch(action, folder);
+    await runBatch(action, folder, somente);
   };
 
   const repetirNaoProcessados = async () => {
@@ -718,17 +721,34 @@ export function EmailPanel({
       setBatchError('A mensagem já está nessa pasta.');
       return;
     }
+    // A conta é a das mensagens que estão sendo movidas, e não a da pasta
+    // aberta: na caixa unificada não há pasta aberta, e olhar para a primeira
+    // conta cadastrada recusava toda soltura vinda das outras.
+    const alvos =
+      anterior && !selecionadas.has(anterior)
+        ? threads
+            .filter((t) => t.id === anterior)
+            .flatMap((t) => recebidas(t))
+            .map((m) => ({ account: m.account, id: m.id }))
+        : alvosSelecionados();
+
+    const contas = new Set(alvos.map((a) => a.account));
+    if (contas.size === 0) return;
     // O IMAP move dentro de uma conta. Entre contas seria copiar e apagar, que
     // é outra operação — e não é a que a soltura promete.
-    const contaDeOrigem = view.folderAccount || mailboxes[0]?.id || '';
-    if (destino.account !== contaDeOrigem) {
+    if (contas.size > 1) {
+      setBatchError('Essas mensagens são de contas diferentes: mova uma conta por vez.');
+      return;
+    }
+    if (!contas.has(destino.account)) {
       setBatchError('Só dá para mover entre pastas da mesma conta.');
       return;
     }
+
     // A soltura usa o mesmo caminho de lote das demais ações: o pedido fica
     // gravado antes de sair daqui, e uma falha aparece na linha.
     if (anterior && !selecionadas.has(anterior)) despachar({ type: 'click', id: anterior });
-    await executarLote('move', destino.path);
+    await executarLote('move', destino.path, alvos);
   };
 
   const marcarPastaLida = async (contaDaPasta: string, node: MailboxNode) => {
