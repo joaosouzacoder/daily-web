@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { groupByRepo, parseRepoList, rankPulls, repoUrl, serializeRepoList, toPullItems } from '@/lib/integrations/githubApi';
+import { afterEach, beforeEach, vi } from 'vitest';
+import {
+  fetchReviewRequests,
+  groupByRepo,
+  parseRepoList,
+  rankPulls,
+  repoFromApiUrl,
+  repoUrl,
+  REVIEW_REQUESTS_QUERY,
+  reviewRequestsPath,
+  scopeNote,
+  serializeRepoList,
+  toPullItems,
+  toReviewItems,
+} from '@/lib/integrations/githubApi';
+import type { Connection } from '@/lib/vault/connections';
 import type { PullRequestItem } from '@/lib/types';
 
 const ME = 'joaosouzacoder';
@@ -158,5 +173,185 @@ describe('repoUrl', () => {
     expect(repoUrl('javascript:alert(1)')).toBeNull();
     expect(repoUrl('joao/repo?x=1')).toBeNull();
     expect(repoUrl('https://evil.com/a')).toBeNull();
+  });
+});
+
+
+// --- Revisões pedidas a você ---------------------------------------------------
+
+function conn(token = 'ghp_token'): Connection {
+  return {
+    id: 'c1',
+    module: 'pulls',
+    label: 'GitHub',
+    values: { token },
+    createdAt: '',
+    updatedAt: '',
+  } as unknown as Connection;
+}
+
+function searchItem(over: Record<string, unknown> = {}) {
+  return {
+    number: 7,
+    title: 'Trocar o parser',
+    html_url: 'https://github.com/outra/org/pull/7',
+    user: { login: 'maria' },
+    repository_url: 'https://api.github.com/repos/outra/org',
+    updated_at: '2026-09-10T10:00:00Z',
+    created_at: '2026-09-01T10:00:00Z',
+    draft: false,
+    pull_request: {},
+    ...over,
+  };
+}
+
+/** Uma resposta do GitHub com os cabeçalhos que importam aqui. */
+function reply(body: unknown, headers: Record<string, string> = {}, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers });
+}
+
+describe('reviewRequestsPath', () => {
+  it('monta uma busca só, com a consulta pedida', () => {
+    const path = reviewRequestsPath();
+    const url = new URL(`https://api.github.com${path}`);
+
+    expect(url.pathname).toBe('/search/issues');
+    expect(url.searchParams.get('q')).toBe(REVIEW_REQUESTS_QUERY);
+    expect(REVIEW_REQUESTS_QUERY).toBe('is:open is:pr review-requested:@me');
+    expect(url.searchParams.get('per_page')).toBe('100');
+    expect(url.searchParams.get('sort')).toBe('updated');
+  });
+});
+
+describe('repoFromApiUrl', () => {
+  it('tira dono/nome da URL da API', () => {
+    expect(repoFromApiUrl('https://api.github.com/repos/dono/nome')).toBe('dono/nome');
+  });
+
+  it('devolve vazio para o que não tem essa forma', () => {
+    expect(repoFromApiUrl('https://api.github.com/user')).toBe('');
+    expect(repoFromApiUrl(undefined)).toBe('');
+  });
+});
+
+describe('toReviewItems', () => {
+  it('leva o repositório, o autor, a idade e o link', () => {
+    const [item] = toReviewItems([searchItem()]);
+
+    expect(item.repo).toBe('outra/org');
+    expect(item.number).toBe(7);
+    expect(item.title).toBe('Trocar o parser');
+    expect(item.url).toBe('https://github.com/outra/org/pull/7');
+    expect(item.author).toBe('maria');
+    expect(item.createdAt).toBe('2026-09-01T10:00:00Z');
+    expect(item.updatedAt).toBe('2026-09-10T10:00:00Z');
+  });
+
+  it('toda linha da busca está esperando a sua revisão e não é sua', () => {
+    const [item] = toReviewItems([searchItem()]);
+
+    expect(item.awaitingYou).toBe(true);
+    expect(item.mine).toBe(false);
+    expect(item.isPullRequest).toBe(true);
+  });
+});
+
+describe('scopeNote', () => {
+  it('não avisa nada quando há o que mostrar', () => {
+    expect(scopeNote('', false)).toBeNull();
+    expect(scopeNote(null, false)).toBeNull();
+  });
+
+  it('com token clássico sem `repo`, explica o que fica de fora', () => {
+    expect(scopeNote('read:user, gist', true)).toMatch(/escopo `repo`/);
+  });
+
+  it('com token clássico com `repo`, a lista vazia é vazia mesmo', () => {
+    expect(scopeNote('repo, read:user', true)).toBeNull();
+  });
+
+  it('com token fine-grained, diz que o alcance é o que foi concedido', () => {
+    expect(scopeNote(null, true)).toMatch(/fine-grained/);
+  });
+});
+
+describe('fetchReviewRequests', () => {
+  beforeEach(() => vi.restoreAllMocks());
+  afterEach(() => vi.restoreAllMocks());
+
+  it('faz uma chamada só, para a busca', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(reply({ total_count: 1, items: [searchItem()] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const digest = await fetchReviewRequests(conn());
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/search/issues');
+    expect(digest.items.map((i) => i.repo)).toEqual(['outra/org']);
+    expect(digest.truncated).toBe(false);
+    vi.unstubAllGlobals();
+  });
+
+  it('diz quando a página cortou a lista', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(reply({ total_count: 250, items: [searchItem()] })),
+    );
+
+    const digest = await fetchReviewRequests(conn());
+
+    expect(digest.truncated).toBe(true);
+    expect(digest.total).toBe(250);
+    vi.unstubAllGlobals();
+  });
+
+  it('lista vazia com token sem alcance vira aviso, não silêncio', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(reply({ total_count: 0, items: [] }, { 'x-oauth-scopes': 'gist' })),
+    );
+
+    const digest = await fetchReviewRequests(conn());
+
+    expect(digest.items).toEqual([]);
+    expect(digest.scopeNote).toMatch(/escopo `repo`/);
+    vi.unstubAllGlobals();
+  });
+
+  it('lista vazia com token completo não inventa problema', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(reply({ total_count: 0, items: [] }, { 'x-oauth-scopes': 'repo' })),
+    );
+
+    expect((await fetchReviewRequests(conn())).scopeNote).toBeNull();
+    vi.unstubAllGlobals();
+  });
+
+  it('token recusado vira mensagem, não lista vazia', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply({}, {}, 401)));
+
+    await expect(fetchReviewRequests(conn())).rejects.toThrow(/recusou o token/);
+    vi.unstubAllGlobals();
+  });
+
+  it('sem permissão vira mensagem própria', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply({}, { 'x-ratelimit-remaining': '12' }, 403)));
+
+    await expect(fetchReviewRequests(conn())).rejects.toThrow(/não tem permissão/);
+    vi.unstubAllGlobals();
+  });
+
+  it('limite atingido diz quanto sobrou e quando volta', async () => {
+    const reset = Math.floor(new Date('2026-09-14T18:30:00Z').getTime() / 1000);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        reply({}, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': String(reset) }, 403),
+      ),
+    );
+
+    await expect(fetchReviewRequests(conn())).rejects.toThrow(/restam 0, volta às \d{2}:\d{2}/);
+    vi.unstubAllGlobals();
   });
 });

@@ -9,6 +9,36 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Added
+- A "Revisões" tab in the GitHub panel lists the pull requests waiting for the
+  user's review, from any repository the token can see — the tracked-repo list
+  has nothing to do with it. It is one search call per cycle
+  (`is:open is:pr review-requested:@me`), never one call per repository. The
+  tab shows only what is still awaiting his review: GitHub drops the review
+  request once the review is in, so what he has already reviewed leaves the
+  list on its own. Each row carries the repository (with a link to it), the
+  number, the title, the author and how long the request has been waiting.
+  The tab lives in the URL as `?pulls=revisoes`; the default tab stays out of
+  it and an unknown value falls back to the default.
+- An empty list now says which kind of empty it is. A classic token without
+  the `repo` scope, or a fine-grained token, cannot see review requests in
+  repositories it was not granted — the tab says so and what to do about it,
+  instead of showing a silent empty list. A refused token (401) and a missing
+  permission (403) surface as errors, and a 403 for rate limit now reports how
+  much is left and when the quota comes back. One page of results is the cap;
+  when the search has more, the tab says how many it is showing of the total.
+
+### Fixed
+- The GitHub panel scrolls inside its card like the other panels do. It was
+  entering the grid frame inside a `div` with no height, which broke the
+  chain of heights down to its body: the list grew past the card instead of
+  scrolling in it, taking the tabs and the tracked-repos drawer out of reach.
+  The body now has a real height, only the list scrolls, and the scrollbar has
+  a gutter of its own so it does not land on top of the rows — the same
+  treatment the notes panel already got. On a narrow screen the panel keeps
+  the stacked, page-scrolling behaviour every panel has there. This panel has
+  no maximized view.
+
+### Added
 - A note and a folder can be created from inside the maximized notes view.
   The tree in the dialog now has a header with the same two actions the card
   has, and a line saying where the new thing will land — "Criar em: Trabalho /

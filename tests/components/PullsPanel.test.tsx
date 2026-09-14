@@ -1,9 +1,39 @@
 import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import { PullsPanel } from '@/components/PullsPanel';
-import type { PullRequestItem } from '@/lib/types';
+import type { PullRequestItem, ReviewRequestsDigest } from '@/lib/types';
+
+/** A URL da página, em memória: o painel lê a aba dela e escreve nela, e o
+ *  teste confere o que ficou gravado. */
+const nav = vi.hoisted(() => ({
+  search: '',
+  history: [] as string[],
+  listeners: new Set<() => void>(),
+}));
+
+vi.mock('next/navigation', async () => {
+  const { useSyncExternalStore } = await import('react');
+  const subscribe = (listener: () => void) => {
+    nav.listeners.add(listener);
+    return () => nav.listeners.delete(listener);
+  };
+  const push = (url: string) => {
+    nav.history.push(url);
+    nav.search = url.split('?')[1] ?? '';
+    nav.listeners.forEach((listener) => listener());
+  };
+  return {
+    usePathname: () => '/',
+    useRouter: () => ({ push }),
+    useSearchParams: () =>
+      new URLSearchParams(useSyncExternalStore(subscribe, () => nav.search)),
+  };
+});
+
 
 beforeEach(() => {
+  nav.search = '';
+  nav.history = [];
   vi.spyOn(global, 'fetch').mockResolvedValue(
     new Response(JSON.stringify({ repos: [] }), { status: 200 }),
   );
@@ -153,5 +183,154 @@ describe('repositório clicável', () => {
     );
     expect(screen.queryByRole('link', { name: 'javascript:alert(1)' })).toBeNull();
     expect(screen.getByRole('heading', { name: 'javascript:alert(1)' })).toBeInTheDocument();
+  });
+});
+
+describe('aba de revisões pedidas', () => {
+  function review(over: Partial<ReviewRequestsDigest> = {}): ReviewRequestsDigest {
+    return { items: [], truncated: false, total: 0, scopeNote: null, ...over };
+  }
+
+  const pedido = pull({
+    repo: 'outra/org',
+    number: 7,
+    title: 'Trocar o parser',
+    url: 'https://github.com/outra/org/pull/7',
+    author: 'maria',
+    mine: false,
+    awaitingYou: true,
+    createdAt: '2026-09-01T10:00:00Z',
+  });
+
+  function abrirRevisoes() {
+    fireEvent.click(screen.getByRole('tab', { name: /Revisões/ }));
+  }
+
+  it('a aba padrão não vai para a URL, e a outra vai', () => {
+    render(
+      <PullsPanel
+        pulls={{ data: { items: [], errors: [] }, error: null }}
+        reviewRequests={{ data: review(), error: null }}
+      />,
+    );
+
+    abrirRevisoes();
+    expect(nav.history.at(-1)).toBe('/?pulls=revisoes');
+
+    fireEvent.click(screen.getByRole('tab', { name: /Acompanhados/ }));
+    expect(nav.history.at(-1)).toBe('/');
+  });
+
+  it('um valor que não é aba nenhuma cai na padrão', () => {
+    nav.search = 'pulls=inventada';
+    render(
+      <PullsPanel
+        pulls={{ data: { items: [pull({})], errors: [] }, error: null }}
+        reviewRequests={{ data: review({ items: [pedido] }), error: null }}
+      />,
+    );
+
+    expect(screen.getByRole('tab', { name: /Acompanhados/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+  });
+
+  it('a aba vem aberta quando a URL pede', () => {
+    nav.search = 'pulls=revisoes';
+    render(
+      <PullsPanel
+        pulls={{ data: { items: [], errors: [] }, error: null }}
+        reviewRequests={{ data: review({ items: [pedido] }), error: null }}
+      />,
+    );
+
+    expect(screen.getByRole('link', { name: 'Trocar o parser' })).toBeInTheDocument();
+  });
+
+  it('cada linha diz de qual repositório veio, com link para ele', () => {
+    render(
+      <PullsPanel
+        pulls={{ data: { items: [], errors: [] }, error: null }}
+        reviewRequests={{ data: review({ items: [pedido] }), error: null }}
+      />,
+    );
+    abrirRevisoes();
+
+    expect(screen.getByRole('link', { name: 'outra/org' })).toHaveAttribute(
+      'href',
+      'https://github.com/outra/org',
+    );
+    expect(screen.getByRole('link', { name: 'Trocar o parser' })).toHaveAttribute(
+      'href',
+      'https://github.com/outra/org/pull/7',
+    );
+    expect(screen.getByText('maria')).toBeInTheDocument();
+    expect(screen.getByText('#7')).toBeInTheDocument();
+  });
+
+  it('lista vazia diz que não há pedido', () => {
+    render(
+      <PullsPanel
+        pulls={{ data: { items: [], errors: [] }, error: null }}
+        reviewRequests={{ data: review(), error: null }}
+      />,
+    );
+    abrirRevisoes();
+
+    expect(screen.getByText(/Nenhuma revisão pedida a você/)).toBeInTheDocument();
+  });
+
+  it('lista vazia por alcance do token explica o que fazer', () => {
+    render(
+      <PullsPanel
+        pulls={{ data: { items: [], errors: [] }, error: null }}
+        reviewRequests={{
+          data: review({ scopeNote: 'este token clássico não tem o escopo `repo`' }),
+          error: null,
+        }}
+      />,
+    );
+    abrirRevisoes();
+
+    expect(screen.getByText(/não tem o escopo `repo`/)).toBeInTheDocument();
+  });
+
+  it('token recusado aparece como erro, não como lista vazia', () => {
+    render(
+      <PullsPanel
+        pulls={{ data: { items: [], errors: [] }, error: null }}
+        reviewRequests={{ data: null, error: 'o GitHub recusou o token' }}
+      />,
+    );
+    abrirRevisoes();
+
+    expect(screen.getByText('o GitHub recusou o token')).toBeInTheDocument();
+    expect(screen.queryByText(/Nenhuma revisão pedida/)).not.toBeInTheDocument();
+  });
+
+  it('avisa quando a página cortou a lista', () => {
+    render(
+      <PullsPanel
+        pulls={{ data: { items: [], errors: [] }, error: null }}
+        reviewRequests={{ data: review({ items: [pedido], truncated: true, total: 250 }), error: null }}
+      />,
+    );
+    abrirRevisoes();
+
+    expect(screen.getByText(/Mostrando 1 de 250/)).toBeInTheDocument();
+  });
+
+  it('a gaveta de repositórios acompanhados não segue para a outra aba', () => {
+    render(
+      <PullsPanel
+        pulls={{ data: { items: [], errors: [] }, error: null }}
+        reviewRequests={{ data: review({ items: [pedido] }), error: null }}
+      />,
+    );
+    expect(screen.getByText('Repositórios acompanhados')).toBeInTheDocument();
+
+    abrirRevisoes();
+    expect(screen.queryByText('Repositórios acompanhados')).not.toBeInTheDocument();
   });
 });

@@ -150,6 +150,7 @@ export default function DashboardPage() {
       node: (
         <PullsPanel
           pulls={state?.pulls ?? { data: { items: [], errors: [] }, error: null }}
+          reviewRequests={state?.reviewRequests ?? { data: null, error: null }}
           onChanged={reload}
           loading={booting}
         />

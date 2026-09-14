@@ -85,6 +85,18 @@ export interface PullRequestItem {
   /** Separa pull request de issue: o GitHub devolve os dois na mesma lista. */
   isPullRequest: boolean;
   updatedAt: string;
+  /** Quando foi aberto. Só a busca de revisões pedidas traz isto; a idade do
+   *  PR é o que diz há quanto tempo ele espera. */
+  createdAt?: string;
+}
+
+/** As revisões pedidas a você, de qualquer repositório que o token enxergue.
+ *  Vem da busca do GitHub, não da lista de repositórios acompanhados. */
+export interface ReviewRequestsDigest {
+  items: PullRequestItem[];
+  truncated: boolean;
+  total: number;
+  scopeNote: string | null;
 }
 
 export interface PullsDigest {
@@ -251,6 +263,9 @@ export interface DashboardState {
   email: PanelResult<EmailEnvelope[]>;
   agenda: PanelResult<AgendaItem[]>;
   pulls: PanelResult<PullsDigest>;
+  /** PRs esperando a revisão do usuário, inclusive fora dos repositórios
+   *  acompanhados. */
+  reviewRequests: PanelResult<ReviewRequestsDigest>;
   jira: PanelResult<JiraItem[]>;
   /** Issues que o usuário escolheu acompanhar, mesmo não sendo dele. */
   jiraWatched: PanelResult<JiraItem[]>;

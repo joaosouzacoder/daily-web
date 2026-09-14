@@ -60,6 +60,7 @@ function state(over: Partial<DashboardState> = {}): DashboardState {
     email: { data: [envelope({ id: '1' }), envelope({ id: '2' })], error: null },
     agenda: { data: [], error: null },
     pulls: { data: { items: [], errors: [] }, error: null },
+    reviewRequests: { data: { items: [], truncated: false, total: 0, scopeNote: null }, error: null },
     jira: { data: [], error: null },
     jiraWatched: { data: [], error: null },
     jiraDelivered: { data: [], error: null },

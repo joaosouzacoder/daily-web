@@ -170,7 +170,19 @@ async function buildState(userId: string, ciclo: symbol): Promise<DashboardState
   // daqui não pode ser confirmada por ele: ele é anterior à escrita.
   const retratoIniciadoEm = new Date();
 
-  const [email, agenda, pulls, jira, tasks, mentions, jiraWatched, jiraDelivered, jiraApproved, jiraProblems] =
+  const [
+    email,
+    agenda,
+    pulls,
+    reviewRequests,
+    jira,
+    tasks,
+    mentions,
+    jiraWatched,
+    jiraDelivered,
+    jiraApproved,
+    jiraProblems,
+  ] =
     await Promise.all([
       has('email')
         ? mergeConnections(mailConnections, (c) => loadInbox(userId, c, EMAIL_LIMIT))
@@ -179,6 +191,9 @@ async function buildState(userId: string, ciclo: symbol): Promise<DashboardState
         ? mergeConnections(calendars, (c) => agendaSource.fetchAgenda(c, undefined, days))
         : OFF,
       pullsConnection ? panel(() => githubApi.fetchPulls(pullsConnection)) : OFF,
+      // Uma busca por ciclo, independente de quantos repositórios são
+      // acompanhados — ela varre tudo o que o token enxerga.
+      pullsConnection ? panel(() => githubApi.fetchReviewRequests(pullsConnection)) : OFF,
       jiraConnection ? panel(() => jiraApi.fetchIssues(jiraConnection, JIRA_FILTER)) : OFF,
       has('tasks') ? panel(() => fetchTasks(userId)) : OFF,
       jiraConnection ? panel(() => getNotifications(userId, jiraConnection)) : OFF,
@@ -210,6 +225,7 @@ async function buildState(userId: string, ciclo: symbol): Promise<DashboardState
     email: emailReconciliado,
     agenda,
     pulls,
+    reviewRequests,
     jira,
     jiraWatched,
     jiraDelivered,
