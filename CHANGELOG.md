@@ -18,6 +18,10 @@ Only `main` is maintained; there are no release branches.
   through the same confirmation as `E` instead of deleting immediately;
   the toolbar's "Mover" button is unchanged, since it already commits to
   the folder shown in its own dropdown.
+- Every confirmation dialog now prints its keyboard shortcut on the button
+  itself ("Cancelar Esc", "Excluir Enter"), and the e-mail list's batch
+  toolbar shows the `E`/`M` shortcuts next to the selection count. A
+  shortcut nobody can see is a shortcut nobody finds.
 
 ### Fixed
 - An opened e-mail's body can be selected and copied again, and its links are

@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { ShortcutKey } from '@/components/data/ShortcutKey';
 
 export interface ConfirmOptions {
   title: string;
@@ -77,9 +78,12 @@ export function useConfirm() {
         </DialogHeader>
         <DialogFooter>
           {/* Cancel comes first and is the quiet one: the destructive act should
-              never be the button your hand lands on by habit. */}
+              never be the button your hand lands on by habit. The key each
+              button answers to is printed on it — a shortcut nobody can see
+              is a shortcut nobody uses. */}
           <Button type="button" variant="outline" onClick={() => settle(false)}>
             {pending?.cancelLabel ?? 'Cancelar'}
+            <ShortcutKey>Esc</ShortcutKey>
           </Button>
           <Button
             type="button"
@@ -88,6 +92,7 @@ export function useConfirm() {
             onClick={() => settle(true)}
           >
             {pending?.confirmLabel ?? 'Confirmar'}
+            <ShortcutKey>Enter</ShortcutKey>
           </Button>
         </DialogFooter>
       </DialogContent>

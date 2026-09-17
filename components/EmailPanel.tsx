@@ -36,6 +36,7 @@ import { Maximize2, Minimize2 } from 'lucide-react';
 import type { MailboxNode, NoteFolder } from '@/lib/types';
 import { FolderInput, Mail, MailOpen, Trash2 } from 'lucide-react';
 import { IconAction } from '@/components/data/IconAction';
+import { ShortcutKey } from '@/components/data/ShortcutKey';
 import { Label, Trash } from 'iconoir-react';
 import type { Account, EmailEnvelope, EmailThread, MailboxRef, PanelResult } from '@/lib/types';
 import { PanelError } from '@/components/data/PanelError';
@@ -850,6 +851,14 @@ export function EmailPanel({
         <span className={cn('text-sm text-ink-dim', tabular)}>
           {sel.selected.length} {sel.selected.length === 1 ? 'conversa' : 'conversas'}
         </span>
+        {/* A única pista de que E e M existem: sem ela, o atalho é invisível
+            e ninguém descobre sozinho. */}
+        <span className="flex items-center gap-1 type-caption text-ink-dim">
+          <ShortcutKey>E</ShortcutKey>
+          <span>excluir</span>
+          <ShortcutKey>M</ShortcutKey>
+          <span>mover</span>
+        </span>
         <IconAction
           variant="outline"
           label="Marcar lido"
@@ -1402,9 +1411,11 @@ export function EmailPanel({
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setMoverAberto(false)}>
               Cancelar
+              <ShortcutKey>Esc</ShortcutKey>
             </Button>
             <Button type="button" onClick={() => void confirmarMoverEmLote()}>
               Mover
+              <ShortcutKey>Enter</ShortcutKey>
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1022,6 +1022,26 @@ describe('seleção múltipla, arraste e ações de pasta', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  it('a barra de ações em lote mostra os atalhos E e M', () => {
+    montar();
+    fireEvent.click(caixaDe(1));
+    expect(screen.getByText('excluir')).toBeInTheDocument();
+    expect(screen.getByText('mover')).toBeInTheDocument();
+  });
+
+  it('o modal de confirmação mostra Esc e Enter nos botões', async () => {
+    montar();
+    fireEvent.click(caixaDe(1));
+
+    fireEvent.keyDown(screen.getByRole('listbox', { name: 'conversas' }), { key: 'e' });
+    const dialog = await screen.findByRole('dialog');
+    // O atalho segue no acessível "Cancelar"/"Excluir" — a dica é só visual.
+    expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Excluir' })).toBeInTheDocument();
+    expect(within(dialog).getByText('Esc')).toBeInTheDocument();
+    expect(within(dialog).getByText('Enter')).toBeInTheDocument();
+  });
+
   it('tecla E com seleção abre a confirmação de exclusão em lote; cancelar não apaga nada', async () => {
     montar();
     fireEvent.click(caixaDe(1));
