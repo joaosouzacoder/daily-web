@@ -1010,6 +1010,94 @@ describe('seleção múltipla, arraste e ações de pasta', () => {
     expect(screen.queryByText('4 conversas')).toBeNull();
   });
 
+  it('tecla E sem nada selecionado não faz nada', () => {
+    montar();
+    fireEvent.keyDown(screen.getByRole('listbox', { name: 'conversas' }), { key: 'e' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('tecla M sem nada selecionado não faz nada', () => {
+    montar();
+    fireEvent.keyDown(screen.getByRole('listbox', { name: 'conversas' }), { key: 'm' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('tecla E com seleção abre a confirmação de exclusão em lote; cancelar não apaga nada', async () => {
+    montar();
+    fireEvent.click(caixaDe(1));
+    fireEvent.click(caixaDe(2));
+    const antes = corpos.length;
+
+    fireEvent.keyDown(screen.getByRole('listbox', { name: 'conversas' }), { key: 'e' });
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Excluir estes 2 e-mails?')).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(corpos.length).toBe(antes);
+  });
+
+  it('tecla E confirma e exclui em lote', async () => {
+    montar();
+    fireEvent.click(caixaDe(1));
+    fireEvent.click(caixaDe(2));
+
+    fireEvent.keyDown(screen.getByRole('listbox', { name: 'conversas' }), { key: 'e' });
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Excluir' }));
+
+    await waitFor(() => expect(corpos.some((c) => c.includes('"action":"delete"'))).toBe(true));
+    const corpo = JSON.parse(corpos.find((c) => c.includes('"action":"delete"'))!);
+    expect(corpo.targets).toEqual([
+      { account: 'mail-1', id: '1' },
+      { account: 'mail-1', id: '2' },
+    ]);
+  });
+
+  it('o botão Excluir da barra de ações em lote também pede confirmação', async () => {
+    montar();
+    fireEvent.click(caixaDe(1));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Excluir este e-mail?')).toBeInTheDocument();
+  });
+
+  it('tecla M com seleção abre o modal de mover com a pasta padrão, e permite trocar antes de confirmar', async () => {
+    vi.mocked(global.fetch).mockImplementation(async (url, init) => {
+      const endereco = String(url);
+      if (init?.body) corpos.push(String(init.body));
+      if (endereco.includes('/api/email/mailboxes')) {
+        return new Response(JSON.stringify({ mailboxes: ARVORE }));
+      }
+      if (endereco.includes('/api/email/folders')) {
+        return new Response(JSON.stringify({ folders: ['INBOX', 'Arquivo'] }));
+      }
+      if (endereco.includes('/api/email/batch')) {
+        return new Response(JSON.stringify({ results: [] }));
+      }
+      return new Response(JSON.stringify({ folders: [], ok: true, messages: [] }));
+    });
+    montar();
+    fireEvent.click(caixaDe(1));
+    // A pasta padrão só existe depois que o efeito busca as pastas da conta
+    // selecionada; a tecla M antes disso não teria destino nenhum para abrir.
+    await screen.findByLabelText('pasta de destino');
+
+    fireEvent.keyDown(screen.getByRole('listbox', { name: 'conversas' }), { key: 'm' });
+    const dialog = await screen.findByRole('dialog');
+    const select = within(dialog).getByRole('combobox') as HTMLSelectElement;
+    expect(select.value).toBe('INBOX');
+
+    fireEvent.change(select, { target: { value: 'Arquivo' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Mover' }));
+
+    await waitFor(() => expect(corpos.some((c) => c.includes('"action":"move"'))).toBe(true));
+    const corpo = JSON.parse(corpos.find((c) => c.includes('"action":"move"'))!);
+    expect(corpo.folder).toBe('Arquivo');
+    expect(corpo.targets).toEqual([{ account: 'mail-1', id: '1' }]);
+  });
+
   // O navegador só abre a sessão de arraste se a origem continuar de pé
   // durante o `dragstart`. Marcar a linha ou recolher o maço ali dentro
   // repinta a lista e faz o Chromium desistir do arraste sem avisar — era

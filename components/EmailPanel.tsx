@@ -28,6 +28,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -496,6 +497,31 @@ export function EmailPanel({
       despachar({ type: 'all' });
       return;
     }
+    // E e M só agem sobre o que está marcado no checkbox — sem seleção, as
+    // teclas não fazem nada, para não confirmar a exclusão da conversa
+    // errada por engano.
+    if (
+      e.key.toLowerCase() === 'e' &&
+      !e.metaKey &&
+      !e.ctrlKey &&
+      !e.altKey &&
+      sel.selected.length > 0
+    ) {
+      e.preventDefault();
+      void confirmarExclusaoEmLote();
+      return;
+    }
+    if (
+      e.key.toLowerCase() === 'm' &&
+      !e.metaKey &&
+      !e.ctrlKey &&
+      !e.altKey &&
+      sel.selected.length > 0
+    ) {
+      e.preventDefault();
+      iniciarMoverEmLote();
+      return;
+    }
     if (e.key === 'Escape' && sel.selected.length > 0) {
       // Com algo selecionado, Esc limpa a seleção e para aí: deixá-lo subir
       // fecharia a tela cheia junto, que não foi o que se pediu.
@@ -668,6 +694,36 @@ export function EmailPanel({
     await runBatch(action, folder, somente);
   };
 
+  // Mesma pergunta da lixeira de uma linha só (removeThread): excluir em lote,
+  // pelo botão da barra ou pela tecla E, também confirma antes de apagar.
+  const confirmarExclusaoEmLote = async () => {
+    const alvos = alvosSelecionados();
+    if (alvos.length === 0) return;
+    const ok = await confirm({
+      title: alvos.length === 1 ? 'Excluir este e-mail?' : `Excluir estes ${alvos.length} e-mails?`,
+      description: 'Os enviados ficam: sua cópia do que escreveu não é lixo da caixa.',
+      confirmLabel: 'Excluir',
+      destructive: true,
+    });
+    if (!ok) return;
+    await executarLote('delete');
+  };
+
+  // A tecla M abre este modal em vez de mover na hora: mover é permanente o
+  // suficiente (a mensagem sai da pasta de origem) para merecer a mesma pausa
+  // que excluir tem, e a pasta de destino ainda pode ser trocada aqui dentro.
+  const [moverAberto, setMoverAberto] = useState(false);
+
+  const iniciarMoverEmLote = () => {
+    if (sel.selected.length === 0 || folders.length === 0) return;
+    setMoverAberto(true);
+  };
+
+  const confirmarMoverEmLote = async () => {
+    setMoverAberto(false);
+    await executarLote('move', targetFolder);
+  };
+
   const repetirNaoProcessados = async () => {
     if (!ultimaAcao || naoProcessados.length === 0) return;
     const alvos = naoProcessados.map((r) => ({ account: r.account, id: r.id }));
@@ -831,7 +887,7 @@ export function EmailPanel({
         <IconAction
           variant="destructive"
           label="Excluir"
-          onClick={() => void executarLote('delete')}
+          onClick={() => void confirmarExclusaoEmLote()}
           icon={<Trash2 className="size-4" />}
         />
       </>
@@ -1309,6 +1365,50 @@ export function EmailPanel({
         conteudo
       )}
       {dialog}
+
+      {/* A tecla M abre este modal; o botão "Mover" da barra continua movendo
+          direto para a pasta já escolhida no dropdown dela, sem passar por
+          aqui — só o atalho de teclado ganhou a pausa de confirmar. */}
+      <Dialog open={moverAberto} onOpenChange={setMoverAberto}>
+        <DialogContent
+          className="sm:max-w-md"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              void confirmarMoverEmLote();
+            }
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>
+              {alvosSelecionados().length === 1
+                ? 'Mover este e-mail para:'
+                : `Mover estes ${alvosSelecionados().length} e-mails para:`}
+            </DialogTitle>
+          </DialogHeader>
+          <select
+            autoFocus
+            className={cn(selectClass, focusRing)}
+            aria-label="pasta de destino do atalho M"
+            value={targetFolder}
+            onChange={(e) => setTargetFolder(e.target.value)}
+          >
+            {folders.map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
+          </select>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setMoverAberto(false)}>
+              Cancelar
+            </Button>
+            <Button type="button" onClick={() => void confirmarMoverEmLote()}>
+              Mover
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Em tela cheia o painel vira o aplicativo inteiro: as pastas de um
           lado, a lista do outro, e a mensagem abre dentro dela. */}

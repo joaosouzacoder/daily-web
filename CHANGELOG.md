@@ -8,6 +8,17 @@ Only `main` is maintained; there are no release branches.
 
 ## [Unreleased]
 
+### Added
+- Keyboard shortcuts for the two destructive batch actions on the e-mail
+  list: with at least one conversation checked, `E` opens the same delete
+  confirmation the row-level trash icon already used, and `M` opens a new
+  confirmation that lets you change the destination folder before moving.
+  Both dialogs confirm with Enter and cancel with Escape, like every other
+  confirmation in the app. The toolbar's own "Excluir" button now goes
+  through the same confirmation as `E` instead of deleting immediately;
+  the toolbar's "Mover" button is unchanged, since it already commits to
+  the folder shown in its own dropdown.
+
 ### Fixed
 - An opened e-mail's body can be selected and copied again, and its links are
   clickable. Both were broken by the same conversation row: it carried
