@@ -8,6 +8,16 @@ Only `main` is maintained; there are no release branches.
 
 ## [Unreleased]
 
+### Changed
+- Dependencies brought up to date: the `@anthropic-ai/sdk`, `lucide-react`,
+  `mailparser`, Next.js, React and React DOM, and `tailwind-merge` production
+  group; the `@types/react`, `@types/react-dom`, `@vitejs/plugin-react`,
+  `@types/node`, and `@types/nodemailer` development group; Vitest 5;
+  nodemailer 10; and imapflow 2. imapflow's 2.0 release migrated to
+  TypeScript and narrowed `envelope.date` from `Date` to `Date | string`,
+  which broke the type check in `lib/integrations/imap.ts`; the envelope
+  date is now normalized through `new Date(...)` before formatting.
+
 ### Added
 - A "Revisões" tab in the GitHub panel lists the pull requests waiting for the
   user's review, from any repository the token can see — the tracked-repo list

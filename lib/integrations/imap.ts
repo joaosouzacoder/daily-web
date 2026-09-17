@@ -166,7 +166,7 @@ function toEnvelope(
     subject: message.envelope?.subject ?? '',
     // O que você mandou nunca é novidade para você.
     unread: mailbox === 'sent' ? false : !message.flags?.has('\\Seen'),
-    date: (message.envelope?.date ?? new Date()).toISOString(),
+    date: new Date(message.envelope?.date ?? Date.now()).toISOString(),
     messageId: message.envelope?.messageId ?? '',
     references: parseReferences(message.headers, message.envelope?.inReplyTo),
     labels: userLabels(message.labels),
