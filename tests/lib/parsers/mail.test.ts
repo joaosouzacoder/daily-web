@@ -40,6 +40,31 @@ describe('readable', () => {
     const html = '<div style="display:none">preview <div>nested</div> more hidden text should not leak</div><p>Real content</p>';
     expect(readable(html)).toBe('Real content');
   });
+
+  it('preserva o destino de um link ao lado do texto visível', () => {
+    const html = '<p>Confirme em <a href="https://example.com/confirmar">clique aqui</a>.</p>';
+    expect(readable(html)).toBe('Confirme em clique aqui (https://example.com/confirmar).');
+  });
+
+  it('não duplica a URL quando o texto do link já é a própria URL', () => {
+    const html = '<p><a href="https://example.com/page">https://example.com/page</a></p>';
+    expect(readable(html)).toBe('https://example.com/page');
+  });
+
+  it('mostra a URL quando o link não tem texto visível (ex.: botão em imagem)', () => {
+    const html = '<p><a href="https://example.com/promo"><img src="banner.png"></a></p>';
+    expect(readable(html)).toBe('https://example.com/promo');
+  });
+
+  it('preserva um link mailto: junto do texto', () => {
+    const html = '<p><a href="mailto:contato@example.com">fale com a gente</a></p>';
+    expect(readable(html)).toBe('fale com a gente (mailto:contato@example.com)');
+  });
+
+  it('descarta o href de um link interno (âncora de página), mantendo só o texto', () => {
+    const html = '<p><a href="#rodape">voltar ao topo</a></p>';
+    expect(readable(html)).toBe('voltar ao topo');
+  });
 });
 
 describe('sortFolders', () => {

@@ -8,6 +8,21 @@ Only `main` is maintained; there are no release branches.
 
 ## [Unreleased]
 
+### Fixed
+- An opened e-mail's body can be selected and copied again, and its links are
+  clickable. Both were broken by the same conversation row: it carried
+  `draggable` (for dragging a thread into a folder) on the `<li>` that also
+  contains the opened message, and browsers block native text selection
+  inside a draggable ancestor. `draggable` now lives on the row header only,
+  which is also the only part that should start a drag.
+- A link inside an e-mail survives being flattened to plain text. The reader
+  shows a `text/plain`-style view built by stripping every HTML tag, which
+  used to erase a link's `href` along with the tag, leaving unclickable
+  visible text and no address at all when the link had none (an image
+  button, say). The address is now kept next to the text — or shown on its
+  own when there was no text — and any URL in the resulting body, including
+  ones the sender wrote as plain text, is rendered as a real, clickable link.
+
 ### Changed
 - Dependencies brought up to date: the `@anthropic-ai/sdk`, `lucide-react`,
   `mailparser`, Next.js, React and React DOM, and `tailwind-merge` production

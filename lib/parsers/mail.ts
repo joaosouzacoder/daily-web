@@ -65,6 +65,22 @@ function stripHiddenElements(html: string): string {
   return result;
 }
 
+const ANCHOR_RE = /<a\b[^>]*?href\s*=\s*(["'])([^"']*)\1[^>]*>([\s\S]*?)<\/a>/gi;
+
+/** A tag genérica de baixo apaga o `href` junto com a tag; sem isto, todo
+ *  link da mensagem se tornaria texto morto, impossível de clicar. */
+function inlineAnchors(html: string): string {
+  return html.replace(ANCHOR_RE, (_match, _quote, hrefRaw, inner) => {
+    const href = decodeEntities(hrefRaw).trim();
+    const text = decodeEntities(inner.replace(/<[^>]+>/g, '')).trim();
+    // Uma âncora de página (`#secao`) não vira link fora do e-mail; só o
+    // texto sobrevive, como já acontecia antes desta função existir.
+    if (!/^(?:https?:|mailto:)/i.test(href)) return text;
+    if (!text || text === href) return href;
+    return `${text} (${href})`;
+  });
+}
+
 export function readable(raw: string): string {
   if (!looksLikeHtml(raw)) {
     return collapseBlankLines(raw);
@@ -74,7 +90,8 @@ export function readable(raw: string): string {
     .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
     .replace(/<!--[\s\S]*?-->/g, '');
   const withoutHidden = stripHiddenElements(withoutScripts);
-  const withBreaks = withoutHidden.replace(BLOCK_TAGS_RE, '\n');
+  const withInlinedLinks = inlineAnchors(withoutHidden);
+  const withBreaks = withInlinedLinks.replace(BLOCK_TAGS_RE, '\n');
   const withoutTags = withBreaks.replace(/<[^>]+>/g, '');
   return collapseBlankLines(decodeEntities(withoutTags));
 }

@@ -5,6 +5,7 @@ import type {
   CSSProperties,
   DragEvent as ReactDragEvent,
   KeyboardEvent as ReactKeyboardEvent,
+  ReactNode,
 } from 'react';
 import { useEmailView } from '@/lib/hooks/useEmailView';
 import { useReducedMotion } from '@/lib/hooks/useReducedMotion';
@@ -1019,9 +1020,6 @@ export function EmailPanel({
                       ? deslocamentoDoMaco(indice, indiceArrastada)
                       : undefined
                   }
-                  draggable
-                  onDragStart={(e) => aoComecarArraste(thread, e)}
-                  onDragEnd={aoTerminarArraste}
                 >
                   <div
                     className={cn(
@@ -1035,6 +1033,13 @@ export function EmailPanel({
                       cursorAqui && 'ring-1 ring-inset ring-brand-edge',
                       noMaco && 'opacity-70 shadow-e2',
                     )}
+                    // O arraste vive na linha, não na `<li>`: se subisse para
+                    // ela, o e-mail aberto embaixo herdaria o `draggable` e o
+                    // navegador passaria a tratar toda seleção de texto ali
+                    // como o início de um arraste, em vez de selecionar.
+                    draggable
+                    onDragStart={(e) => aoComecarArraste(thread, e)}
+                    onDragEnd={aoTerminarArraste}
                   >
                     <span
                       aria-hidden
@@ -1447,7 +1452,7 @@ function EmailDetail({
       className="flex flex-col gap-3 border-b border-line-soft py-4 pr-4 pl-9"
       aria-label="corpo do e-mail"
     >
-      <div className={bodyClass}>{body ?? 'Carregando…'}</div>
+      <div className={bodyClass}>{body ? linkify(body) : 'Carregando…'}</div>
 
       {/* O histórico citado fica dobrado: numa resposta de resposta ele é a
           maior parte do texto, e é justamente a parte que já foi lida. */}
@@ -1534,6 +1539,40 @@ const iconButtonClass =
 /** The message body scrolls inside the row rather than pushing the list down. */
 const bodyClass =
   'max-h-[340px] overflow-y-auto pr-3 text-sm leading-relaxed break-words whitespace-pre-wrap text-ink-mid';
+
+const URL_RE = /https?:\/\/[^\s<>()]+/g;
+
+/** `readable()` already flattened the body to plain text, so any URL in it —
+ *  one the sender wrote, or one preserved from a stripped `<a href>` — is
+ *  still just text. This turns those addresses into real, clickable links. */
+function linkify(text: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  let lastIndex = 0;
+  let key = 0;
+  for (const match of text.matchAll(URL_RE)) {
+    const start = match.index ?? 0;
+    if (start > lastIndex) nodes.push(text.slice(lastIndex, start));
+    // Trailing punctuation almost always belongs to the sentence, not the
+    // address ("veja https://x.com/y." should not link the final period).
+    let url = match[0];
+    const trailing = url.match(/[.,;:!?)'"]+$/);
+    if (trailing) url = url.slice(0, -trailing[0].length);
+    nodes.push(
+      <a
+        key={key++}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer nofollow"
+        className="underline"
+      >
+        {url}
+      </a>,
+    );
+    lastIndex = start + url.length;
+  }
+  if (lastIndex < text.length) nodes.push(text.slice(lastIndex));
+  return nodes;
+}
 
 /**
  * A panel that cannot load is information, not an alarm: a contained block with a

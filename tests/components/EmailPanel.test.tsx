@@ -129,6 +129,33 @@ describe('EmailPanel', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  it('transforma uma URL do corpo do e-mail num link clicável', async () => {
+    vi.mocked(global.fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/api/email/mail-1/1/body')) {
+        return new Response(
+          JSON.stringify({ text: 'Veja o PR em https://github.com/x/y/pull/1 e comente.' }),
+        );
+      }
+      return new Response(JSON.stringify({ folders: [] }));
+    });
+    render(<EmailPanel onSeenChanged={() => {}} onRemoved={() => {}} mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: /^Revisão do PR/ }));
+    const corpo = await screen.findByLabelText('corpo do e-mail');
+    const link = await within(corpo).findByRole('link', { name: 'https://github.com/x/y/pull/1' });
+    expect(link).toHaveAttribute('href', 'https://github.com/x/y/pull/1');
+    expect(link).toHaveAttribute('target', '_blank');
+  });
+
+  it('o corpo do e-mail não fica dentro de um ancestral arrastável, para o texto ficar selecionável', async () => {
+    render(<EmailPanel onSeenChanged={() => {}} onRemoved={() => {}} mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: /^Revisão do PR/ }));
+    const corpo = await screen.findByLabelText('corpo do e-mail');
+    for (let el: HTMLElement | null = corpo; el; el = el.parentElement) {
+      expect(el.getAttribute('draggable')).not.toBe('true');
+    }
+  });
+
   it('gera o rascunho com IA e envia a resposta', async () => {
     vi.mocked(global.fetch).mockImplementation(async (input) => {
       const url = String(input);
@@ -941,7 +968,9 @@ describe('seleção múltipla, arraste e ações de pasta', () => {
 
   const caixaDe = (n: number) =>
     screen.getByLabelText(`selecionar Mensagem ${n}`) as HTMLInputElement;
-  const liDe = (n: number) => caixaDe(n).closest('li')!;
+  // O `draggable` vive na `.row`, não na `<li>`: soltar o e-mail aberto embaixo
+  // dela do arraste é o que deixa o texto do corpo selecionável.
+  const liDe = (n: number) => caixaDe(n).closest('.row')! as HTMLElement;
   // O botão do título é o único da linha que anuncia se está aberto.
   const linhaDe = (n: number) => within(liDe(n)).getAllByRole('button')[0];
 
@@ -1114,7 +1143,9 @@ describe('alvos de ação no arraste', () => {
 
   const caixaDe = (n: number) =>
     screen.getByLabelText(`selecionar Mensagem ${n}`) as HTMLInputElement;
-  const liDe = (n: number) => caixaDe(n).closest('li')!;
+  // O `draggable` vive na `.row`, não na `<li>`: soltar o e-mail aberto embaixo
+  // dela do arraste é o que deixa o texto do corpo selecionável.
+  const liDe = (n: number) => caixaDe(n).closest('.row')! as HTMLElement;
 
   beforeEach(() => {
     corpos = [];
@@ -1538,7 +1569,9 @@ describe('soltar numa pasta com mais de uma conta na tela', () => {
   }
 
   const liDe = (assunto: string) =>
-    (screen.getByLabelText(`selecionar ${assunto}`) as HTMLInputElement).closest('li')!;
+    (screen.getByLabelText(`selecionar ${assunto}`) as HTMLInputElement).closest(
+      '.row',
+    )! as HTMLElement;
 
   const abrirTelaCheia = async () => {
     fireEvent.click(screen.getByRole('button', { name: 'Abrir em tela cheia' }));
