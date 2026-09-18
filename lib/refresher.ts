@@ -13,7 +13,7 @@ import { replayPendingActions } from './email/replay';
 import { loadInbox } from './email/inbox';
 import { listUsers } from './auth/users';
 import { enabledModules, listConnections } from './vault/connections';
-import { agendaDays, dashboardLayout, dashboardLayouts, jiraWatchedKeys } from './preferences';
+import { agendaDays, dashboardLayout, dashboardLayouts, jiraWatchedKeys, jiraFollowedPeople } from './preferences';
 import type { Connection } from './vault/connections';
 
 const EMAIL_LIMIT = 30;
@@ -35,7 +35,7 @@ const JIRA_FILTER = 'both' as const;
  *  tela em vez de mostrar "nada por aqui" para quem nunca quis aquilo. */
 const OFF: PanelResult<never> = { data: null, error: null };
 
-async function panel<T>(fn: () => Promise<T>): Promise<PanelResult<T>> {
+export async function panel<T>(fn: () => Promise<T>): Promise<PanelResult<T>> {
   try {
     return { data: await fn(), error: null };
   } catch (err) {
@@ -228,6 +228,7 @@ async function buildState(userId: string, ciclo: symbol): Promise<DashboardState
     reviewRequests,
     jira,
     jiraWatched,
+    jiraFollowedPeople: jiraConnection ? jiraFollowedPeople(userId) : [],
     jiraDelivered,
     jiraApproved,
     jiraProblems,

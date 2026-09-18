@@ -9,6 +9,11 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Added
+- The Jira panel can follow a person — search by name, the person becomes a tab
+  next to "Eu", and with it selected every list (Em aberto, Entregues, Aprovados,
+  Problemas) is scoped to that person; the tab is kept in the URL (`jiraPessoa`);
+  the person's lists are fetched on demand when the tab is open, not in the
+  background cycle; you only see what your own Jira token can see; up to 10 people.
 - Keyboard shortcuts for the two destructive batch actions on the e-mail
   list: with at least one conversation checked, `E` opens the same delete
   confirmation the row-level trash icon already used, and `M` opens a new

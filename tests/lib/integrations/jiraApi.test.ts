@@ -339,3 +339,83 @@ describe('fetchProblems', () => {
     expect(searchBodies(fetchMock)[0].fields).toContain('customfield_1');
   });
 });
+
+import { searchPeople, fetchPerson, ME } from '@/lib/integrations/jiraApi';
+
+describe('JiraSubject (fetch by person)', () => {
+  const PERSON = { kind: 'person' as const, accountId: '123:abc' };
+
+  it('fetchIssues usa conta específica e não currentUser', async () => {
+    const fetchMock = stubSearchSequence([[], [], []]);
+    await fetchIssues(CONN, 'both', PERSON);
+
+    expect(jqlOf(fetchMock, 0)).toContain('assignee = "123:abc"');
+    expect(jqlOf(fetchMock, 1)).toContain('reporter = "123:abc"');
+    expect(jqlOf(fetchMock, 2)).toContain('approvals = pendingBy("123:abc")');
+    expect(jqlOf(fetchMock, 0)).not.toContain('currentUser()');
+  });
+
+  it('fetchDelivered usa conta específica e não currentUser', async () => {
+    const fetchMock = stubSearchSequence([[], []]);
+    await fetchDelivered(CONN, PERSON);
+
+    expect(jqlOf(fetchMock, 0)).toContain('CHANGED BY "123:abc"');
+    expect(jqlOf(fetchMock, 0)).toContain('assignee = "123:abc"');
+    expect(jqlOf(fetchMock, 0)).not.toContain('currentUser()');
+  });
+
+  it('fetchApproved usa conta específica e não currentUser', async () => {
+    const fetchMock = stubSearchSequence([[], []]);
+    await fetchApproved(CONN, PERSON);
+
+    expect(jqlOf(fetchMock, 0)).toContain('CHANGED FROM "Aprovação" BY "123:abc"');
+    expect(jqlOf(fetchMock, 0)).not.toContain('currentUser()');
+  });
+
+  it('fetchProblems usa conta específica e não currentUser', async () => {
+    const fetchMock = vi.fn();
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ id: 'customfield_10015', name: 'Start date' }] });
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ issues: [] }) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await fetchProblems(CONN, PERSON);
+    
+    const body = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(body.jql).toContain('assignee = "123:abc" OR reporter = "123:abc"');
+    expect(body.jql).not.toContain('currentUser()');
+  });
+
+  it('rejeita accountId inválido antes de qualquer requisição', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchIssues(CONN, 'both', { kind: 'person', accountId: '" OR 1=1' })).rejects.toThrow('conta do Jira inválida');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('searchPeople & fetchPerson', () => {
+  it('searchPeople filtra não-atlassian e inativos e encoda url', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true, status: 200, json: async () => ([
+        { accountId: '123:abc', accountType: 'atlassian', active: true, displayName: 'Ana', emailAddress: 'a@a.com' },
+        { accountId: '456:def', accountType: 'app', active: true, displayName: 'Bot' },
+        { accountId: '789:ghi', accountType: 'atlassian', active: false, displayName: 'Inativo' },
+      ])
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const people = await searchPeople(CONN, 'Ana S');
+    expect(fetchMock.mock.calls[0][0]).toContain('query=Ana%20S');
+    expect(people).toEqual([{ accountId: '123:abc', displayName: 'Ana' }]);
+  });
+
+  it('fetchPerson retorna null no 404 e throw no 401', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404, text: async () => '' });
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await fetchPerson(CONN, '123')).toBeNull();
+
+    fetchMock.mockResolvedValue({ ok: false, status: 401, text: async () => '' });
+    await expect(fetchPerson(CONN, '123')).rejects.toThrow('Jira recusou o e-mail');
+  });
+});

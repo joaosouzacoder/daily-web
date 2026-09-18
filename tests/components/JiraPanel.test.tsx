@@ -1,4 +1,4 @@
-import { describe, expect, it, afterEach, vi } from 'vitest';
+import { describe, expect, it, afterEach, beforeEach, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
 import { JiraPanel } from '@/components/JiraPanel';
@@ -31,6 +31,10 @@ vi.mock('next/navigation', async () => {
   };
 });
 
+vi.mock('@/lib/hooks/useJiraPersonView', () => ({
+  useJiraPersonView: vi.fn().mockReturnValue({ view: null, loading: false, error: null }),
+}));
+
 /** As três listas do painel são obrigatórias; cada teste só quer falar de
  *  uma delas, então o resto vem vazio por padrão. */
 function Panel(props: Partial<ComponentProps<typeof JiraPanel>>) {
@@ -41,6 +45,8 @@ function Panel(props: Partial<ComponentProps<typeof JiraPanel>>) {
       delivered={{ data: [], error: null }}
       approved={{ data: [], error: null }}
       problems={{ data: [], error: null }}
+      people={[]}
+      refreshedAt={null}
       onChanged={() => {}}
       {...props}
     />
@@ -731,5 +737,53 @@ describe('aba na URL', () => {
     nav.search = 'jira=<script>';
     render(<Panel />);
     expect(screen.getByRole('tab', { name: /Em aberto/ })).toHaveAttribute('aria-selected', 'true');
+  });
+});
+
+import { useJiraPersonView } from '@/lib/hooks/useJiraPersonView';
+
+describe('Visão de Pessoa (pessoaAtiva)', () => {
+  const people = [{ accountId: '123:abc', displayName: 'Ana Souza' }];
+
+  beforeEach(() => {
+    (useJiraPersonView as any).mockReturnValue({
+      view: {
+        jira: { data: [issue({ key: 'ANA-1', summary: 'Da Ana' })], error: null },
+        delivered: { data: [], error: null },
+        approved: { data: [], error: null },
+        problems: { data: [], error: null },
+      },
+      loading: false,
+      error: null
+    });
+  });
+
+  it('exibe as abas de pessoa e inicia em "Eu"', () => {
+    render(<Panel people={people} />);
+    expect(screen.getByRole('tab', { name: 'Eu' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Ana Souza' })).toBeInTheDocument();
+  });
+
+  it('troca para a pessoa, altera o título e atualiza URL', () => {
+    render(<Panel people={people} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Ana Souza' }));
+    expect(nav.history.at(-1)).toBe('/?jiraPessoa=123%3Aabc');
+  });
+
+  it('usa a view da pessoa e não a do usuário local quando selecionada', () => {
+    nav.search = 'jiraPessoa=123:abc';
+    render(<Panel people={people} jira={{ data: [issue({ key: 'LOCAL-1' })], error: null }} />);
+    
+    expect(screen.getByText('ANA-1')).toBeInTheDocument();
+    expect(screen.queryByText('LOCAL-1')).not.toBeInTheDocument();
+    
+    // Eyebrow alterado
+    expect(screen.getByText('Jira · Ana Souza')).toBeInTheDocument();
+  });
+
+  it('esconde "Acompanhando" quando em visão de terceiro', () => {
+    nav.search = 'jiraPessoa=123:abc';
+    render(<Panel people={people} watched={{ data: [issue({ key: 'WATCH-1' })], error: null }} />);
+    expect(screen.queryByText('WATCH-1')).not.toBeInTheDocument();
   });
 });
