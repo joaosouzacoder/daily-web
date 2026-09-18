@@ -8,6 +8,8 @@ import {
   serializeSizedLayouts,
 } from './dashboardLayout';
 import type { PanelPlacement, SizedLayout } from './dashboardLayout';
+import { isJiraAccountId } from './jiraAccount';
+import type { JiraPerson } from './types';
 
 // Preferências de visualização por usuário. São escolhas de como olhar, não
 // de credencial: por isso não passam pelo cofre e não são cifradas.
@@ -121,4 +123,40 @@ export function setJiraWatchedKeys(userId: string, keys: string[]): void {
   // não deve mostrar TT-1 e tt-1 como duas coisas.
   const limpas = [...new Set(keys.map((k) => k.trim().toUpperCase()).filter(isJiraKey))];
   setPreference(userId, JIRA_WATCHED, limpas.join(','));
+}
+
+export const JIRA_PEOPLE = 'jiraFollowedPeople';
+export const MAX_JIRA_PEOPLE = 10;
+export { isJiraAccountId };
+
+export function jiraFollowedPeople(userId: string): JiraPerson[] {
+  const bruto = read(userId, JIRA_PEOPLE);
+  if (!bruto) return [];
+  try {
+    const json = JSON.parse(bruto);
+    if (!Array.isArray(json)) return [];
+    return json
+      .filter((p): p is Record<string, unknown> => typeof p === 'object' && p !== null)
+      .map((p) => ({
+        accountId: String(p.accountId),
+        displayName: String(p.displayName || '').trim().slice(0, 100),
+      }))
+      .filter((p) => isJiraAccountId(p.accountId));
+  } catch {
+    return [];
+  }
+}
+
+export function setJiraFollowedPeople(userId: string, people: JiraPerson[]): void {
+  const map = new Map<string, JiraPerson>();
+  for (const p of people) {
+    if (!isJiraAccountId(p.accountId)) continue;
+    if (map.has(p.accountId)) continue;
+    map.set(p.accountId, {
+      accountId: p.accountId,
+      displayName: p.displayName.trim().slice(0, 100),
+    });
+    if (map.size >= MAX_JIRA_PEOPLE) break;
+  }
+  setPreference(userId, JIRA_PEOPLE, JSON.stringify([...map.values()]));
 }

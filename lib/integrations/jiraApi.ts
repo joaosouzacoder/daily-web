@@ -5,11 +5,28 @@ import type {
   JiraProblemItem,
   JiraRole,
   JiraStatusCategory,
+  JiraPerson,
 } from '@/lib/types';
 import type { JiraFilter } from '@/lib/parsers/jira';
 import { findProblems, isEpic } from '@/lib/parsers/jiraProblems';
 import type { JiraAuditIssue } from '@/lib/parsers/jiraProblems';
 import { isJiraKey } from '@/lib/preferences';
+import { isJiraAccountId } from '@/lib/jiraAccount';
+
+export type JiraSubject = { kind: 'me' } | { kind: 'person'; accountId: string };
+export const ME: JiraSubject = { kind: 'me' };
+
+function jqlUser(subject: JiraSubject): string {
+  if (subject.kind === 'me') return 'currentUser()';
+  if (!isJiraAccountId(subject.accountId)) throw new Error('conta do Jira inválida');
+  return `"${subject.accountId}"`;
+}
+
+function jqlPending(subject: JiraSubject): string {
+  if (subject.kind === 'me') return 'myPending()';
+  if (!isJiraAccountId(subject.accountId)) throw new Error('conta do Jira inválida');
+  return `pendingBy("${subject.accountId}")`;
+}
 
 const TIMEOUT_MS = 20_000;
 const PAGE_SIZE = 100;
@@ -122,33 +139,34 @@ async function search(auth: JiraAuth, jql: string): Promise<RawIssue[]> {
 
 const OPEN = 'statusCategory != Done';
 
-// O que espera por uma decisão sua. `myPending()` é a função que a instância
-// aceita — `pendingBy(currentUser())` é recusada com erro de sintaxe — e é ela
-// que separa o que aguarda você do que apenas está parado num status chamado
-// "Aprovação", que pode estar esperando outra pessoa. Depender do nome do
-// status traria a issue errada.
-const AWAITING_MY_APPROVAL = `approvals = myPending() AND ${OPEN} ORDER BY updated DESC`;
+// O que espera por uma decisão do usuário ou da pessoa acompanhada. Para
+// o usuário logado, `myPending()` funciona. Para outra pessoa, usa-se
+// `pendingBy("<accountId>")` (com a ID em aspas — o formato sem aspas ou
+// com `currentUser()` é recusado pela API).
+const awaitingApprovalJql = (subject: JiraSubject) =>
+  `approvals = ${jqlPending(subject)} AND ${OPEN} ORDER BY updated DESC`;
 
-/** Uma issue pode ser sua como responsável e como relator ao mesmo tempo; a
+/** Uma issue pode ser de quem está sendo olhado como responsável e como relator ao mesmo tempo; a
  *  união é feita por chave para ela não aparecer duas vezes na lista.
  *
  *  A aprovação entra na mesma união, e não como lista à parte, porque é a
- *  mesma pergunta — "o que ainda pede algo de mim" — e porque uma issue que
- *  seja sua e espere sua aprovação precisa continuar sendo uma linha só. */
-export async function fetchIssues(conn: Connection, filter: JiraFilter): Promise<JiraItem[]> {
+ *  mesma pergunta — "o que ainda pede algo" — e porque uma issue que
+ *  seja de quem está sendo olhado e espere aprovação precisa continuar sendo uma linha só. */
+export async function fetchIssues(conn: Connection, filter: JiraFilter, subject = ME): Promise<JiraItem[]> {
   const auth = jiraAuth(conn);
   const byKey = new Map<string, JiraItem>();
 
   const wantAssignee = filter === 'assignee' || filter === 'both';
   const wantReporter = filter === 'reporter' || filter === 'both';
+  const userStr = jqlUser(subject);
 
   if (wantAssignee) {
-    for (const raw of await search(auth, `assignee = currentUser() AND ${OPEN} ORDER BY updated DESC`)) {
+    for (const raw of await search(auth, `assignee = ${userStr} AND ${OPEN} ORDER BY updated DESC`)) {
       byKey.set(raw.key, toJiraItem(raw, auth.baseUrl, 'assignee'));
     }
   }
   if (wantReporter) {
-    for (const raw of await search(auth, `reporter = currentUser() AND ${OPEN} ORDER BY updated DESC`)) {
+    for (const raw of await search(auth, `reporter = ${userStr} AND ${OPEN} ORDER BY updated DESC`)) {
       const existing = byKey.get(raw.key);
       if (existing) existing.role = 'both';
       else byKey.set(raw.key, toJiraItem(raw, auth.baseUrl, 'reporter'));
@@ -156,14 +174,14 @@ export async function fetchIssues(conn: Connection, filter: JiraFilter): Promise
   }
 
   // Buscada sempre, inclusive quando o filtro é só responsável ou só relator:
-  // aprovar não é um papel seu na issue, e o filtro de papel não deveria
-  // esconder o que espera por você.
-  for (const raw of await search(auth, AWAITING_MY_APPROVAL)) {
+  // aprovar não é um papel na issue, e o filtro de papel não deveria
+  // esconder o que espera aprovação.
+  for (const raw of await search(auth, awaitingApprovalJql(subject))) {
     const existing = byKey.get(raw.key);
     // A issue que já veio pelo papel mantém o papel e ganha a marca. A que só
-    // aparece por aprovação não tem papel seu: nem responsável, nem relator.
+    // aparece por aprovação não tem papel: nem responsável, nem relator.
     // Entra com o valor neutro que o resto do módulo já usa nesse caso, para
-    // não afirmar um papel que não é seu — quem explica a presença dela na
+    // não afirmar um papel que não se aplica — quem explica a presença dela na
     // lista é a marca de aprovação, não o papel.
     const item = existing ?? toJiraItem(raw, auth.baseUrl, 'assignee');
     item.awaitingApproval = true;
@@ -191,58 +209,60 @@ function withToday(week: RawIssue[], today: RawIssue[], baseUrl: string): JiraDa
   }));
 }
 
-// O que saiu das suas mãos. Duas condições, unidas porque as instâncias
+// O que saiu das mãos de quem está sendo olhado. Duas condições, unidas porque as instâncias
 // se comportam de formas diferentes:
 //
 //   - `status CHANGED BY currentUser() DURING (startOfDay(), now())` pega a
 //     transição que você mesmo fez. Não depende do nome do status final, que
 //     é livre por workflow — este Jira encerra em "Resolvido" e "Fechado",
 //     outro encerra em "Done", e listar nomes quebraria fora daqui.
-//   - `resolved >= startOfDay()` pega o que foi resolvido no seu nome sem que
-//     a transição tenha sido sua, que é o caso de automação de workflow.
+//   - `resolved >= startOfDay()` pega o que foi resolvido no nome de quem está
+//     sendo olhado sem que a transição tenha sido dele, que é o caso de automação.
 //
-// `statusCategory = Done` por fora descarta o que você fechou e alguém
+// `statusCategory = Done` por fora descarta o que foi fechado e alguém
 // reabriu depois: reaberto não é entregue.
-const delivered = (desde: string) =>
-  'statusCategory = Done AND (' +
-  `status CHANGED BY currentUser() DURING (${desde}, now())` +
-  ` OR (assignee = currentUser() AND resolved >= ${desde})` +
-  ') ORDER BY updated DESC';
+const delivered = (desde: string, subject: JiraSubject) => {
+  const userStr = jqlUser(subject);
+  return 'statusCategory = Done AND (' +
+    `status CHANGED BY ${userStr} DURING (${desde}, now())` +
+    ` OR (assignee = ${userStr} AND resolved >= ${desde})` +
+    ') ORDER BY updated DESC';
+};
 
-/** Issues que este usuário encerrou nos últimos sete dias, marcadas conforme
+/** Issues que este usuário (ou a pessoa olhada) encerrou nos últimos sete dias, marcadas conforme
  *  caiam ou não no dia de hoje. */
-export async function fetchDelivered(conn: Connection): Promise<JiraDatedItem[]> {
+export async function fetchDelivered(conn: Connection, subject = ME): Promise<JiraDatedItem[]> {
   const auth = jiraAuth(conn);
   const [week, today] = await Promise.all([
-    search(auth, delivered(WEEK)),
-    search(auth, delivered(TODAY)),
+    search(auth, delivered(WEEK, subject)),
+    search(auth, delivered(TODAY, subject)),
   ]);
   return withToday(week, today, auth.baseUrl);
 }
 
-// O que você aprovou. Não há função JQL para isto: `myApproved()` e
+// O que foi aprovado por quem está sendo olhado. Não há função JQL para isto: `myApproved()` e
 // `myDecided()` não existem, e `approvedBy(currentUser())` é recusada — o
 // campo `approvals` não aceita função com argumento. `approved()` sozinho
 // responde "aprovada por alguém", incluindo aprovações de outras pessoas.
 //
-// O que restringe a você é a transição de saída da aprovação ter sido sua.
+// O que restringe a quem está sendo olhado é a transição de saída da aprovação ter sido sua.
 // Diferente das outras consultas deste módulo, esta cita o nome do status:
 // sem `FROM "Aprovação"`, uma issue aprovada por outra pessoa entra na lista
-// assim que você mexe no status dela — foi medido contra a API de aprovação,
+// assim que o status muda — foi medido contra a API de aprovação,
 // e o nome é o que separa os dois casos. O preço é conhecido: se o workflow
 // renomear esse status, a lista esvazia em silêncio.
-const approved = (desde: string) =>
+const approved = (desde: string, subject: JiraSubject) =>
   'approvals = approved() AND ' +
-  `status CHANGED FROM "Aprovação" BY currentUser() DURING (${desde}, now())` +
+  `status CHANGED FROM "Aprovação" BY ${jqlUser(subject)} DURING (${desde}, now())` +
   ' ORDER BY updated DESC';
 
-/** Issues que este usuário aprovou nos últimos sete dias, marcadas conforme
+/** Issues que este usuário (ou a pessoa olhada) aprovou nos últimos sete dias, marcadas conforme
  *  caiam ou não no dia de hoje. */
-export async function fetchApproved(conn: Connection): Promise<JiraDatedItem[]> {
+export async function fetchApproved(conn: Connection, subject = ME): Promise<JiraDatedItem[]> {
   const auth = jiraAuth(conn);
   const [week, today] = await Promise.all([
-    search(auth, approved(WEEK)),
-    search(auth, approved(TODAY)),
+    search(auth, approved(WEEK, subject)),
+    search(auth, approved(TODAY, subject)),
   ]);
   return withToday(week, today, auth.baseUrl);
 }
@@ -316,24 +336,26 @@ async function startDateField(auth: JiraAuth): Promise<string> {
   return field.id;
 }
 
-// Histórias e épicos seus que ainda pedem atenção: o que está aberto e o que
+// Histórias e épicos de quem está sendo olhado que ainda pedem atenção: o que está aberto e o que
 // mudou no último mês. Sem o recorte de tempo, todo o histórico concluído
 // entraria só para ser conferido.
-const PROBLEM_SCOPE =
-  '(assignee = currentUser() OR reporter = currentUser()) AND ' +
-  '(statusCategory != Done OR updated >= -30d) ORDER BY updated DESC';
+const problemScope = (subject: JiraSubject) => {
+  const userStr = jqlUser(subject);
+  return `(assignee = ${userStr} OR reporter = ${userStr}) AND ` +
+    '(statusCategory != Done OR updated >= -30d) ORDER BY updated DESC';
+};
 
 // Chaves por consulta de filhas: mantém a JQL de tamanho previsível.
 const EPIC_CHUNK = 50;
 
-/** Histórias e épicos seus com defeito de preenchimento. São duas idas ao
+/** Histórias e épicos com defeito de preenchimento. São duas idas ao
  *  Jira além da descoberta do campo, e não uma por épico: as filhas de todos
  *  os épicos vêm juntas, por `parent in (...)`. */
-export async function fetchProblems(conn: Connection): Promise<JiraProblemItem[]> {
+export async function fetchProblems(conn: Connection, subject = ME): Promise<JiraProblemItem[]> {
   const auth = jiraAuth(conn);
   const startField = await startDateField(auth);
 
-  const raw = await searchAll(auth, PROBLEM_SCOPE, [...FIELDS, startField]);
+  const raw = await searchAll(auth, problemScope(subject), [...FIELDS, startField]);
   const scope: JiraAuditIssue[] = raw.map((issue) => {
     const fields = (issue.fields ?? {}) as Record<string, unknown>;
     const text = (value: unknown) => (typeof value === 'string' ? value : '');
@@ -364,4 +386,64 @@ export async function fetchProblems(conn: Connection): Promise<JiraProblemItem[]
 
 export async function testConnection(conn: Connection): Promise<void> {
   await request(jiraAuth(conn), '/rest/api/3/myself', undefined);
+}
+
+interface JiraUserResponse {
+  accountId?: string;
+  accountType?: string;
+  active?: boolean;
+  displayName?: string;
+}
+
+export async function searchPeople(conn: Connection, query: string): Promise<JiraPerson[]> {
+  const auth = jiraAuth(conn);
+  const rawData = (await request(
+    auth,
+    `/rest/api/3/user/search?query=${encodeURIComponent(query)}&maxResults=10`,
+    undefined
+  ));
+  const data = Array.isArray(rawData) ? (rawData as JiraUserResponse[]) : [];
+
+  return data
+    .filter(
+      (u) =>
+        u.accountType === 'atlassian' &&
+        u.active !== false &&
+        u.accountId &&
+        isJiraAccountId(u.accountId)
+    )
+    .map((u) => ({
+      accountId: u.accountId!,
+      displayName: u.displayName ?? '',
+    }));
+}
+
+export async function fetchPerson(conn: Connection, accountId: string): Promise<JiraPerson | null> {
+  const auth = jiraAuth(conn);
+  
+  const response = await fetch(`${auth.baseUrl}/rest/api/3/user?accountId=${encodeURIComponent(accountId)}`, {
+    method: 'GET',
+    headers: {
+      authorization: auth.header,
+      accept: 'application/json',
+    },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+
+  if (response.status === 404) return null;
+  if (response.status === 401) throw new Error('Jira recusou o e-mail ou o API token');
+  if (response.status === 403) throw new Error('o API token do Jira não tem permissão para isso');
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`Jira respondeu ${response.status}${text ? `: ${text.slice(0, 200)}` : ''}`);
+  }
+
+  const data = (await response.json()) as JiraUserResponse;
+
+  if (data.accountType !== 'atlassian' || !data.accountId) return null;
+  
+  return {
+    accountId: data.accountId,
+    displayName: data.displayName ?? '',
+  };
 }

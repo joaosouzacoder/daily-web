@@ -241,6 +241,18 @@ export interface MailboxRef {
   label: string;
 }
 
+export interface JiraPerson {
+  accountId: string;
+  displayName: string;
+}
+
+export interface JiraPersonView {
+  jira: PanelResult<JiraItem[]>;
+  delivered: PanelResult<JiraDatedItem[]>;
+  approved: PanelResult<JiraDatedItem[]>;
+  problems: PanelResult<JiraProblemItem[]>;
+}
+
 export interface DashboardState {
   updatedAt: string;
   /** Módulos que este usuário ligou. O painel só desenha o que está aqui. */
@@ -269,6 +281,8 @@ export interface DashboardState {
   jira: PanelResult<JiraItem[]>;
   /** Issues que o usuário escolheu acompanhar, mesmo não sendo dele. */
   jiraWatched: PanelResult<JiraItem[]>;
+  /** Pessoas que o usuário escolheu acompanhar no Jira. */
+  jiraFollowedPeople: JiraPerson[];
   /** Issues que o usuário encerrou nos últimos sete dias. Ficam de fora de
    *  `jira`, que só lista o que ainda está aberto. */
   jiraDelivered: PanelResult<JiraDatedItem[]>;
