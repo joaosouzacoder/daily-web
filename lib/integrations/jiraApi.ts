@@ -345,6 +345,15 @@ const problemScope = (subject: JiraSubject) => {
     '(statusCategory != Done OR updated >= -30d) ORDER BY updated DESC';
 };
 
+// Arquivar é tirar do trabalho, não concluir: a issue arquivada não tem mais
+// o que ser corrigido. O corte é pelo nome do status, feito aqui e não na
+// JQL — `status != "Arquivado"` é recusado com erro onde o status não existe,
+// e derrubaria a aba inteira nessas instâncias.
+const ARCHIVED_STATUS_NAMES = ['arquivado', 'archived'];
+
+const isArchived = (issue: JiraItem) =>
+  ARCHIVED_STATUS_NAMES.includes(issue.status.trim().toLowerCase());
+
 // Chaves por consulta de filhas: mantém a JQL de tamanho previsível.
 const EPIC_CHUNK = 50;
 
@@ -356,14 +365,16 @@ export async function fetchProblems(conn: Connection, subject = ME): Promise<Jir
   const startField = await startDateField(auth);
 
   const raw = await searchAll(auth, problemScope(subject), [...FIELDS, startField]);
-  const scope: JiraAuditIssue[] = raw.map((issue) => {
-    const fields = (issue.fields ?? {}) as Record<string, unknown>;
-    const text = (value: unknown) => (typeof value === 'string' ? value : '');
-    return {
-      ...toJiraItem(issue, auth.baseUrl, 'assignee'),
-      startDate: text(fields[startField]),
-    };
-  });
+  const scope: JiraAuditIssue[] = raw
+    .map((issue) => {
+      const fields = (issue.fields ?? {}) as Record<string, unknown>;
+      const text = (value: unknown) => (typeof value === 'string' ? value : '');
+      return {
+        ...toJiraItem(issue, auth.baseUrl, 'assignee'),
+        startDate: text(fields[startField]),
+      };
+    })
+    .filter((issue) => !isArchived(issue));
 
   // As chaves vêm do próprio Jira, mas entram numa JQL: a mesma validação da
   // lista de acompanhamento vale aqui.

@@ -271,6 +271,23 @@ describe('fetchProblems', () => {
   const epic = (key: string, over: Record<string, unknown> = {}) =>
     issue(key, { issuetype: { name: 'Epic', subtask: false }, ...over });
 
+  it('deixa de fora a história arquivada', async () => {
+    const arquivada = { name: 'Arquivado', statusCategory: { key: 'done' } };
+    const fetchMock = stubJira([
+      {
+        issues: [
+          story('DAD-2', { status: arquivada, customfield_10015: null }),
+          story('DAD-3', { customfield_10015: null }),
+        ],
+      },
+    ]);
+    const found = await fetchProblems(CONN);
+
+    // A exclusão não vai para a JQL: o status pode não existir na instância.
+    expect(searchBodies(fetchMock)[0].jql).not.toContain('Arquivado');
+    expect(found.map((i) => i.key)).toEqual(['DAD-3']);
+  });
+
   it('lê a data de início pelo campo descoberto', async () => {
     const fetchMock = stubJira([
       { issues: [story('DAD-2', { customfield_10015: null }), story('DAD-3')] },

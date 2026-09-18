@@ -18,12 +18,15 @@ interface Props {
   tabs: TabItem[];
   active: string;
   onChange: (id: string) => void;
+  /** Quebra em várias linhas em vez de rolar. Para faixas que crescem com
+   *  dados do usuário, onde a rolagem lateral empurra o painel. */
+  wrap?: boolean;
 }
 
 // Abas de verdade, com `role="tab"`: um chip diz "filtro ligado", uma aba diz
 // "outro conteúdo". As duas listas do Jira não são recortes da mesma lista,
 // então o controle precisa dizer isso.
-export function Tabs({ label, id, tabs, active, onChange }: Props) {
+export function Tabs({ label, id, tabs, active, onChange, wrap = false }: Props) {
   const mover = (indice: number, passo: number) => {
     const destino = (indice + passo + tabs.length) % tabs.length;
     onChange(tabs[destino].id);
@@ -34,7 +37,10 @@ export function Tabs({ label, id, tabs, active, onChange }: Props) {
     <div
       role="tablist"
       aria-label={label}
-      className="group/tabs-list mb-4 inline-flex w-fit max-w-full items-center justify-start gap-1 overflow-x-auto rounded-full border bg-muted/70 p-[3px] shadow-e1"
+      className={cn(
+        'group/tabs-list mb-4 inline-flex w-fit max-w-full items-center justify-start gap-1 border bg-muted/70 p-[3px] shadow-e1',
+        wrap ? 'min-w-0 flex-wrap rounded-2xl' : 'overflow-x-auto rounded-full',
+      )}
     >
       {tabs.map((tab, indice) => {
         const selecionada = tab.id === active;
