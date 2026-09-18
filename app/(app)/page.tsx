@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { useDashboardState } from '@/lib/hooks/usePolling';
+import { useDesktopAlerts } from '@/lib/hooks/useDesktopAlerts';
 import { NowBand } from '@/components/NowBand';
 import { NotificationsBell } from '@/components/NotificationsBell';
 import { EmailPanel } from '@/components/EmailPanel';
@@ -36,6 +37,7 @@ import {
 
 export default function DashboardPage() {
   const { state, loading, refreshNow, reload, mutate } = useDashboardState();
+  const desktop = useDesktopAlerts(state);
   const [layoutError, setLayoutError] = useState<string | null>(null);
   const booting = loading && !state;
 
@@ -170,12 +172,19 @@ export default function DashboardPage() {
         updatedAt={state?.updatedAt ?? null}
         nextRefreshAt={state?.nextRefreshAt ?? null}
         bell={
-          has('jira') ? (
+          has('jira') || has('email') || has('pulls') ? (
             <NotificationsBell
               notifications={state?.notifications ?? { data: [], error: null }}
               onChanged={reload}
               onMarkedRead={(id) => mutate((s) => markNotificationRead(s, id))}
               onMarkedAllRead={(ids) => mutate((s) => markNotificationsRead(s, ids))}
+              desktop={{
+                supported: desktop.supported,
+                enabled: desktop.enabled,
+                permission: desktop.permission,
+                onEnable: () => void desktop.enable(),
+                onDisable: desktop.disable,
+              }}
             />
           ) : null
         }

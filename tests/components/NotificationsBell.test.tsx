@@ -40,6 +40,59 @@ const items = [
 ];
 
 describe('NotificationsBell', () => {
+  it('mostra o controle de avisos do computador quando há suporte', () => {
+    const onEnable = vi.fn();
+    render(
+      <Bell desktop={{
+        supported: true,
+        enabled: false,
+        permission: 'default',
+        onEnable,
+        onDisable: () => {},
+      }} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /notificações/ }));
+    const toggle = screen.getByRole('button', { name: 'Avisar no computador' });
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(toggle);
+    expect(onEnable).toHaveBeenCalledOnce();
+  });
+
+  it('desliga os avisos pelo mesmo controle', () => {
+    const onDisable = vi.fn();
+    render(
+      <Bell desktop={{
+        supported: true,
+        enabled: true,
+        permission: 'granted',
+        onEnable: () => {},
+        onDisable,
+      }} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /notificações/ }));
+    const toggle = screen.getByRole('button', { name: 'Avisar no computador' });
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(toggle);
+    expect(onDisable).toHaveBeenCalledOnce();
+  });
+
+  it('explica quando os avisos foram bloqueados pelo navegador', () => {
+    render(
+      <Bell desktop={{
+        supported: true,
+        enabled: false,
+        permission: 'denied',
+        onEnable: () => {},
+        onDisable: () => {},
+      }} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /notificações/ }));
+    expect(
+      screen.getByText('Avisos bloqueados no navegador — libere nas permissões do site.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Avisar no computador' })).toBeNull();
+  });
+
   it('mostra a contagem de não lidas', () => {
     render(<Bell onMarkedRead={() => {}} notifications={{ data: items, error: null }} onChanged={() => {}} />);
     expect(screen.getByRole('button', { name: /notificações/ }).textContent).toContain('1');

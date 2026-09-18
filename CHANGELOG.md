@@ -9,6 +9,12 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Added
+- Opt-in desktop notifications while daily-web is open in a browser tab or as
+  a PWA, covering new e-mails, assigned or problematic Jira issues, pull
+  requests in watched repositories, review requests, and agenda events, plus
+  reminders 10 minutes before timed events. The bell contains the toggle;
+  existing items are baselined on first load, and bursts over five items are
+  collapsed into one summary.
 - The Jira panel can follow a person — search by name, the person becomes a tab
   next to "Eu", and with it selected every list (Em aberto, Entregues, Aprovados,
   Problemas) is scoped to that person; the tab is kept in the URL (`jiraPessoa`);
@@ -29,6 +35,8 @@ Only `main` is maintained; there are no release branches.
   shortcut nobody can see is a shortcut nobody finds.
 
 ### Fixed
+- The notification bell no longer disappears when Jira is off but e-mail or
+  pull requests are on.
 - The Jira person tabs wrap onto new lines, next to their buttons, instead of scrolling sideways. With
   several people followed and one selected, the strip plus its buttons was
   wider than the panel and pushed it into scrolling both ways.
