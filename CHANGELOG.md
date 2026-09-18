@@ -29,6 +29,13 @@ Only `main` is maintained; there are no release branches.
   shortcut nobody can see is a shortcut nobody finds.
 
 ### Fixed
+- The Jira person tabs wrap onto new lines, next to their buttons, instead of scrolling sideways. With
+  several people followed and one selected, the strip plus its buttons was
+  wider than the panel and pushed it into scrolling both ways.
+- The Jira "Problemas" list no longer flags archived issues (status
+  "Arquivado"/"Archived"). They are filtered after the search rather than in
+  the JQL, because Jira rejects a status name that does not exist in the
+  instance.
 - An opened e-mail's body can be selected and copied again, and its links are
   clickable. Both were broken by the same conversation row: it carried
   `draggable` (for dragging a thread into a folder) on the `<li>` that also

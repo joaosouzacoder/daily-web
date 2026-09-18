@@ -426,8 +426,9 @@ export function JiraPanel({
           : undefined
       }
     >
-      <div className="flex items-start gap-2">
+      <div className="flex min-w-0 items-start gap-2">
         <Tabs
+          wrap
           id="jira-pessoa"
           label="de quem é o Jira"
           active={pessoaAtiva ?? 'eu'}
