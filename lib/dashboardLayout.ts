@@ -14,6 +14,10 @@ export interface PanelPlacement {
   h: number;
 }
 
+/** Abaixo disto a grade não cabe: um módulo por vez, escolhido na barra de
+ *  baixo. O sino usa o mesmo corte para se abrir de ponta a ponta. */
+export const NARROW_BREAKPOINT = 1023;
+
 export const GRID_COLUMNS = 12;
 /** Altura de uma unidade da grade, em pixels. */
 export const GRID_ROW_HEIGHT = 32;
