@@ -10,6 +10,7 @@ import { IconAction } from '@/components/data/IconAction';
 import { Button } from '@/components/ui/button';
 import { tabular } from '@/lib/theme';
 import { cn } from '@/lib/utils';
+import { Chip } from '@/components/ui/Chip';
 
 /** De onde o aviso veio, em uma palavra. O rótulo era fixo em "JIRA", que
  *  passou a mentir quando o sino ganhou pull request e e-mail. */
@@ -26,6 +27,13 @@ interface Props {
   onMarkedRead: (id: string) => void;
   /** O mesmo, para o lote inteiro. */
   onMarkedAllRead: (ids: string[]) => void;
+  desktop?: {
+    supported: boolean;
+    enabled: boolean;
+    permission: string;
+    onEnable: () => void;
+    onDisable: () => void;
+  };
 }
 
 export function NotificationsBell({
@@ -33,6 +41,7 @@ export function NotificationsBell({
   onChanged,
   onMarkedRead,
   onMarkedAllRead,
+  desktop,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -152,6 +161,22 @@ export function NotificationsBell({
               role="dialog"
               aria-label="central de notificações"
             >
+              {desktop?.supported && (
+                <div className="mb-2 flex items-center justify-between gap-3 border-b border-line pb-3">
+                  {desktop.permission === 'denied' ? (
+                    <p className="type-caption text-ink-dim">
+                      Avisos bloqueados no navegador — libere nas permissões do site.
+                    </p>
+                  ) : (
+                    <Chip
+                      active={desktop.enabled}
+                      onClick={desktop.enabled ? desktop.onDisable : desktop.onEnable}
+                    >
+                      Avisar no computador
+                    </Chip>
+                  )}
+                </div>
+              )}
               {/* Dispensar um a um custa um clique por aviso, e o sino chega a
                 60. O botão só existe quando há o que dispensar. */}
               {unreadCount > 0 && (
