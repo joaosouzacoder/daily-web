@@ -40,6 +40,15 @@ const items = [
 ];
 
 describe('NotificationsBell', () => {
+  it('mantém o painel dentro das bordas de uma tela estreita', () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+    render(<Bell />);
+
+    fireEvent.click(screen.getByRole('button', { name: /notificações/ }));
+
+    expect(screen.getByRole('dialog')).toHaveStyle({ left: '12px', right: '12px' });
+  });
+
   it('mostra o controle de avisos do computador quando há suporte', () => {
     const onEnable = vi.fn();
     render(

@@ -9,6 +9,8 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Added
+- Narrow screens now have a bottom tab bar with one icon per enabled module,
+  showing one module at a time and keeping the active module in `?modulo=`.
 - Opt-in desktop notifications while daily-web is open in a browser tab or as
   a PWA, covering new e-mails, assigned or problematic Jira issues, pull
   requests in watched repositories, review requests, and agenda events, plus
@@ -35,6 +37,8 @@ Only `main` is maintained; there are no release branches.
   shortcut nobody can see is a shortcut nobody finds.
 
 ### Fixed
+- The notifications popover now fits narrow screens instead of overflowing
+  the left edge.
 - The notification bell no longer disappears when Jira is off but e-mail or
   pull requests are on.
 - The Jira person tabs wrap onto new lines, next to their buttons, instead of scrolling sideways. With

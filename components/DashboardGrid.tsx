@@ -2,26 +2,26 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LayoutGrid, X } from 'lucide-react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { IconAction } from '@/components/data/IconAction';
+import { MobileModuleNav } from '@/components/MobileModuleNav';
 import type { ReactNode } from 'react';
 import GridLayout, { useContainerWidth, type Layout } from 'react-grid-layout';
 import { Button } from '@/components/ui/button';
 import { PanelFrame, cardSurface } from '@/components/data/Panel';
 import { cn } from '@/lib/utils';
+import { isModuleId, type ModuleId } from '@/lib/modules';
 import {
   GRID_COLUMNS,
   GRID_ROW_HEIGHT,
   MIN_PANEL_HEIGHT,
   MIN_PANEL_WIDTH,
+  NARROW_BREAKPOINT,
   layoutFor,
   parseLayout,
   serializeLayout,
   type PanelPlacement,
 } from '@/lib/dashboardLayout';
-
-/** Abaixo disto a grade não cabe: os painéis viram uma coluna só, empilhada
- *  na ordem de cima para baixo, e arrastar sai do caminho. */
-const NARROW_BREAKPOINT = 1023;
 
 const naoFazNada = () => {};
 
@@ -34,10 +34,14 @@ interface Props {
 }
 
 export function DashboardGrid({ layout, panels, onSave }: Props) {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   // A v2 mede a largura por hook em vez do antigo WidthProvider.
   const { width, mounted, containerRef } = useContainerWidth();
   const [dragging, setDragging] = useState(false);
   const [narrow, setNarrow] = useState(false);
+  const narrowRef = useRef<HTMLDivElement>(null);
   // O botão é a única entrada do modo: deixa preso até a pessoa desligar, e
   // funciona igual em tela de toque, onde não há tecla para segurar.
   const [pinned, setPinned] = useState(false);
@@ -150,13 +154,49 @@ export function DashboardGrid({ layout, panels, onSave }: Props) {
   );
 
   if (narrow) {
-    // Numa tela estreita não há espaço para grade. Os painéis caem numa
-    // coluna, na ordem em que estão dispostos.
     const ordenados = [...visible].sort((a, b) => a.y - b.y || a.x - b.x);
+    const modules = ordenados.flatMap((placement) =>
+      isModuleId(placement.i) ? [placement.i] : [],
+    );
+    const requested = searchParams.get('modulo');
+    const active =
+      requested && isModuleId(requested) && modules.includes(requested)
+        ? requested
+        : modules[0];
+
+    if (modules.length < 2 || !active) {
+      return (
+        <div className="flex flex-col gap-4">
+          {ordenados.map((p) => panels.find((painel) => painel.id === p.i)?.node)}
+        </div>
+      );
+    }
+
+    const setActive = (next: ModuleId) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (next === modules[0]) params.delete('modulo');
+      else params.set('modulo', next);
+      const query = params.toString();
+      router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
+      // Quem rola é o <main> do AppShell, não a janela.
+      narrowRef.current?.closest('main')?.scrollTo({ top: 0 });
+    };
+
     return (
-      <div className="flex flex-col gap-4">
-        {ordenados.map((p) => panels.find((painel) => painel.id === p.i)?.node)}
-      </div>
+      <>
+        <div
+          ref={narrowRef}
+          className="flex flex-col gap-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))]"
+        >
+          {ordenados.map((p) => (
+            // Os painéis ficam montados para preservar edições ainda não salvas.
+            <div key={p.i} hidden={p.i !== active}>
+              {panels.find((painel) => painel.id === p.i)?.node}
+            </div>
+          ))}
+        </div>
+        <MobileModuleNav modules={modules} active={active} onChange={setActive} />
+      </>
     );
   }
 

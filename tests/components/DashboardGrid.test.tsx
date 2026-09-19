@@ -1,6 +1,31 @@
 import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor, act } from '@testing-library/react';
 
+const nav = vi.hoisted(() => ({
+  search: '',
+  history: [] as string[],
+  listeners: new Set<() => void>(),
+}));
+
+vi.mock('next/navigation', async () => {
+  const { useSyncExternalStore } = await import('react');
+  const subscribe = (listener: () => void) => {
+    nav.listeners.add(listener);
+    return () => nav.listeners.delete(listener);
+  };
+  const push = (url: string) => {
+    nav.history.push(url);
+    nav.search = url.split('?')[1] ?? '';
+    nav.listeners.forEach((listener) => listener());
+  };
+  return {
+    usePathname: () => '/',
+    useRouter: () => ({ push }),
+    useSearchParams: () =>
+      new URLSearchParams(useSyncExternalStore(subscribe, () => nav.search)),
+  };
+});
+
 // A grade de verdade precisa medir largura e observar redimensionamento, que
 // o jsdom não faz. O que interessa testar aqui é o que decidimos: quando o
 // modo de organizar liga, o que é passado para a grade e o que acontece numa
@@ -33,10 +58,16 @@ function larguraDaJanela(px: number) {
 
 beforeEach(() => {
   props.length = 0;
+  nav.search = '';
+  nav.history = [];
   larguraDaJanela(1440);
+  vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 const ultimasProps = () => props[props.length - 1];
 
@@ -93,12 +124,79 @@ describe('DashboardGrid', () => {
     expect(screen.getByRole('status')).toHaveTextContent(/Arraste para mover/);
   });
 
-  it('numa tela estreita empilha em coluna, sem grade', () => {
+  it('numa tela estreita mostra só o primeiro painel e a navegação', () => {
     larguraDaJanela(390);
-    render(<DashboardGrid layout={defaultLayout()} panels={painéis} onSave={() => {}} />);
+    const tresPainéis = [
+      ...painéis,
+      { id: 'tasks', node: <p>painel de tarefas</p> },
+    ];
+    render(<DashboardGrid layout={defaultLayout()} panels={tresPainéis} onSave={() => {}} />);
 
     expect(screen.queryByTestId('grade')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Organizar' })).toBeNull();
+    expect(screen.getByText('painel de e-mail').parentElement).not.toHaveAttribute('hidden');
+    expect(screen.getByText('painel do jira').parentElement).toHaveAttribute('hidden');
+    expect(screen.getByText('painel de tarefas').parentElement).toHaveAttribute('hidden');
+    expect(screen.getByRole('navigation', { name: 'módulos' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button')).toHaveLength(3);
+  });
+
+  it('mostra o painel indicado por modulo', () => {
+    larguraDaJanela(390);
+    nav.search = 'modulo=jira';
+    render(<DashboardGrid layout={defaultLayout()} panels={painéis} onSave={() => {}} />);
+
+    expect(screen.getByText('painel de e-mail').parentElement).toHaveAttribute('hidden');
+    expect(screen.getByText('painel do jira').parentElement).not.toHaveAttribute('hidden');
+  });
+
+  it.each(['modulo=lixo', 'modulo=agenda'])(
+    'volta ao primeiro painel quando o parâmetro não vale: %s',
+    (search) => {
+      larguraDaJanela(390);
+      nav.search = search;
+      render(<DashboardGrid layout={defaultLayout()} panels={painéis} onSave={() => {}} />);
+
+      expect(screen.getByText('painel de e-mail').parentElement).not.toHaveAttribute('hidden');
+      expect(screen.getByText('painel do jira').parentElement).toHaveAttribute('hidden');
+    },
+  );
+
+  it('troca o módulo na URL sem apagar os outros parâmetros', () => {
+    larguraDaJanela(390);
+    nav.search = 'filtro=hoje';
+    // A página rola dentro do <main> do AppShell, e é ele que volta ao topo.
+    const main = document.createElement('main');
+    main.scrollTo = vi.fn();
+    document.body.appendChild(main);
+    render(<DashboardGrid layout={defaultLayout()} panels={painéis} onSave={() => {}} />, {
+      container: main,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Jira' }));
+
+    expect(nav.history.at(-1)).toBe('/?filtro=hoje&modulo=jira');
+    expect(main.scrollTo).toHaveBeenCalledWith({ top: 0 });
+    main.remove();
+  });
+
+  it('tira o módulo padrão da URL', () => {
+    larguraDaJanela(390);
+    nav.search = 'filtro=hoje&modulo=jira';
+    render(<DashboardGrid layout={defaultLayout()} panels={painéis} onSave={() => {}} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'E-mail' }));
+
+    expect(nav.history.at(-1)).toBe('/?filtro=hoje');
+  });
+
+  it('não mostra navegação para um painel só', () => {
+    larguraDaJanela(390);
+    render(
+      <DashboardGrid layout={defaultLayout()} panels={[painéis[0]]} onSave={() => {}} />,
+    );
+
+    expect(screen.queryByRole('navigation', { name: 'módulos' })).toBeNull();
     expect(screen.getByText('painel de e-mail')).toBeInTheDocument();
   });
 

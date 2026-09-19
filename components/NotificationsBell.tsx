@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { tabular } from '@/lib/theme';
 import { cn } from '@/lib/utils';
 import { Chip } from '@/components/ui/Chip';
+import { NARROW_BREAKPOINT } from '@/lib/dashboardLayout';
 
 /** De onde o aviso veio, em uma palavra. O rótulo era fixo em "JIRA", que
  *  passou a mentir quando o sino ganhou pull request e e-mail. */
@@ -108,13 +109,26 @@ export function NotificationsBell({
   // backdrop-filter: o menu era recortado e pintado por baixo do conteúdo,
   // e nenhum z-index resolve isso de dentro.
   const anchorRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  const [pos, setPos] = useState<
+    | { top: number; right: number; left?: undefined; narrow: false }
+    | { top: number; right: number; left: number; narrow: true }
+    | null
+  >(null);
 
   useLayoutEffect(() => {
     if (!open) return;
     const medir = () => {
       const r = anchorRef.current?.getBoundingClientRect();
-      if (r) setPos({ top: r.bottom + 8, right: window.innerWidth - r.right });
+      if (!r) return;
+      const top = r.bottom + 8;
+      if (window.innerWidth <= NARROW_BREAKPOINT) {
+        setPos({ top, left: 12, right: 12, narrow: true });
+        return;
+      }
+      const width = Math.min(460, window.innerWidth - 32);
+      const anchoredRight = window.innerWidth - r.right;
+      const right = Math.min(anchoredRight, window.innerWidth - width - 12);
+      setPos({ top, right, narrow: false });
     };
     medir();
     window.addEventListener('resize', medir);
@@ -156,8 +170,22 @@ export function NotificationsBell({
           <>
             <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
             <div
-              style={pos ? { top: pos.top, right: pos.right } : undefined}
-              className="fixed z-50 max-h-[70vh] w-[min(460px,calc(100vw-2rem))] overflow-y-auto rounded-lg border border-line-strong bg-glass-strong p-4 shadow-e4 backdrop-blur-xl backdrop-saturate-150"
+              style={
+                pos
+                  ? {
+                      top: pos.top,
+                      right: pos.right,
+                      left: pos.left,
+                      maxHeight: pos.narrow
+                        ? `calc(100dvh - ${pos.top}px - 5.5rem - env(safe-area-inset-bottom))`
+                        : undefined,
+                    }
+                  : undefined
+              }
+              className={cn(
+                'fixed z-50 overflow-y-auto rounded-lg border border-line-strong bg-glass-strong p-4 shadow-e4 backdrop-blur-xl backdrop-saturate-150',
+                pos?.narrow ? 'w-auto' : 'max-h-[70vh] w-[min(460px,calc(100vw-2rem))]',
+              )}
               role="dialog"
               aria-label="central de notificações"
             >
@@ -186,6 +214,7 @@ export function NotificationsBell({
                   </span>
                   <IconAction
                     size="icon-xs"
+                    className="min-h-10 min-w-10"
                     label={marcandoTodas ? 'Marcando…' : 'Marcar todas como lidas'}
                     disabled={marcandoTodas}
                     onClick={() => void markAllRead()}
@@ -248,6 +277,7 @@ export function NotificationsBell({
                       {!item.read && (
                         <IconAction
                           size="icon-xs"
+                          className="min-h-10 min-w-10"
                           label={`marcar ${item.title} como lida`}
                           onClick={() => void markRead(item)}
                           icon={<Check className="size-4" />}
