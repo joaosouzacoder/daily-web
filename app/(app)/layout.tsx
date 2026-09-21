@@ -3,9 +3,11 @@ import type { ReactNode } from 'react';
 import { AppShell } from '@/components/shell/AppShell';
 import { getCurrentUser } from '@/lib/auth/currentUser';
 import {
+  BACKDROP_COOKIE,
   DENSITY_COOKIE,
   SIDEBAR_COOKIE,
   THEME_COOKIE,
+  parseBackdrop,
   parseDensity,
   parseSidebar,
   parseTheme,
@@ -23,6 +25,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     <AppShell
       theme={parseTheme(jar.get(THEME_COOKIE)?.value)}
       density={parseDensity(jar.get(DENSITY_COOKIE)?.value)}
+      backdrop={parseBackdrop(jar.get(BACKDROP_COOKIE)?.value)}
       sidebar={parseSidebar(jar.get(SIDEBAR_COOKIE)?.value)}
       username={user?.username ?? null}
     >
