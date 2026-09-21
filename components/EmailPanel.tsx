@@ -1207,7 +1207,9 @@ export function EmailPanel({
                     className={cn(
                       // `row` and `row-unread` stay as behavioural markers: the suite
                       // reads the unread state of a conversation off this element.
-                      'row flex items-center gap-3 border-b border-line-soft px-2 py-3 transition-colors duration-100 ease-brand even:bg-muted/25 motion-reduce:transition-none',
+                      // Em tela estreita a linha quebra: só checkbox e título ficam
+                      // em cima, e o resto desce para a segunda linha.
+                      'row flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line-soft px-2 py-3 transition-colors duration-100 ease-brand even:bg-muted/25 motion-reduce:transition-none lg:flex-nowrap lg:gap-3',
                       isOpen ? 'bg-brand-tint' : 'hover:bg-brand-tint',
                       thread.unreadCount > 0 && 'row-unread',
                       marcada && 'bg-brand-tint/70',
@@ -1276,7 +1278,7 @@ export function EmailPanel({
                       >
                         {titulo}
                       </span>
-                      <span className="w-full truncate type-caption text-ink-dim">
+                      <span className="hidden w-full truncate type-caption text-ink-dim lg:block">
                         {thread.participants.join(', ') || EM_DASH}
                       </span>
                       {acaoComErro && (
@@ -1285,120 +1287,134 @@ export function EmailPanel({
                         </span>
                       )}
                     </button>
-                    {thread.messages.length > 1 && (
+                    {/* A segunda linha do celular, alinhada ao título. No desktop
+                        o invólucro some (`contents`) e cada item volta a ser
+                        vizinho do título na mesma linha. */}
+                    <div className="flex w-full min-w-0 items-center gap-2 pl-[2.875rem] lg:contents">
+                      {/* Os participantes já aparecem sob o título no desktop; esta
+                          cópia é só da linha de baixo, e o leitor de tela não a lê
+                          duas vezes. */}
+                      <span
+                        aria-hidden
+                        className="min-w-0 flex-1 truncate type-caption text-ink-dim lg:hidden"
+                      >
+                        {thread.participants.join(', ') || EM_DASH}
+                      </span>
+                      {thread.messages.length > 1 && (
+                        <span
+                          className={cn(
+                            'shrink-0 rounded-full border px-1.5 type-caption leading-relaxed',
+                            tabular,
+                            thread.unreadCount > 0
+                              ? 'border-brand-edge bg-brand-tint text-brand'
+                              : 'border-line-strong bg-neutral-tint text-ink-dim',
+                          )}
+                          aria-label={
+                            enviadas > 0
+                              ? `${thread.messages.length} mensagens, ${enviadas} enviadas por você`
+                              : `${thread.messages.length} mensagens`
+                          }
+                        >
+                          {thread.messages.length}
+                        </span>
+                      )}
                       <span
                         className={cn(
-                          'shrink-0 rounded-full border px-1.5 type-caption leading-relaxed',
+                          'min-w-[3.5ch] shrink-0 text-right type-caption text-ink-dim',
                           tabular,
-                          thread.unreadCount > 0
-                            ? 'border-brand-edge bg-brand-tint text-brand'
-                            : 'border-line-strong bg-neutral-tint text-ink-dim',
                         )}
-                        aria-label={
-                          enviadas > 0
-                            ? `${thread.messages.length} mensagens, ${enviadas} enviadas por você`
-                            : `${thread.messages.length} mensagens`
-                        }
                       >
-                        {thread.messages.length}
+                        {relativeTime(thread.lastDate) || EM_DASH}
                       </span>
-                    )}
-                    <span
-                      className={cn(
-                        'min-w-[3.5ch] shrink-0 text-right type-caption text-ink-dim',
-                        tabular,
+                      {mailboxes.length > 1 && (
+                        <Badge variant="secondary" className="shrink-0">
+                          {thread.messages[0].accountLabel ?? EM_DASH}
+                        </Badge>
                       )}
-                    >
-                      {relativeTime(thread.lastDate) || EM_DASH}
-                    </span>
-                    {mailboxes.length > 1 && (
-                      <Badge variant="secondary" className="shrink-0">
-                        {thread.messages[0].accountLabel ?? EM_DASH}
-                      </Badge>
-                    )}
-                    <div className="flex shrink-0 items-center gap-0.5">
-                      <div className="hidden items-center gap-0.5 lg:flex">
-                        <div className="relative flex">
+                      <div className="flex shrink-0 items-center gap-0.5">
+                        <div className="hidden items-center gap-0.5 lg:flex">
+                          <div className="relative flex">
+                            <button
+                              type="button"
+                              // `is-tagged` stays as a behavioural marker: the suite reads
+                              // whether a conversation already carries a label off it.
+                              className={cn(
+                                iconButtonClass,
+                                tags.length > 0 && 'is-tagged text-brand',
+                              )}
+                              aria-label={`etiquetar ${titulo}`}
+                              aria-expanded={tagMenuKey === thread.id}
+                              onClick={() => {
+                                const next = tagMenuKey === thread.id ? null : thread.id;
+                                setTagMenuKey(next);
+                                if (next) void loadTagFolders(thread.messages[0].account);
+                              }}
+                            >
+                              <Label width={16} height={16} />
+                            </button>
+                            {tagMenuKey === thread.id && (
+                              <>
+                                <div
+                                  className="fixed inset-0 z-40"
+                                  onClick={() => setTagMenuKey(null)}
+                                />
+                                <div
+                                  className="absolute top-full right-0 z-50 mt-2 flex max-h-80 min-w-45 flex-col overflow-y-auto rounded-xl border border-line-strong bg-surface-4 p-2 shadow-e4"
+                                  role="menu"
+                                  aria-label="etiquetas"
+                                >
+                                  {(tagFolders[thread.messages[0].account] ?? []).length === 0 ? (
+                                    <p className="px-3 py-2 text-sm text-ink-dim">
+                                      Carregando etiquetas…
+                                    </p>
+                                  ) : (
+                                    (tagFolders[thread.messages[0].account] ?? []).map((f) => (
+                                      <button
+                                        key={f}
+                                        type="button"
+                                        role="menuitem"
+                                        className={cn(
+                                          'rounded-md px-3 py-2 text-left text-sm text-ink-mid transition-colors duration-100 ease-brand hover:bg-brand-tint hover:text-ink motion-reduce:transition-none',
+                                          focusRing,
+                                        )}
+                                        onClick={() => void applyTagToThread(thread, f)}
+                                      >
+                                        {f}
+                                      </button>
+                                    ))
+                                  )}
+                                </div>
+                              </>
+                            )}
+                          </div>
                           <button
                             type="button"
-                            // `is-tagged` stays as a behavioural marker: the suite reads
-                            // whether a conversation already carries a label off it.
-                            className={cn(
-                              iconButtonClass,
-                              tags.length > 0 && 'is-tagged text-brand',
-                            )}
-                            aria-label={`etiquetar ${titulo}`}
-                            aria-expanded={tagMenuKey === thread.id}
-                            onClick={() => {
-                              const next = tagMenuKey === thread.id ? null : thread.id;
-                              setTagMenuKey(next);
-                              if (next) void loadTagFolders(thread.messages[0].account);
-                            }}
+                            className={cn(iconButtonClass, 'hover:border-danger/40 hover:text-danger')}
+                            aria-label={`excluir ${titulo}`}
+                            onClick={() => void removeThread(thread)}
                           >
-                            <Label width={16} height={16} />
+                            <Trash width={16} height={16} />
                           </button>
-                          {tagMenuKey === thread.id && (
-                            <>
-                              <div
-                                className="fixed inset-0 z-40"
-                                onClick={() => setTagMenuKey(null)}
-                              />
-                              <div
-                                className="absolute top-full right-0 z-50 mt-2 flex max-h-80 min-w-45 flex-col overflow-y-auto rounded-xl border border-line-strong bg-surface-4 p-2 shadow-e4"
-                                role="menu"
-                                aria-label="etiquetas"
-                              >
-                                {(tagFolders[thread.messages[0].account] ?? []).length === 0 ? (
-                                  <p className="px-3 py-2 text-sm text-ink-dim">
-                                    Carregando etiquetas…
-                                  </p>
-                                ) : (
-                                  (tagFolders[thread.messages[0].account] ?? []).map((f) => (
-                                    <button
-                                      key={f}
-                                      type="button"
-                                      role="menuitem"
-                                      className={cn(
-                                        'rounded-md px-3 py-2 text-left text-sm text-ink-mid transition-colors duration-100 ease-brand hover:bg-brand-tint hover:text-ink motion-reduce:transition-none',
-                                        focusRing,
-                                      )}
-                                      onClick={() => void applyTagToThread(thread, f)}
-                                    >
-                                      {f}
-                                    </button>
-                                  ))
-                                )}
-                              </div>
-                            </>
-                          )}
                         </div>
-                        <button
-                          type="button"
-                          className={cn(iconButtonClass, 'hover:border-danger/40 hover:text-danger')}
-                          aria-label={`excluir ${titulo}`}
-                          onClick={() => void removeThread(thread)}
-                        >
-                          <Trash width={16} height={16} />
-                        </button>
+                        {/* A conversa vira nota ou tarefa a partir da mensagem
+                            recebida mais recente, que é a que se está olhando. */}
+                        <CreateFromEmailMenu
+                          subject={titulo}
+                          folders={noteFolders}
+                          busy={criando !== null}
+                          onOpen={() => void carregarPastasDeNota()}
+                          narrow={{
+                            tagFolders: tagFolders[thread.messages[0].account] ?? [],
+                            onOpenTags: () => void loadTagFolders(thread.messages[0].account),
+                            onTag: (folder) => void applyTagToThread(thread, folder),
+                            onDelete: () => void removeThread(thread),
+                          }}
+                          onCreate={(kind, folderId) => {
+                            const alvo = recebidas(thread).at(-1) ?? thread.messages[0];
+                            void criarDoEmail(alvo, kind, folderId);
+                          }}
+                        />
                       </div>
-                      {/* A conversa vira nota ou tarefa a partir da mensagem
-                          recebida mais recente, que é a que se está olhando. */}
-                      <CreateFromEmailMenu
-                        subject={titulo}
-                        folders={noteFolders}
-                        busy={criando !== null}
-                        onOpen={() => void carregarPastasDeNota()}
-                        narrow={{
-                          tagFolders: tagFolders[thread.messages[0].account] ?? [],
-                          onOpenTags: () => void loadTagFolders(thread.messages[0].account),
-                          onTag: (folder) => void applyTagToThread(thread, folder),
-                          onDelete: () => void removeThread(thread),
-                        }}
-                        onCreate={(kind, folderId) => {
-                          const alvo = recebidas(thread).at(-1) ?? thread.messages[0];
-                          void criarDoEmail(alvo, kind, folderId);
-                        }}
-                      />
                     </div>
                   </div>
 
