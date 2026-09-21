@@ -35,7 +35,17 @@ describe('createSessionToken / verifySessionToken', () => {
 
   it('rejeita token adulterado', async () => {
     const token = await createSessionToken('u-1', 'joao', SECRET);
-    const tampered = `${token.slice(0, -2)}xx`;
+    const [payloadB64, sigB64] = token.split('.');
+    // A troca é no meio da assinatura porque o último caractere de um
+    // base64url carrega poucos bits: trocá-lo decodifica para os mesmos bytes
+    // com frequência suficiente para o teste passar batido de vez em quando.
+    const meio = Math.floor(sigB64.length / 2);
+    const outro = sigB64[meio] === 'A' ? 'B' : 'A';
+    const tampered = `${payloadB64}.${sigB64.slice(0, meio)}${outro}${sigB64.slice(meio + 1)}`;
+
+    expect(Buffer.from(tampered.split('.')[1], 'base64url')).not.toEqual(
+      Buffer.from(sigB64, 'base64url'),
+    );
     expect(await verifySessionToken(tampered, SECRET, 60_000)).toBeNull();
   });
 
