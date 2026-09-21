@@ -8,6 +8,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
@@ -34,19 +37,38 @@ interface Props {
   /** Carrega as pastas quando o menu abre: pedir antes seria uma ida por
    *  linha da lista. */
   onOpen?: () => void;
+  /** Só em tela estreita: as ações que no desktop têm botão próprio na linha. */
+  narrow?: {
+    tagFolders: string[];
+    onOpenTags: () => void;
+    onTag: (folder: string) => void;
+    onDelete: () => void;
+  };
 }
 
-export function CreateFromEmailMenu({ subject, folders, busy, onCreate, onOpen }: Props) {
+export function CreateFromEmailMenu({
+  subject,
+  folders,
+  busy,
+  onCreate,
+  onOpen,
+  narrow,
+}: Props) {
   const [pasta, setPasta] = useState('');
 
   return (
-    <DropdownMenu onOpenChange={(aberto) => aberto && onOpen?.()}>
+    <DropdownMenu
+      onOpenChange={(aberto) => {
+        if (!aberto) return;
+        onOpen?.();
+      }}
+    >
       <DropdownMenuTrigger asChild>
         <button
           type="button"
           aria-label={`Ações de ${subject || '(sem assunto)'}`}
           className={cn(
-            'shrink-0 rounded-sm p-1 text-ink-dim transition-colors',
+            'grid size-10 shrink-0 place-items-center rounded-sm text-ink-dim transition-colors lg:inline-block lg:size-auto lg:p-1',
             'hover:bg-neutral-tint hover:text-ink motion-reduce:transition-none',
             focusRing,
           )}
@@ -91,6 +113,42 @@ export function CreateFromEmailMenu({ subject, folders, busy, onCreate, onOpen }
           <ListTodo className="size-4" />
           Criar tarefa
         </DropdownMenuItem>
+
+        {narrow && (
+          <>
+            <DropdownMenuSeparator className="lg:hidden" />
+            <DropdownMenuSub onOpenChange={(aberto) => aberto && narrow.onOpenTags()}>
+              <DropdownMenuSubTrigger role="presentation" className="min-h-10 lg:hidden">
+                Etiquetar
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                {narrow.tagFolders.length === 0 ? (
+                  <DropdownMenuItem disabled className="min-h-10 lg:hidden">
+                    Carregando etiquetas…
+                  </DropdownMenuItem>
+                ) : (
+                  narrow.tagFolders.map((folder) => (
+                    <DropdownMenuItem
+                      key={folder}
+                      className="min-h-10 lg:hidden"
+                      onSelect={() => narrow.onTag(folder)}
+                    >
+                      {folder}
+                    </DropdownMenuItem>
+                  ))
+                )}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            <DropdownMenuItem
+              role="presentation"
+              variant="destructive"
+              className="min-h-10 lg:hidden"
+              onSelect={narrow.onDelete}
+            >
+              Excluir
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
