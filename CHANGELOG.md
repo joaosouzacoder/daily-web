@@ -8,6 +8,13 @@ Only `main` is maintained; there are no release branches.
 
 ## [Unreleased]
 
+### Changed
+- The page background is now a flat Catppuccin base — Latte (`#eff1f5`) in the
+  light theme, Macchiato (`#24273a`) in the dark one — instead of the tinted
+  mesh. The five gradient blobs are transparent, so the gradient stack itself
+  is untouched, and no other token moved: panels, cards, text and accent are
+  exactly as they were.
+
 ### Added
 - Narrow screens now have a bottom tab bar with one icon per enabled module,
   showing one module at a time and keeping the active module in `?modulo=`.
