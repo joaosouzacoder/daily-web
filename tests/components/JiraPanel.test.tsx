@@ -3,6 +3,7 @@ import type { ComponentProps } from 'react';
 import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
 import { JiraPanel } from '@/components/JiraPanel';
 import type { JiraDatedItem, JiraItem, JiraProblemItem } from '@/lib/types';
+import { FocusBlockProvider } from '@/components/FocusBlockProvider';
 
 /** A URL da página, em memória: o painel lê a aba dela e escreve nela, e o
  *  teste confere o que ficou gravado. */
@@ -84,6 +85,18 @@ afterEach(() => {
 });
 
 describe('JiraPanel', () => {
+  it('mostra agendar foco só quando há agenda Google', () => {
+    const panel = <Panel jira={{ data: [issue({})], error: null }} />;
+    const { rerender } = render(panel);
+    expect(screen.queryByLabelText('agendar foco para A-1')).not.toBeInTheDocument();
+    rerender(
+      <FocusBlockProvider calendars={[{ id: 'c', label: 'Google', account: 'a@b.com', canWrite: true }]} onCreated={() => {}}>
+        {panel}
+      </FocusBlockProvider>,
+    );
+    expect(screen.getByLabelText('agendar foco para A-1')).toBeInTheDocument();
+  });
+
   it('lista as issues com chave e resumo', () => {
     render(<Panel watched={{ data: [], error: null }} onChanged={() => {}} jira={{ data: [issue({})], error: null }} />);
     expect(screen.getByText('A-1')).toBeInTheDocument();

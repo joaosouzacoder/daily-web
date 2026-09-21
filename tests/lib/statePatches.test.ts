@@ -55,6 +55,7 @@ function state(over: Partial<DashboardState> = {}): DashboardState {
     modules: ['email', 'tasks', 'jira'],
     mailboxes: [{ id: 'mail-1', label: 'Trabalho' }],
     agendaDays: 2,
+    agendaCalendars: [],
     layout: defaultLayout(),
     layouts: [],
     email: { data: [envelope({ id: '1' }), envelope({ id: '2' })], error: null },

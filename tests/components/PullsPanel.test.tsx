@@ -2,6 +2,7 @@ import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import { PullsPanel } from '@/components/PullsPanel';
 import type { PullRequestItem, ReviewRequestsDigest } from '@/lib/types';
+import { FocusBlockProvider } from '@/components/FocusBlockProvider';
 
 /** A URL da página, em memória: o painel lê a aba dela e escreve nela, e o
  *  teste confere o que ficou gravado. */
@@ -61,6 +62,21 @@ function pull(over: Partial<PullRequestItem>): PullRequestItem {
 }
 
 describe('PullsPanel', () => {
+  it('mostra agendar foco só quando há agenda Google', () => {
+    vi.mocked(global.fetch).mockImplementation(
+      async () => new Response(JSON.stringify({ repos: [] }), { status: 200 }),
+    );
+    const panel = <PullsPanel pulls={{ data: { items: [pull({})], errors: [] }, error: null }} />;
+    const { rerender } = render(panel);
+    expect(screen.queryByLabelText('agendar foco para joao/daily-web#3')).not.toBeInTheDocument();
+    rerender(
+      <FocusBlockProvider calendars={[{ id: 'c', label: 'Google', account: 'a@b.com', canWrite: true }]} onCreated={() => {}}>
+        {panel}
+      </FocusBlockProvider>,
+    );
+    expect(screen.getByLabelText('agendar foco para joao/daily-web#3')).toBeInTheDocument();
+  });
+
   it('lista cada PR com link para o GitHub', () => {
     render(<PullsPanel pulls={{ data: { items: [pull({})], errors: [] }, error: null }} />);
     const link = screen.getByRole('link', { name: 'Arrumar o build' });

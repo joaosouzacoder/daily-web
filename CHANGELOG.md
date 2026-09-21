@@ -9,6 +9,11 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Added
+- Blocos de foco transformam tarefas, issues do Jira e pull requests em eventos
+  na agenda Google da própria pessoa, por arrastar ou pelo botão "Agendar foco",
+  sempre após confirmação. A conexão usa o escopo `calendar.events` (contas já
+  conectadas precisam reconectar uma vez), exclui agendas iCal e agora guarda
+  os escopos concedidos pelo Google.
 - A "Fundo" choice in the account menu, next to theme and density: the
   original iridescent gradient (the default) or the flat Catppuccin base —
   Latte in the light theme, Macchiato in the dark one. It is stored in a
