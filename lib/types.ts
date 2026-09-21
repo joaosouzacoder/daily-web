@@ -205,7 +205,22 @@ export interface NoteFolderNode extends NoteFolder {
   children: NoteFolderNode[];
 }
 
-export type NotificationSource = 'jira_mention' | 'pull_request' | 'email';
+export interface SlackMessage {
+  id: string;
+  channel: string;
+  author: string;
+  text: string;
+  date: string;
+  url: string;
+}
+
+export interface SlackDigest {
+  mentions: SlackMessage[];
+  directs: SlackMessage[];
+  team: string;
+}
+
+export type NotificationSource = 'jira_mention' | 'pull_request' | 'email' | 'slack';
 
 export interface NotificationItem {
   id: string;
@@ -291,6 +306,7 @@ export interface DashboardState {
   /** Histórias e épicos seus com defeito de preenchimento. */
   jiraProblems: PanelResult<JiraProblemItem[]>;
   tasks: PanelResult<TodoTask[]>;
+  slack: PanelResult<SlackDigest>;
   notifications: PanelResult<NotificationItem[]>;
   pomodoro: PomodoroState;
   /** Quando o ciclo de fundo roda de novo, em ISO. Nulo se ele não está

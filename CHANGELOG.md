@@ -9,6 +9,9 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Added
+- An optional Slack module using per-user OAuth: recent mentions and unread
+  direct messages appear in their own panel and feed the notification bell
+  and desktop alerts. The host configures one Slack app for the instance.
 - A "Fundo" choice in the account menu, next to theme and density: the
   original iridescent gradient (the default) or the flat Catppuccin base —
   Latte in the light theme, Macchiato in the dark one. It is stored in a

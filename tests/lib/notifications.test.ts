@@ -178,6 +178,21 @@ describe('emailNotifications', () => {
   });
 });
 
+describe('slackNotifications', () => {
+  it('inclui menções e diretas e respeita o estado de leitura', async () => {
+    const { markRead, slackNotifications } = await import('@/lib/notifications');
+    markRead('u-1', 'slack', 'C1:1');
+    const items = slackNotifications('u-1', {
+      team: 'Equipe',
+      mentions: [{ id: 'C1:1', channel: '#geral', author: 'Ana', text: 'Oi', date: '2026-09-20T10:00:00Z', url: 'https://equipe.slack.com/x' }],
+      directs: [{ id: 'D1:2', channel: 'mensagem direta', author: 'Bia', text: 'Olá', date: '2026-09-21T10:00:00Z', url: '' }],
+    });
+    expect(items.map((item) => item.source)).toEqual(['slack', 'slack']);
+    expect(items.find((item) => item.id.endsWith('C1:1'))?.read).toBe(true);
+    expect(items.find((item) => item.id.endsWith('D1:2'))?.read).toBe(false);
+  });
+});
+
 const OFF = { data: null, error: null };
 
 describe('combineNotifications', () => {
@@ -203,6 +218,18 @@ describe('combineNotifications', () => {
   it('continua ausente quando nenhuma fonte está ligada', async () => {
     const { combineNotifications } = await import('@/lib/notifications');
     expect(combineNotifications('u-1', OFF, OFF, OFF).data).toBeNull();
+  });
+
+  it('inclui o Slack sem alterar as outras fontes', async () => {
+    const { combineNotifications } = await import('@/lib/notifications');
+    const result = combineNotifications('u-1', OFF, OFF, OFF, {
+      data: {
+        team: 'Equipe', directs: [],
+        mentions: [{ id: 'C1:1', channel: '#geral', author: 'Ana', text: 'Oi', date: '2026-09-21T10:00:00Z', url: '' }],
+      },
+      error: null,
+    });
+    expect(result.data?.map((item) => item.source)).toEqual(['slack']);
   });
 
   // Um Jira fora do ar não pode esconder o e-mail que chegou, nem sumir o erro.

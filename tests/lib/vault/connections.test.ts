@@ -121,6 +121,7 @@ describe('resumo para a tela', () => {
       'pulls',
       'tasks',
       'notes',
+      'slack',
     ]);
     expect(moduleStates(USER).every((m) => !m.configured)).toBe(true);
   });

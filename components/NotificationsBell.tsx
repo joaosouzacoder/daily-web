@@ -19,6 +19,7 @@ const SOURCE_LABEL: Record<NotificationSource, string> = {
   jira_mention: 'JIRA',
   pull_request: 'PR',
   email: 'E-MAIL',
+  slack: 'SLACK',
 };
 
 interface Props {

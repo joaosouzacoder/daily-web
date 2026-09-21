@@ -8,7 +8,7 @@ export interface DesktopAlert {
   url: string;
 }
 
-export type AlertSource = 'email' | 'jira' | 'jiraProblem' | 'pull' | 'review' | 'agenda';
+export type AlertSource = 'email' | 'jira' | 'jiraProblem' | 'pull' | 'review' | 'agenda' | 'slack';
 
 export interface SeenState {
   v: 1;
@@ -16,7 +16,7 @@ export interface SeenState {
   reminders: string[];
 }
 
-const SOURCES: AlertSource[] = ['email', 'jira', 'jiraProblem', 'pull', 'review', 'agenda'];
+const SOURCES: AlertSource[] = ['email', 'jira', 'jiraProblem', 'pull', 'review', 'agenda', 'slack'];
 
 function agendaKey(prefix: 'agenda' | 'reminder', item: AgendaItem): string {
   return `${prefix}:${item.account}|${item.date}|${item.time}|${item.title}`;
@@ -106,7 +106,27 @@ export function currentAlerts(
     });
   }
 
-  return { email, jira, jiraProblem, pull, review, agenda };
+  const slack = state.slack.data === null ? null : new Map<string, DesktopAlert>();
+  for (const item of state.slack.data?.mentions ?? []) {
+    const key = `slack:${item.id}`;
+    slack?.set(key, {
+      tag: key,
+      title: 'Menção no Slack',
+      body: `${item.author} — ${item.text}`,
+      url: item.url,
+    });
+  }
+  for (const item of state.slack.data?.directs ?? []) {
+    const key = `slack:${item.id}`;
+    slack?.set(key, {
+      tag: key,
+      title: 'Mensagem no Slack',
+      body: `${item.author} — ${item.text}`,
+      url: item.url,
+    });
+  }
+
+  return { email, jira, jiraProblem, pull, review, agenda, slack };
 }
 
 export function diffAlerts(

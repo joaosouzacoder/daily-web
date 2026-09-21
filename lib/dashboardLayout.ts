@@ -38,6 +38,7 @@ const DEFAULT: PanelPlacement[] = [
   { i: 'jira', x: 7, y: 9, w: 5, h: 12 },
   { i: 'pulls', x: 7, y: 21, w: 5, h: 5 },
   { i: 'notes', x: 0, y: 26, w: 7, h: 10 },
+  { i: 'slack', x: 7, y: 26, w: 5, h: 10 },
 ];
 
 export function defaultLayout(): PanelPlacement[] {

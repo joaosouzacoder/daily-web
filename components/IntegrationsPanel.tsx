@@ -45,6 +45,8 @@ interface Payload {
   mstodoAvailable: boolean;
   googleConfigured: boolean;
   googleRedirectUri: string;
+  slackConfigured: boolean;
+  slackRedirectUri: string;
   modules: ModuleState[];
 }
 
@@ -419,6 +421,14 @@ export function IntegrationsPanel() {
                 </Button>
               )}
 
+            {mod.module === 'slack' && payload.slackConfigured && !isEditing && (
+              <Button asChild size="sm" className="w-fit">
+                <a href="/api/integrations/slack/start">
+                  {mod.connections.length > 0 ? 'Reconectar' : 'Conectar com Slack'}
+                </a>
+              </Button>
+            )}
+
             {/* Sem client no servidor, quem administra a instância precisa
                 saber o que falta — e principalmente qual URI registrar, que é
                 onde o setup costuma falhar. */}
@@ -430,6 +440,18 @@ export function IntegrationsPanel() {
                 gratuito; registre esta URI de redirecionamento:{' '}
                 <code className="mt-1 inline-block font-mono text-ink [overflow-wrap:anywhere]">
                   {payload.googleRedirectUri}
+                </code>
+              </p>
+            )}
+
+            {mod.module === 'slack' && !payload.slackConfigured && (
+              <p className="type-caption max-w-[70ch] rounded-md border border-dashed border-line-strong p-3 text-ink-mid">
+                Para conectar o Slack, quem administra este servidor precisa definir{' '}
+                <code className="font-mono text-ink">SLACK_CLIENT_ID</code> e{' '}
+                <code className="font-mono text-ink">SLACK_CLIENT_SECRET</code>. Registre esta URI
+                de redirecionamento:{' '}
+                <code className="mt-1 inline-block font-mono text-ink [overflow-wrap:anywhere]">
+                  {payload.slackRedirectUri}
                 </code>
               </p>
             )}

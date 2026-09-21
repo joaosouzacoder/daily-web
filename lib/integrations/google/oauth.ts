@@ -1,4 +1,5 @@
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHmac } from 'node:crypto';
+import { signOAuthState, verifyOAuthState } from '@/lib/integrations/oauthState';
 
 // O client OAuth é da instância, não de cada pessoa. Quem sobe o servidor cria
 // um (grátis) uma vez; quem usa só clica em "Conectar". A alternativa — cada
@@ -33,7 +34,6 @@ export function isGooglePurpose(value: unknown): value is GooglePurpose {
 const USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
-const STATE_MAX_AGE_MS = 10 * 60 * 1000;
 
 export interface GoogleClient {
   clientId: string;
@@ -78,12 +78,7 @@ export function signState(
   now = Date.now(),
   purpose: GooglePurpose = 'agenda',
 ): string {
-  const payload = Buffer.from(
-    JSON.stringify({ userId, purpose, nonce: randomBytes(12).toString('base64url'), at: now }),
-    'utf8',
-  ).toString('base64url');
-  const signature = createHmac('sha256', secret).update(payload).digest('base64url');
-  return `${payload}.${signature}`;
+  return signOAuthState(userId, purpose, secret, now);
 }
 
 export function verifyState(
@@ -91,26 +86,26 @@ export function verifyState(
   secret: string,
   now = Date.now(),
 ): { userId: string; purpose: GooglePurpose } | null {
+  const verified = verifyOAuthState(state, secret, now);
+  if (verified && isGooglePurpose(verified.purpose)) {
+    return { userId: verified.userId, purpose: verified.purpose };
+  }
+
+  // Um fluxo iniciado antes de o `purpose` existir era da agenda. Este caso
+  // legado continua verificando a assinatura antes de completar o payload.
   const [payload, signature] = state.split('.');
   if (!payload || !signature) return null;
-
-  const expected = createHmac('sha256', secret).update(payload).digest('base64url');
-  const a = Buffer.from(signature);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
-
   try {
     const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as {
       userId?: string;
       purpose?: unknown;
       at?: number;
     };
-    if (!parsed.userId || typeof parsed.at !== 'number') return null;
-    if (now - parsed.at > STATE_MAX_AGE_MS || parsed.at > now + 60_000) return null;
-    // Um fluxo iniciado antes de o `purpose` existir era da agenda.
-    const purpose = parsed.purpose === undefined ? 'agenda' : parsed.purpose;
-    if (!isGooglePurpose(purpose)) return null;
-    return { userId: parsed.userId, purpose };
+    if (parsed.purpose !== undefined || !parsed.userId || typeof parsed.at !== 'number') return null;
+    const legacySignature = createHmac('sha256', secret).update(payload).digest('base64url');
+    if (legacySignature !== signature) return null;
+    if (now - parsed.at > 10 * 60 * 1000 || parsed.at > now + 60_000) return null;
+    return { userId: parsed.userId, purpose: 'agenda' };
   } catch {
     return null;
   }

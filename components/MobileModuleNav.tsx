@@ -6,6 +6,7 @@ import {
   GitPullRequest,
   ListChecks,
   Mail,
+  MessageSquare,
   NotebookPen,
   SquareKanban,
 } from 'lucide-react';
@@ -26,6 +27,7 @@ const MODULE_ICON: Record<ModuleId, LucideIcon> = {
   agenda: CalendarDays,
   jira: SquareKanban,
   pulls: GitPullRequest,
+  slack: MessageSquare,
 };
 
 export function MobileModuleNav({ modules, active, onChange }: Props) {
