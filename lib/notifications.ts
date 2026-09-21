@@ -8,13 +8,14 @@ import type {
   PanelResult,
   PullRequestItem,
   PullsDigest,
+  SlackDigest,
 } from '@/lib/types';
 
 /** Um sino com tudo é um sino que ninguém lê. Cada fonte entra com os mais
  *  recentes até este teto; o painel continua mostrando a lista inteira. */
 const PER_SOURCE_LIMIT = 20;
 
-const SOURCES: NotificationSource[] = ['jira_mention', 'pull_request', 'email'];
+const SOURCES: NotificationSource[] = ['jira_mention', 'pull_request', 'email', 'slack'];
 
 export function isRead(userId: string, source: string, externalId: string): boolean {
   const row = getDb()
@@ -128,6 +129,20 @@ export function emailNotifications(userId: string, envelopes: EmailEnvelope[]): 
     });
 }
 
+export function slackNotifications(userId: string, digest: SlackDigest): NotificationItem[] {
+  return [...digest.mentions, ...digest.directs]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, PER_SOURCE_LIMIT)
+    .map((message) => ({
+      id: notificationId('slack', message.id),
+      source: 'slack' as const,
+      title: `${message.author} — ${message.text}`,
+      url: message.url,
+      read: isRead(userId, 'slack', message.id),
+      date: message.date,
+    }));
+}
+
 
 /**
  * As três fontes do sino numa lista só. Cada painel já foi buscado para a
@@ -142,6 +157,7 @@ export function combineNotifications(
   mentions: PanelResult<NotificationItem[]>,
   pulls: PanelResult<PullsDigest>,
   email: PanelResult<EmailEnvelope[]>,
+  slack: PanelResult<SlackDigest> = { data: null, error: null },
 ): PanelResult<NotificationItem[]> {
   const desligado =
     mentions.data === null &&
@@ -149,13 +165,16 @@ export function combineNotifications(
     pulls.data === null &&
     pulls.error === null &&
     email.data === null &&
-    email.error === null;
+    email.error === null &&
+    slack.data === null &&
+    slack.error === null;
   if (desligado) return { data: null, error: null };
 
   const items = [
     ...(mentions.data ?? []),
     ...pullNotifications(userId, pulls.data?.items ?? []),
     ...emailNotifications(userId, email.data ?? []),
+    ...slackNotifications(userId, slack.data ?? { mentions: [], directs: [], team: '' }),
   ].sort((a, b) => b.date.localeCompare(a.date));
-  return { data: items, error: mentions.error };
+  return { data: items, error: [mentions.error, slack.error].filter(Boolean).join('; ') || null };
 }

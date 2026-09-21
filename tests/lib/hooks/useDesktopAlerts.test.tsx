@@ -43,6 +43,7 @@ function state(updatedAt: string, emails: EmailEnvelope[]): DashboardState {
     jiraApproved: { data: [], error: null },
     jiraProblems: { data: [], error: null },
     tasks: { data: [], error: null },
+    slack: { data: { mentions: [], directs: [], team: '' }, error: null },
     notifications: { data: [], error: null },
     pomodoro: {
       enabled: false,

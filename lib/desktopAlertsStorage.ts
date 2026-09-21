@@ -2,7 +2,7 @@ import type { AlertSource, SeenState } from '@/lib/desktopAlerts';
 
 const SEEN_KEY = 'daily-web.desktop-alerts.v1';
 const ENABLED_KEY = 'daily-web.desktop-alerts.enabled';
-const SOURCES: AlertSource[] = ['email', 'jira', 'jiraProblem', 'pull', 'review', 'agenda'];
+const SOURCES: AlertSource[] = ['email', 'jira', 'jiraProblem', 'pull', 'review', 'agenda', 'slack'];
 
 function emptySeen(): SeenState {
   return { v: 1, sources: {}, reminders: [] };

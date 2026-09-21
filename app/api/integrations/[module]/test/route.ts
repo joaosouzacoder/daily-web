@@ -7,6 +7,7 @@ import * as agenda from '@/lib/integrations/agenda';
 import * as jiraApi from '@/lib/integrations/jiraApi';
 import * as githubApi from '@/lib/integrations/githubApi';
 import { testDriveConnection } from '@/lib/notesSync';
+import * as slack from '@/lib/integrations/slack/digest';
 
 // Tarefas não entram: o provedor local não tem o que testar, e o mstodo já
 // responde na primeira leitura do painel.
@@ -16,6 +17,7 @@ const TESTERS: Partial<Record<ModuleId, (conn: Connection) => Promise<void>>> = 
   jira: jiraApi.testConnection,
   pulls: githubApi.testConnection,
   notes: testDriveConnection,
+  slack: slack.testConnection,
 };
 
 /**

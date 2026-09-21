@@ -44,6 +44,7 @@ Next.js 16 · React 19 · SQLite · no UI framework, CSS written by hand.
 | Pull requests | GitHub personal access token | free |
 | Tasks | stored on this server (default) | — |
 | Quick notes | stored on this server; optional copy in Google Drive (OAuth) | free |
+| Slack | OAuth with each user's own Slack account | free |
 
 Each module is independent. A module with no connection does not render an
 empty panel — it does not render at all.
@@ -88,6 +89,11 @@ once (step by step in `.env.example`, under `GOOGLE_CLIENT_ID`); everyone else
 just clicks **Conectar com Google**. The same client serves the notes copy in
 Google Drive, through the same redirect URI.
 Focus blocks need the `calendar.events` scope; users who connected Google Calendar before this feature must reconnect once.
+
+Slack follows the same host-once, connect-per-user model. Whoever hosts creates
+one Slack app using the steps in `.env.example`; each person then clicks
+**Conectar com Slack** and authorizes their own account. People who do not
+connect it see no Slack panel or Slack notifications.
 
 ## Getting started
 
@@ -163,6 +169,10 @@ same whether your workflow ends in "Resolvido" or in "Done".
 **GitHub** — personal access token at
 [github.com/settings/tokens](https://github.com/settings/tokens). Scope `repo`
 for private repositories; for public ones, no scope is needed.
+
+**Slack** — click **Conectar com Slack**. The panel shows mentions from the
+last seven days and unread direct messages for the account that authorized it.
+Some workspaces require an administrator to approve the app first.
 
 ## Rearranging the dashboard
 

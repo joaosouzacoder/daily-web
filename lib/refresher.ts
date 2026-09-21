@@ -15,6 +15,8 @@ import { listUsers } from './auth/users';
 import { enabledModules, listConnections } from './vault/connections';
 import { agendaDays, dashboardLayout, dashboardLayouts, jiraWatchedKeys, jiraFollowedPeople } from './preferences';
 import type { Connection } from './vault/connections';
+import { fetchSlack, SlackDigestError } from './integrations/slack/digest';
+import type { SlackDigest } from '@/lib/types';
 
 const EMAIL_LIMIT = 30;
 
@@ -61,6 +63,15 @@ async function mergeConnections<T>(
   if (errors.length === 0) return { data, error: null };
   if (data.length === 0) return { data: null, error: errors.join('; ') };
   return { data, error: errors.join('; ') };
+}
+
+async function slackPanel(connection: Connection): Promise<PanelResult<SlackDigest>> {
+  try {
+    return { data: await fetchSlack(connection), error: null };
+  } catch (error) {
+    if (error instanceof SlackDigestError) return { data: error.digest, error: error.message };
+    return { data: null, error: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 type Patch = (state: DashboardState) => DashboardState;
@@ -143,6 +154,7 @@ function logCycle(userId: string, inicio: number, state: DashboardState): void {
     pulls: state.pulls,
     jira: state.jira,
     tasks: state.tasks,
+    slack: state.slack,
   };
   const errors = Object.entries(panels)
     .filter(([, panel]) => panel.error)
@@ -163,6 +175,7 @@ async function buildState(userId: string, ciclo: symbol): Promise<DashboardState
   const days = agendaDays(userId);
   const jiraConnection = has('jira') ? (listConnections(userId, 'jira')[0] ?? null) : null;
   const pullsConnection = has('pulls') ? (listConnections(userId, 'pulls')[0] ?? null) : null;
+  const slackConnection = has('slack') ? (listConnections(userId, 'slack')[0] ?? null) : null;
 
   const watched = jiraConnection ? jiraWatchedKeys(userId) : [];
 
@@ -182,6 +195,7 @@ async function buildState(userId: string, ciclo: symbol): Promise<DashboardState
     jiraDelivered,
     jiraApproved,
     jiraProblems,
+    slack,
   ] =
     await Promise.all([
       has('email')
@@ -203,6 +217,7 @@ async function buildState(userId: string, ciclo: symbol): Promise<DashboardState
       jiraConnection ? panel(() => jiraApi.fetchDelivered(jiraConnection)) : OFF,
       jiraConnection ? panel(() => jiraApi.fetchApproved(jiraConnection)) : OFF,
       jiraConnection ? panel(() => jiraApi.fetchProblems(jiraConnection)) : OFF,
+      slackConnection ? slackPanel(slackConnection) : OFF,
     ]);
 
   // O que o usuário pediu vence o retrato do servidor. As ações que o retrato
@@ -211,7 +226,7 @@ async function buildState(userId: string, ciclo: symbol): Promise<DashboardState
 
   // O sino soma menção do Jira, pull request aberto e e-mail não lido. As
   // três já foram buscadas acima: o aviso é derivado, não é uma quarta ida.
-  const notifications = combineNotifications(userId, mentions, pulls, emailReconciliado);
+  const notifications = combineNotifications(userId, mentions, pulls, emailReconciliado, slack);
 
   const mailboxes: MailboxRef[] = mailConnections.map((c) => ({ id: c.id, label: c.label }));
   const agendaCalendars: AgendaCalendarRef[] = calendars
@@ -242,6 +257,7 @@ async function buildState(userId: string, ciclo: symbol): Promise<DashboardState
     jiraApproved,
     jiraProblems,
     tasks,
+    slack,
     notifications,
     pomodoro: getPomodoroState(userId),
     nextRefreshAt: nextRefreshAt(),

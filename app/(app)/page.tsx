@@ -15,6 +15,7 @@ import { TasksPanel } from '@/components/TasksPanel';
 import { FocusBlockProvider } from '@/components/FocusBlockProvider';
 import { DashboardGrid } from '@/components/DashboardGrid';
 import { NotesPanel } from '@/components/NotesPanel';
+import { SlackPanel } from '@/components/SlackPanel';
 import { EmptyState } from '@/components/data/EmptyState';
 import { ErrorState } from '@/components/data/ErrorState';
 import { Button } from '@/components/ui/button';
@@ -161,6 +162,15 @@ export default function DashboardPage() {
         />
       ),
     },
+    has('slack') && {
+      id: 'slack',
+      node: (
+        <SlackPanel
+          slack={state?.slack ?? { data: { mentions: [], directs: [], team: '' }, error: null }}
+          loading={booting}
+        />
+      ),
+    },
   ].filter((p) => p !== false) as { id: string; node: ReactNode }[];
 
   return (
@@ -173,7 +183,7 @@ export default function DashboardPage() {
         updatedAt={state?.updatedAt ?? null}
         nextRefreshAt={state?.nextRefreshAt ?? null}
         bell={
-          has('jira') || has('email') || has('pulls') ? (
+          has('jira') || has('email') || has('pulls') || has('slack') ? (
             <NotificationsBell
               notifications={state?.notifications ?? { data: [], error: null }}
               onChanged={reload}

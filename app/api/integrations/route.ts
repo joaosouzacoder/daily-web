@@ -5,6 +5,7 @@ import { isVaultConfigured } from '@/lib/vault/crypto';
 import { MODULES } from '@/lib/modules';
 import { isAvailable as mstodoAvailable } from '@/lib/cli/mstodo';
 import { isGoogleConfigured, redirectUri } from '@/lib/integrations/google/oauth';
+import { isSlackConfigured, slackRedirectUri } from '@/lib/integrations/slack/oauth';
 
 export async function GET() {
   const auth = await requireUser();
@@ -23,6 +24,8 @@ export async function GET() {
     // A URI de retorno precisa bater exatamente com a registrada no Google.
     // Mostrar a de verdade evita o erro mais comum de montar o client.
     googleRedirectUri: redirectUri(),
+    slackConfigured: isSlackConfigured(),
+    slackRedirectUri: slackRedirectUri(),
     catalog: MODULES,
     modules: moduleStates(auth.value.id),
   });

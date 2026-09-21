@@ -3,9 +3,9 @@
 // configuração é gerada a partir daqui, então acrescentar um módulo não exige
 // mexer em formulário nenhum.
 
-export type ModuleId = 'email' | 'agenda' | 'jira' | 'pulls' | 'tasks' | 'notes';
+export type ModuleId = 'email' | 'agenda' | 'jira' | 'pulls' | 'tasks' | 'notes' | 'slack';
 
-export const MODULE_IDS: ModuleId[] = ['email', 'agenda', 'jira', 'pulls', 'tasks', 'notes'];
+export const MODULE_IDS: ModuleId[] = ['email', 'agenda', 'jira', 'pulls', 'tasks', 'notes', 'slack'];
 
 export type FieldType = 'text' | 'password' | 'url' | 'number' | 'select';
 
@@ -230,6 +230,24 @@ export const MODULES: Record<ModuleId, ModuleSpec> = {
         placeholder: 'dono/repo, dono/outro',
         help: 'Separados por vírgula. Dá para editar depois direto no painel.',
       },
+    ],
+  },
+  slack: {
+    id: 'slack',
+    label: 'Slack',
+    summary: 'menções e mensagens diretas',
+    multi: false,
+    instructions: [
+      'Clique em "Conectar com Slack" e autorize o acesso à sua conta.',
+      'Se o workspace exigir aprovação de aplicativos, uma pessoa administradora talvez precise aprovar o app.',
+      'A conexão é somente da sua conta e mostra menções e mensagens diretas não lidas.',
+    ],
+    fields: [
+      { name: 'token', label: 'Token do Slack', type: 'password', secret: true, hidden: true },
+      { name: 'userId', label: 'Usuário do Slack', type: 'text', hidden: true },
+      { name: 'teamId', label: 'Workspace', type: 'text', hidden: true },
+      { name: 'teamName', label: 'Nome do workspace', type: 'text', hidden: true },
+      { name: 'scope', label: 'Permissões', type: 'text', hidden: true },
     ],
   },
   tasks: {

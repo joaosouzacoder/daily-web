@@ -31,6 +31,7 @@ const EMPTY_MODULES = [
   mod({ module: 'jira', label: 'Jira', multi: false }),
   mod({ module: 'pulls', label: 'Pull requests', multi: false }),
   mod({ module: 'tasks', label: 'Tarefas', multi: false, enabled: true }),
+  mod({ module: 'slack', label: 'Slack', multi: false }),
 ];
 
 function payload(over: Record<string, unknown> = {}) {
@@ -39,6 +40,8 @@ function payload(over: Record<string, unknown> = {}) {
     mstodoAvailable: false,
     googleConfigured: false,
     googleRedirectUri: 'https://exemplo.com/api/integrations/agenda/google/callback',
+    slackConfigured: false,
+    slackRedirectUri: 'https://exemplo.com/api/integrations/slack/callback',
     modules: EMPTY_MODULES,
     ...over,
   };
@@ -226,6 +229,16 @@ describe('IntegrationsPanel', () => {
 
     const link = screen.getByRole('link', { name: 'Conectar com Google' });
     expect(link).toHaveAttribute('href', '/api/integrations/agenda/google/start');
+  });
+
+  it('oferece conexão OAuth do Slack quando configurada no servidor', async () => {
+    mockFetch(() => payload({ slackConfigured: true }));
+    render(<IntegrationsPanel />);
+    await waitFor(() => expect(screen.getByText('Slack')).toBeInTheDocument());
+    expect(screen.getByRole('link', { name: 'Conectar com Slack' })).toHaveAttribute(
+      'href',
+      '/api/integrations/slack/start',
+    );
   });
 
   // Oferecer um caminho que não existe é pior do que não oferecer; e quem

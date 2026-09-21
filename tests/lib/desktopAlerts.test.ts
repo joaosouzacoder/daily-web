@@ -108,6 +108,7 @@ function state(over: Partial<DashboardState> = {}): DashboardState {
     jiraApproved: { data: [], error: null },
     jiraProblems: { data: [], error: null },
     tasks: { data: [], error: null },
+    slack: { data: { mentions: [], directs: [], team: '' }, error: null },
     notifications: { data: [], error: null },
     pomodoro: {
       enabled: false,
@@ -124,6 +125,21 @@ function state(over: Partial<DashboardState> = {}): DashboardState {
 }
 
 describe('diffAlerts', () => {
+  it('inclui menções e mensagens diretas do Slack', () => {
+    const alerts = currentAlerts(state({
+      slack: {
+        data: {
+          team: 'Equipe',
+          mentions: [{ id: 'C1:1', channel: '#geral', author: 'Ana', text: 'Oi', date: '2026-09-21T10:00:00Z', url: 'https://equipe.slack.com/x' }],
+          directs: [{ id: 'D1:2', channel: 'mensagem direta', author: 'Bia', text: 'Olá', date: '2026-09-21T11:00:00Z', url: '' }],
+        },
+        error: null,
+      },
+    })).slack;
+    expect(alerts?.get('slack:C1:1')?.title).toBe('Menção no Slack');
+    expect(alerts?.get('slack:D1:2')?.title).toBe('Mensagem no Slack');
+  });
+
   it('faz a primeira leitura virar linha de base sem avisar', () => {
     const result = diffAlerts(vazio(), currentAlerts(state({ email: { data: [email()], error: null } })));
 
