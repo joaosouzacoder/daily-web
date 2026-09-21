@@ -77,14 +77,16 @@
   --signal-info-tint: oklch(0.5 0.13 248 / 10%);
   --signal-neutral-tint: oklch(0.53 0.013 250 / 10%);
 
-  /* Background atmosphere. Iridescent and fixed on purpose: the accent stays the
-     color of action and of data. Background here is atmosphere, not signal. */
-  --mesh-base: oklch(0.986 0.004 265);
-  --mesh-1: oklch(0.957 0.017 255);
-  --mesh-2: oklch(0.957 0.019 305);
-  --mesh-3: oklch(0.97 0.013 25);
-  --mesh-4: oklch(0.97 0.013 200);
-  --mesh-5: oklch(0.992 0.006 95);
+  /* Background. A flat Catppuccin base: the blobs are transparent so the page
+     keeps one colour, and the accent stays the color of action and of data.
+     Transparent blobs leave the gradient stack in place — the stack is written
+     twice, on `bg-mesh` and on body, and neither needs touching to go flat. */
+  --mesh-base: oklch(0.958 0.006 264.5); /* Catppuccin Latte base, #eff1f5 */
+  --mesh-1: transparent;
+  --mesh-2: transparent;
+  --mesh-3: transparent;
+  --mesh-4: transparent;
+  --mesh-5: transparent;
 
   --glass: oklch(1 0 0 / 70%);
   --glass-strong: oklch(1 0 0 / 86%);
@@ -173,12 +175,8 @@
     --surface-4: oklch(0.225 0.009 285);
     --surface-5: oklch(0.245 0.01 285);
 
-    --mesh-base: oklch(0.134 0.006 285);
-    --mesh-1: oklch(0.188 0.062 265);
-    --mesh-2: oklch(0.182 0.066 310);
-    --mesh-3: oklch(0.174 0.05 20);
-    --mesh-4: oklch(0.178 0.047 205);
-    --mesh-5: oklch(0.156 0.024 280);
+    /* Os blocos transparentes vêm do :root; aqui só a base muda de variante. */
+    --mesh-base: oklch(0.279 0.035 276.9); /* Catppuccin Macchiato base, #24273a */
 
     --glass: oklch(1 0 0 / 2%);
     --glass-strong: oklch(1 0 0 / 5%);
@@ -248,12 +246,8 @@
   --surface-4: oklch(0.225 0.009 285);
   --surface-5: oklch(0.245 0.01 285);
 
-  --mesh-base: oklch(0.134 0.006 285);
-  --mesh-1: oklch(0.188 0.062 265);
-  --mesh-2: oklch(0.182 0.066 310);
-  --mesh-3: oklch(0.174 0.05 20);
-  --mesh-4: oklch(0.178 0.047 205);
-  --mesh-5: oklch(0.156 0.024 280);
+  /* Os blocos transparentes vêm do :root; aqui só a base muda de variante. */
+  --mesh-base: oklch(0.279 0.035 276.9); /* Catppuccin Macchiato base, #24273a */
 
   --glass: oklch(1 0 0 / 2%);
   --glass-strong: oklch(1 0 0 / 5%);
