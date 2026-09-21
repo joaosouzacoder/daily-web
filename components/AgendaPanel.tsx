@@ -11,6 +11,9 @@ import { PanelError } from '@/components/data/PanelError';
 import { SkeletonRows } from './ui/legacy-skeleton';
 import { EM_DASH } from '@/lib/format';
 import { tabular } from '@/lib/theme';
+import { FOCUS_DRAG_TYPE, parseFocusSource } from '@/lib/focusBlock';
+import { useFocusBlock } from '@/components/FocusBlockProvider';
+import { cn } from '@/lib/utils';
 
 const WEEKDAYS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 const MONTHS = [
@@ -72,8 +75,10 @@ interface Props {
 }
 
 export function AgendaPanel({ agenda, days, onChanged, loading = false }: Props) {
+  const focus = useFocusBlock();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [draggingOver, setDraggingOver] = useState(false);
 
   const all = agenda.data ?? [];
   const groups = groupByDate(all);
@@ -104,6 +109,29 @@ export function AgendaPanel({ agenda, days, onChanged, loading = false }: Props)
 
   return (
     <Section eyebrow="Agenda">
+      {focus.enabled && (
+        <button
+          type="button"
+          className={cn(
+            'mb-3 w-full rounded-lg border border-dashed border-line-strong px-3 py-3 text-sm text-ink-dim transition-colors',
+            draggingOver && 'border-brand bg-brand-tint text-brand',
+          )}
+          onDragOver={(event) => {
+            if (!event.dataTransfer.types.includes(FOCUS_DRAG_TYPE)) return;
+            event.preventDefault();
+            setDraggingOver(true);
+          }}
+          onDragLeave={() => setDraggingOver(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            setDraggingOver(false);
+            const source = parseFocusSource(event.dataTransfer.getData(FOCUS_DRAG_TYPE));
+            if (source) focus.schedule(source);
+          }}
+        >
+          Solte aqui para agendar um bloco de foco
+        </button>
+      )}
       <FilterBar label="Período da agenda">
         {AGENDA_RANGES.map((range) => (
           <Chip

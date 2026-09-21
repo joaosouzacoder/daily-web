@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Plus } from 'lucide-react';
+import { CalendarPlus, Plus } from 'lucide-react';
 import { IconAction } from '@/components/data/IconAction';
 import type {
   PanelResult,
@@ -22,14 +22,31 @@ import { Input } from './ui/input';
 import { EM_DASH, formatRelative } from '@/lib/format';
 import { Tabs } from './ui/legacy-tabs';
 import { focusRing, tabular } from '@/lib/theme';
+import { FOCUS_DRAG_TYPE, type FocusSource } from '@/lib/focusBlock';
+import { useFocusBlock } from '@/components/FocusBlockProvider';
 
 // Os PRs vinham como linhas de texto de uma CLI, então a única coisa a fazer
 // era achar a URL no meio da frase. Agora chegam estruturados da API do
 // GitHub, agrupados pelo repositório de onde vêm.
 function ItemRow({ item, withRepo = false }: { item: PullRequestItem; withRepo?: boolean }) {
+  const focus = useFocusBlock();
   const repo = withRepo ? repoUrl(item.repo) : null;
+  const source: FocusSource = {
+    kind: 'pull',
+    ref: `${item.repo}#${item.number}`,
+    title: item.title,
+    url: item.url,
+  };
   return (
-    <li className="flex items-baseline gap-3 border-b border-line-soft px-2 py-3 transition-colors duration-100 ease-brand even:bg-muted/25 last:border-b-0 hover:bg-brand-tint motion-reduce:transition-none">
+    <li
+      className="flex items-baseline gap-3 border-b border-line-soft px-2 py-3 transition-colors duration-100 ease-brand even:bg-muted/25 last:border-b-0 hover:bg-brand-tint motion-reduce:transition-none"
+      draggable={focus.enabled}
+      onDragStart={(event) => {
+        if (!focus.enabled) return;
+        event.dataTransfer.setData(FOCUS_DRAG_TYPE, JSON.stringify(source));
+        event.dataTransfer.effectAllowed = 'copy';
+      }}
+    >
       {/* Na lista global o repositório é a primeira coisa a saber: sem ele,
           "Arrumar o build" não diz de onde veio. */}
       {withRepo &&
@@ -73,6 +90,13 @@ function ItemRow({ item, withRepo = false }: { item: PullRequestItem; withRepo?:
         <Badge variant="info" className="shrink-0">
           revisar
         </Badge>
+      )}
+      {focus.enabled && (
+        <IconAction
+          label={`agendar foco para ${source.ref}`}
+          onClick={() => focus.schedule(source)}
+          icon={<CalendarPlus className="size-4" />}
+        />
       )}
     </li>
   );

@@ -1,4 +1,4 @@
-import type { DashboardState, EmailEnvelope, MailboxRef, PanelResult } from '@/lib/types';
+import type { AgendaCalendarRef, DashboardState, EmailEnvelope, MailboxRef, PanelResult } from '@/lib/types';
 import * as imap from './integrations/imap';
 import * as agendaSource from './integrations/agenda';
 import * as jiraApi from './integrations/jiraApi';
@@ -214,12 +214,21 @@ async function buildState(userId: string, ciclo: symbol): Promise<DashboardState
   const notifications = combineNotifications(userId, mentions, pulls, emailReconciliado);
 
   const mailboxes: MailboxRef[] = mailConnections.map((c) => ({ id: c.id, label: c.label }));
+  const agendaCalendars: AgendaCalendarRef[] = calendars
+    .filter(agendaSource.isGoogle)
+    .map((c) => ({
+      id: c.id,
+      label: c.label,
+      account: c.values.account ?? '',
+      canWrite: agendaSource.canWriteEvents(c),
+    }));
 
   const state: DashboardState = {
     updatedAt: new Date().toISOString(),
     modules,
     mailboxes,
     agendaDays: days,
+    agendaCalendars,
     layout: dashboardLayout(userId),
     layouts: dashboardLayouts(userId),
     email: emailReconciliado,

@@ -12,6 +12,13 @@ export interface CalendarRef {
   primary: boolean;
 }
 
+export interface FocusBlockInput {
+  title: string;
+  description: string;
+  start: Date;
+  end: Date;
+}
+
 async function api(token: string, path: string): Promise<unknown> {
   const response = await fetch(`${API}${path}`, {
     headers: { authorization: `Bearer ${token}` },
@@ -101,6 +108,42 @@ export function refreshToken(conn: Connection): string {
   const token = conn.values.refreshToken ?? '';
   if (!token) throw new Error(`${conn.label}: conexão com o Google incompleta — conecte de novo`);
   return token;
+}
+
+export async function createFocusBlock(
+  conn: Connection,
+  input: FocusBlockInput,
+): Promise<AgendaItem> {
+  const token = await accessToken(googleClient(), refreshToken(conn));
+  const response = await fetch(`${API}/calendars/primary/events`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      summary: input.title,
+      description: input.description,
+      start: { dateTime: input.start.toISOString() },
+      end: { dateTime: input.end.toISOString() },
+      transparency: 'opaque',
+      extendedProperties: { private: { dailyWebFocus: '1' } },
+    }),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+
+  if (response.status === 401) throw new Error('o Google recusou o acesso — conecte de novo');
+  if (response.status === 403) {
+    throw new Error('o Google negou a permissão para criar eventos — reconecte a agenda');
+  }
+  if (!response.ok) {
+    const body = (await response.text().catch(() => '')).slice(0, 200);
+    throw new Error(`Google Agenda respondeu ${response.status}${body ? `: ${body}` : ''}`);
+  }
+
+  const item = toAgendaItem((await response.json()) as RawEvent, conn.id, conn.label);
+  if (!item) throw new Error('Google Agenda respondeu com um evento inválido');
+  return item;
 }
 
 export function selectedCalendars(conn: Connection): string[] {

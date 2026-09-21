@@ -87,6 +87,7 @@ unverified app serves up to 100 accounts. Whoever hosts creates the client
 once (step by step in `.env.example`, under `GOOGLE_CLIENT_ID`); everyone else
 just clicks **Conectar com Google**. The same client serves the notes copy in
 Google Drive, through the same redirect URI.
+Focus blocks need the `calendar.events` scope; users who connected Google Calendar before this feature must reconnect once.
 
 ## Getting started
 

@@ -12,6 +12,7 @@ import { AgendaPanel } from '@/components/AgendaPanel';
 import { PullsPanel } from '@/components/PullsPanel';
 import { JiraPanel } from '@/components/JiraPanel';
 import { TasksPanel } from '@/components/TasksPanel';
+import { FocusBlockProvider } from '@/components/FocusBlockProvider';
 import { DashboardGrid } from '@/components/DashboardGrid';
 import { NotesPanel } from '@/components/NotesPanel';
 import { EmptyState } from '@/components/data/EmptyState';
@@ -204,7 +205,9 @@ export default function DashboardPage() {
           }
         />
       ) : (
-        <DashboardGrid layout={layout} panels={panels} onSave={saveLayout} />
+        <FocusBlockProvider calendars={state?.agendaCalendars ?? []} onCreated={reload}>
+          <DashboardGrid layout={layout} panels={panels} onSave={saveLayout} />
+        </FocusBlockProvider>
       )}
     </div>
   );

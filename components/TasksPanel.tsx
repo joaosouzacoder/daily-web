@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { CalendarPlus, Plus } from 'lucide-react';
 import { IconAction } from '@/components/data/IconAction';
 import { NavArrowRight } from 'iconoir-react';
 import type { PanelResult, TaskPriority, TodoTask } from '@/lib/types';
@@ -23,6 +23,8 @@ import { Input } from './ui/input';
 import { GLYPH } from './data/Status';
 import { cn } from '@/lib/utils';
 import { focusRing, tabular } from '@/lib/theme';
+import { FOCUS_DRAG_TYPE, type FocusSource } from '@/lib/focusBlock';
+import { useFocusBlock } from '@/components/FocusBlockProvider';
 
 /** A failing integration is information, not an alarm: contained block, side marker. */
 
@@ -213,6 +215,7 @@ export function TasksPanel({
   onSubtaskChanged,
   loading = false,
 }: Props) {
+  const focus = useFocusBlock();
   const [editing, setEditing] = useState<TodoTask | 'new' | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -390,7 +393,17 @@ export function TasksPanel({
           <h3 className="mb-2 block type-caption text-ink-dim">{group.label}</h3>
           <ul>
             {group.tasks.map((task) => (
-              <li key={task.id} className="border-b border-line-soft even:bg-muted/25">
+              <li
+                key={task.id}
+                className="border-b border-line-soft even:bg-muted/25"
+                draggable={focus.enabled && !task.completed}
+                onDragStart={(event) => {
+                  if (!focus.enabled || task.completed) return;
+                  const source: FocusSource = { kind: 'task', ref: task.id, title: task.title };
+                  event.dataTransfer.setData(FOCUS_DRAG_TYPE, JSON.stringify(source));
+                  event.dataTransfer.effectAllowed = 'copy';
+                }}
+              >
                 <div className="flex items-center gap-3 rounded-md px-2 py-3 transition-colors duration-100 ease-brand hover:bg-brand-tint motion-reduce:transition-none">
                   {/* A seta só existe onde há o que revelar. Numa tarefa sem
                       subtarefa ela seria um controle que não faz nada. */}
@@ -467,6 +480,13 @@ export function TasksPanel({
                   {/* O contador acima é o que faz a subtarefa escondida ainda
                       ser visível como informação: dá para ver que existe e
                       quanto falta sem abrir. */}
+                  {focus.enabled && !task.completed && (
+                    <IconAction
+                      label={`agendar foco para ${task.title}`}
+                      onClick={() => focus.schedule({ kind: 'task', ref: task.id, title: task.title })}
+                      icon={<CalendarPlus className="size-4" />}
+                    />
+                  )}
                   <Button
                     type="button"
                     variant="ghost"
