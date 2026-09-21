@@ -175,7 +175,7 @@
     --surface-4: oklch(0.225 0.009 285);
     --surface-5: oklch(0.245 0.01 285);
 
-    /* Os blocos transparentes vêm do :root; aqui só a base muda de variante. */
+    /* The transparent blobs come from :root; only the base changes flavour. */
     --mesh-base: oklch(0.279 0.035 276.9); /* Catppuccin Macchiato base, #24273a */
 
     --glass: oklch(1 0 0 / 2%);
@@ -246,7 +246,7 @@
   --surface-4: oklch(0.225 0.009 285);
   --surface-5: oklch(0.245 0.01 285);
 
-  /* Os blocos transparentes vêm do :root; aqui só a base muda de variante. */
+  /* The transparent blobs come from :root; only the base changes flavour. */
   --mesh-base: oklch(0.279 0.035 276.9); /* Catppuccin Macchiato base, #24273a */
 
   --glass: oklch(1 0 0 / 2%);
