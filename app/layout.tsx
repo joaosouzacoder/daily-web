@@ -56,7 +56,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       data-density={density === 'compact' ? 'compact' : undefined}
       className={`${GeistSans.variable} ${GeistMono.variable} ${forced}`.trim()}
     >
-      <body className="min-h-screen bg-background text-foreground antialiased">
+      {/* No background utility here: body paints --mesh-base from globals.css,
+          and a bg-* class would win over it and hide the page colour. */}
+      <body className="min-h-screen text-foreground antialiased">
         <ServiceWorker />
         {children}
       </body>

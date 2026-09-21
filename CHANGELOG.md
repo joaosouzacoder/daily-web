@@ -8,6 +8,13 @@ Only `main` is maintained; there are no release branches.
 
 ## [Unreleased]
 
+### Fixed
+- The Catppuccin page background actually shows. `<body>` carried the
+  `bg-background` utility, which beats the base-layer rule that paints
+  `--mesh-base`, so the page colour was always `--surface-0`: the Catppuccin
+  change only removed the gradient blobs and left the dark theme near-black.
+  The utility is gone from `<body>`; `--background` itself is unchanged.
+
 ### Changed
 - The page background is now a flat Catppuccin base — Latte (`#eff1f5`) in the
   light theme, Macchiato (`#24273a`) in the dark one — instead of the tinted
