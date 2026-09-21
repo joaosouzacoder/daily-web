@@ -91,6 +91,7 @@ function state(over: Partial<DashboardState> = {}): DashboardState {
     modules: [],
     mailboxes: [],
     agendaDays: 2,
+    agendaCalendars: [],
     layout: [],
     layouts: [],
     email: { data: [], error: null },

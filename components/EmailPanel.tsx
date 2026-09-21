@@ -32,7 +32,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Maximize2, Minimize2 } from 'lucide-react';
+import { Maximize2, Minimize2, MoreHorizontal } from 'lucide-react';
 import type { MailboxNode, NoteFolder } from '@/lib/types';
 import { FolderInput, Mail, MailOpen, Trash2 } from 'lucide-react';
 import { IconAction } from '@/components/data/IconAction';
@@ -57,6 +57,20 @@ import { Textarea } from './ui/textarea';
 import { cn } from '@/lib/utils';
 import { EM_DASH } from '@/lib/format';
 import { focusRing, selectClass, tabular } from '@/lib/theme';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface Props {
   email: PanelResult<EmailEnvelope[]>;
@@ -851,66 +865,165 @@ export function EmailPanel({
         <span className={cn('text-sm text-ink-dim', tabular)}>
           {sel.selected.length} {sel.selected.length === 1 ? 'conversa' : 'conversas'}
         </span>
-        {/* A única pista de que E e M existem: sem ela, o atalho é invisível
-            e ninguém descobre sozinho. */}
-        <span className="flex items-center gap-1 type-caption text-ink-dim">
-          <ShortcutKey>E</ShortcutKey>
-          <span>excluir</span>
-          <ShortcutKey>M</ShortcutKey>
-          <span>mover</span>
+        <span className="hidden lg:contents">
+          {/* A única pista de que E e M existem: sem ela, o atalho é invisível
+              e ninguém descobre sozinho. */}
+          <span className="flex items-center gap-1 type-caption text-ink-dim">
+            <ShortcutKey>E</ShortcutKey>
+            <span>excluir</span>
+            <ShortcutKey>M</ShortcutKey>
+            <span>mover</span>
+          </span>
+          <IconAction
+            variant="outline"
+            label="Marcar lido"
+            onClick={() => void executarLote('read')}
+            icon={<MailOpen className="size-4" />}
+          />
+          <IconAction
+            variant="outline"
+            label="Marcar não lido"
+            onClick={() => void executarLote('unread')}
+            icon={<Mail className="size-4" />}
+          />
+          {folders.length > 0 && (
+            <>
+              <select
+                className={cn(selectClass, focusRing)}
+                aria-label="pasta de destino"
+                value={targetFolder}
+                onChange={(e) => setTargetFolder(e.target.value)}
+              >
+                {folders.map((f) => (
+                  <option key={f} value={f}>
+                    {f}
+                  </option>
+                ))}
+              </select>
+              <IconAction
+                variant="outline"
+                label="Mover"
+                onClick={() => void executarLote('move', targetFolder)}
+                icon={<FolderInput className="size-4" />}
+              />
+            </>
+          )}
+          <IconAction
+            variant="destructive"
+            label="Excluir"
+            onClick={() => void confirmarExclusaoEmLote()}
+            icon={<Trash2 className="size-4" />}
+          />
         </span>
-        <IconAction
-          variant="outline"
-          label="Marcar lido"
-          onClick={() => void executarLote('read')}
-          icon={<MailOpen className="size-4" />}
-        />
-        <IconAction
-          variant="outline"
-          label="Marcar não lido"
-          onClick={() => void executarLote('unread')}
-          icon={<Mail className="size-4" />}
-        />
-        {folders.length > 0 && (
-          <>
-            <select
-              className={cn(selectClass, focusRing)}
-              aria-label="pasta de destino"
-              value={targetFolder}
-              onChange={(e) => setTargetFolder(e.target.value)}
-            >
-              {folders.map((f) => (
-                <option key={f} value={f}>
-                  {f}
-                </option>
-              ))}
-            </select>
-            <IconAction
-              variant="outline"
-              label="Mover"
-              onClick={() => void executarLote('move', targetFolder)}
-              icon={<FolderInput className="size-4" />}
-            />
-          </>
-        )}
-        <IconAction
-          variant="destructive"
-          label="Excluir"
-          onClick={() => void confirmarExclusaoEmLote()}
-          icon={<Trash2 className="size-4" />}
-        />
       </>
     ) : null;
 
   const actions = (
     <>
       {acoesEmLote}
-      <IconAction
-        variant="ghost"
-        label={view.maximized ? 'Restaurar' : 'Abrir em tela cheia'}
-        onClick={() => setView({ maximized: !view.maximized })}
-        icon={view.maximized ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
-      />
+      <span className="hidden lg:contents">
+        <IconAction
+          variant="ghost"
+          label={view.maximized ? 'Restaurar' : 'Abrir em tela cheia'}
+          onClick={() => setView({ maximized: !view.maximized })}
+          icon={view.maximized ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+        />
+      </span>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label="ações dos e-mails"
+            className={cn(
+              'inline-grid size-10 place-items-center rounded-md text-ink-dim transition-colors hover:bg-neutral-tint hover:text-ink lg:hidden',
+              focusRing,
+            )}
+          >
+            <MoreHorizontal className="size-5" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-64">
+          {sel.selected.length > 0 && (
+            <>
+              <DropdownMenuItem disabled className="min-h-10">
+                {sel.selected.length} {sel.selected.length === 1 ? 'conversa' : 'conversas'}
+              </DropdownMenuItem>
+              <DropdownMenuItem className="min-h-10" onSelect={() => void executarLote('read')}>
+                Marcar lido
+              </DropdownMenuItem>
+              <DropdownMenuItem className="min-h-10" onSelect={() => void executarLote('unread')}>
+                Marcar não lido
+              </DropdownMenuItem>
+              {/* Igual ao desktop: sem pastas conhecidas não há para onde mover,
+                  e nada aqui dispara o carregamento delas. */}
+              {folders.length > 0 && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger className="min-h-10">Mover para</DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    {folders.map((folder) => (
+                      <DropdownMenuItem
+                        key={folder}
+                        className="min-h-10"
+                        onSelect={() => void executarLote('move', folder)}
+                      >
+                        {folder}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
+              <DropdownMenuItem
+                variant="destructive"
+                className="min-h-10"
+                onSelect={() => void confirmarExclusaoEmLote()}
+              >
+                Excluir
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+            </>
+          )}
+
+          <DropdownMenuLabel>Filtros</DropdownMenuLabel>
+          <DropdownMenuCheckboxItem
+            className="min-h-10"
+            checked={onlyUnread}
+            onCheckedChange={(checked) => setOnlyUnread(checked === true)}
+          >
+            Só não lidos
+          </DropdownMenuCheckboxItem>
+          {mailboxes.length > 1 && (
+            <>
+              <DropdownMenuLabel>Caixa</DropdownMenuLabel>
+              <DropdownMenuRadioGroup value={account} onValueChange={setAccount}>
+                <DropdownMenuRadioItem className="min-h-10" value="all">
+                  Todas
+                </DropdownMenuRadioItem>
+                {mailboxes.map((box) => (
+                  <DropdownMenuRadioItem key={box.id} className="min-h-10" value={box.id}>
+                    {box.label}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </>
+          )}
+          <DropdownMenuLabel>Ordenar</DropdownMenuLabel>
+          <DropdownMenuRadioGroup value={sort} onValueChange={(value) => setSort(value as Sort)}>
+            <DropdownMenuRadioItem className="min-h-10" value="recent">
+              Mais recentes
+            </DropdownMenuRadioItem>
+            <DropdownMenuRadioItem className="min-h-10" value="oldest">
+              Mais antigos
+            </DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="min-h-10"
+            onSelect={() => setView({ maximized: !view.maximized })}
+          >
+            {view.maximized ? 'Restaurar' : 'Tela cheia'}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </>
   );
 
@@ -919,35 +1032,39 @@ export function EmailPanel({
   const conteudo = (
     <>
         <FilterBar label="Filtrar e-mails">
-          <SearchInput
-            value={query}
-            onChange={setQuery}
-            label="buscar e-mails"
-            placeholder="assunto ou remetente"
-          />
-          <Chip active={onlyUnread} onClick={() => setOnlyUnread((v) => !v)}>
-            Não lidos
-          </Chip>
-          {/* Uma caixa só não precisa de filtro por caixa. */}
-          {mailboxes.length > 1 &&
-            mailboxes.map((box) => (
-              <Chip
-                key={box.id}
-                active={account === box.id}
-                onClick={() => setAccount(account === box.id ? 'all' : box.id)}
-              >
-                {box.label}
-              </Chip>
-            ))}
-          <select
-            className={cn(selectClass, focusRing)}
-            aria-label="ordenar e-mails"
-            value={sort}
-            onChange={(e) => setSort(e.target.value as Sort)}
-          >
-            <option value="recent">Mais recentes</option>
-            <option value="oldest">Mais antigos</option>
-          </select>
+          <div className="w-full [&>div]:max-w-none lg:contents lg:[&>div]:max-w-80">
+            <SearchInput
+              value={query}
+              onChange={setQuery}
+              label="buscar e-mails"
+              placeholder="assunto ou remetente"
+            />
+          </div>
+          <div className="hidden lg:contents">
+            <Chip active={onlyUnread} onClick={() => setOnlyUnread((v) => !v)}>
+              Não lidos
+            </Chip>
+            {/* Uma caixa só não precisa de filtro por caixa. */}
+            {mailboxes.length > 1 &&
+              mailboxes.map((box) => (
+                <Chip
+                  key={box.id}
+                  active={account === box.id}
+                  onClick={() => setAccount(account === box.id ? 'all' : box.id)}
+                >
+                  {box.label}
+                </Chip>
+              ))}
+            <select
+              className={cn(selectClass, focusRing)}
+              aria-label="ordenar e-mails"
+              value={sort}
+              onChange={(e) => setSort(e.target.value as Sort)}
+            >
+              <option value="recent">Mais recentes</option>
+              <option value="oldest">Mais antigos</option>
+            </select>
+          </div>
         </FilterBar>
 
         <ActiveFilters filters={activeFilters} onRemove={clearFilter} onClearAll={clearAll} />
@@ -1090,7 +1207,9 @@ export function EmailPanel({
                     className={cn(
                       // `row` and `row-unread` stay as behavioural markers: the suite
                       // reads the unread state of a conversation off this element.
-                      'row flex items-center gap-3 border-b border-line-soft px-2 py-3 transition-colors duration-100 ease-brand even:bg-muted/25 motion-reduce:transition-none',
+                      // Em tela estreita a linha quebra: só checkbox e título ficam
+                      // em cima, e o resto desce para a segunda linha.
+                      'row flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line-soft px-2 py-3 transition-colors duration-100 ease-brand even:bg-muted/25 motion-reduce:transition-none lg:flex-nowrap lg:gap-3',
                       isOpen ? 'bg-brand-tint' : 'hover:bg-brand-tint',
                       thread.unreadCount > 0 && 'row-unread',
                       marcada && 'bg-brand-tint/70',
@@ -1159,7 +1278,7 @@ export function EmailPanel({
                       >
                         {titulo}
                       </span>
-                      <span className="w-full truncate type-caption text-ink-dim">
+                      <span className="hidden w-full truncate type-caption text-ink-dim lg:block">
                         {thread.participants.join(', ') || EM_DASH}
                       </span>
                       {acaoComErro && (
@@ -1168,106 +1287,134 @@ export function EmailPanel({
                         </span>
                       )}
                     </button>
-                    {thread.messages.length > 1 && (
+                    {/* A segunda linha do celular, alinhada ao título. No desktop
+                        o invólucro some (`contents`) e cada item volta a ser
+                        vizinho do título na mesma linha. */}
+                    <div className="flex w-full min-w-0 items-center gap-2 pl-[2.875rem] lg:contents">
+                      {/* Os participantes já aparecem sob o título no desktop; esta
+                          cópia é só da linha de baixo, e o leitor de tela não a lê
+                          duas vezes. */}
+                      <span
+                        aria-hidden
+                        className="min-w-0 flex-1 truncate type-caption text-ink-dim lg:hidden"
+                      >
+                        {thread.participants.join(', ') || EM_DASH}
+                      </span>
+                      {thread.messages.length > 1 && (
+                        <span
+                          className={cn(
+                            'shrink-0 rounded-full border px-1.5 type-caption leading-relaxed',
+                            tabular,
+                            thread.unreadCount > 0
+                              ? 'border-brand-edge bg-brand-tint text-brand'
+                              : 'border-line-strong bg-neutral-tint text-ink-dim',
+                          )}
+                          aria-label={
+                            enviadas > 0
+                              ? `${thread.messages.length} mensagens, ${enviadas} enviadas por você`
+                              : `${thread.messages.length} mensagens`
+                          }
+                        >
+                          {thread.messages.length}
+                        </span>
+                      )}
                       <span
                         className={cn(
-                          'shrink-0 rounded-full border px-1.5 type-caption leading-relaxed',
+                          'min-w-[3.5ch] shrink-0 text-right type-caption text-ink-dim',
                           tabular,
-                          thread.unreadCount > 0
-                            ? 'border-brand-edge bg-brand-tint text-brand'
-                            : 'border-line-strong bg-neutral-tint text-ink-dim',
                         )}
-                        aria-label={
-                          enviadas > 0
-                            ? `${thread.messages.length} mensagens, ${enviadas} enviadas por você`
-                            : `${thread.messages.length} mensagens`
-                        }
                       >
-                        {thread.messages.length}
+                        {relativeTime(thread.lastDate) || EM_DASH}
                       </span>
-                    )}
-                    <span
-                      className={cn(
-                        'min-w-[3.5ch] shrink-0 text-right type-caption text-ink-dim',
-                        tabular,
+                      {mailboxes.length > 1 && (
+                        <Badge variant="secondary" className="shrink-0">
+                          {thread.messages[0].accountLabel ?? EM_DASH}
+                        </Badge>
                       )}
-                    >
-                      {relativeTime(thread.lastDate) || EM_DASH}
-                    </span>
-                    {mailboxes.length > 1 && (
-                      <Badge variant="secondary" className="shrink-0">
-                        {thread.messages[0].accountLabel ?? EM_DASH}
-                      </Badge>
-                    )}
-                    <div className="flex shrink-0 items-center gap-0.5">
-                      <div className="relative flex">
-                        <button
-                          type="button"
-                          // `is-tagged` stays as a behavioural marker: the suite reads
-                          // whether a conversation already carries a label off it.
-                          className={cn(iconButtonClass, tags.length > 0 && 'is-tagged text-brand')}
-                          aria-label={`etiquetar ${titulo}`}
-                          aria-expanded={tagMenuKey === thread.id}
-                          onClick={() => {
-                            const next = tagMenuKey === thread.id ? null : thread.id;
-                            setTagMenuKey(next);
-                            if (next) void loadTagFolders(thread.messages[0].account);
-                          }}
-                        >
-                          <Label width={16} height={16} />
-                        </button>
-                        {tagMenuKey === thread.id && (
-                          <>
-                            <div className="fixed inset-0 z-40" onClick={() => setTagMenuKey(null)} />
-                            <div
-                              className="absolute top-full right-0 z-50 mt-2 flex max-h-80 min-w-45 flex-col overflow-y-auto rounded-xl border border-line-strong bg-surface-4 p-2 shadow-e4"
-                              role="menu"
-                              aria-label="etiquetas"
-                            >
-                              {(tagFolders[thread.messages[0].account] ?? []).length === 0 ? (
-                                <p className="px-3 py-2 text-sm text-ink-dim">
-                                  Carregando etiquetas…
-                                </p>
-                              ) : (
-                                (tagFolders[thread.messages[0].account] ?? []).map((f) => (
-                                  <button
-                                    key={f}
-                                    type="button"
-                                    role="menuitem"
-                                    className={cn(
-                                      'rounded-md px-3 py-2 text-left text-sm text-ink-mid transition-colors duration-100 ease-brand hover:bg-brand-tint hover:text-ink motion-reduce:transition-none',
-                                      focusRing,
-                                    )}
-                                    onClick={() => void applyTagToThread(thread, f)}
-                                  >
-                                    {f}
-                                  </button>
-                                ))
+                      <div className="flex shrink-0 items-center gap-0.5">
+                        <div className="hidden items-center gap-0.5 lg:flex">
+                          <div className="relative flex">
+                            <button
+                              type="button"
+                              // `is-tagged` stays as a behavioural marker: the suite reads
+                              // whether a conversation already carries a label off it.
+                              className={cn(
+                                iconButtonClass,
+                                tags.length > 0 && 'is-tagged text-brand',
                               )}
-                            </div>
-                          </>
-                        )}
+                              aria-label={`etiquetar ${titulo}`}
+                              aria-expanded={tagMenuKey === thread.id}
+                              onClick={() => {
+                                const next = tagMenuKey === thread.id ? null : thread.id;
+                                setTagMenuKey(next);
+                                if (next) void loadTagFolders(thread.messages[0].account);
+                              }}
+                            >
+                              <Label width={16} height={16} />
+                            </button>
+                            {tagMenuKey === thread.id && (
+                              <>
+                                <div
+                                  className="fixed inset-0 z-40"
+                                  onClick={() => setTagMenuKey(null)}
+                                />
+                                <div
+                                  className="absolute top-full right-0 z-50 mt-2 flex max-h-80 min-w-45 flex-col overflow-y-auto rounded-xl border border-line-strong bg-surface-4 p-2 shadow-e4"
+                                  role="menu"
+                                  aria-label="etiquetas"
+                                >
+                                  {(tagFolders[thread.messages[0].account] ?? []).length === 0 ? (
+                                    <p className="px-3 py-2 text-sm text-ink-dim">
+                                      Carregando etiquetas…
+                                    </p>
+                                  ) : (
+                                    (tagFolders[thread.messages[0].account] ?? []).map((f) => (
+                                      <button
+                                        key={f}
+                                        type="button"
+                                        role="menuitem"
+                                        className={cn(
+                                          'rounded-md px-3 py-2 text-left text-sm text-ink-mid transition-colors duration-100 ease-brand hover:bg-brand-tint hover:text-ink motion-reduce:transition-none',
+                                          focusRing,
+                                        )}
+                                        onClick={() => void applyTagToThread(thread, f)}
+                                      >
+                                        {f}
+                                      </button>
+                                    ))
+                                  )}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            className={cn(iconButtonClass, 'hover:border-danger/40 hover:text-danger')}
+                            aria-label={`excluir ${titulo}`}
+                            onClick={() => void removeThread(thread)}
+                          >
+                            <Trash width={16} height={16} />
+                          </button>
+                        </div>
+                        {/* A conversa vira nota ou tarefa a partir da mensagem
+                            recebida mais recente, que é a que se está olhando. */}
+                        <CreateFromEmailMenu
+                          subject={titulo}
+                          folders={noteFolders}
+                          busy={criando !== null}
+                          onOpen={() => void carregarPastasDeNota()}
+                          narrow={{
+                            tagFolders: tagFolders[thread.messages[0].account] ?? [],
+                            onOpenTags: () => void loadTagFolders(thread.messages[0].account),
+                            onTag: (folder) => void applyTagToThread(thread, folder),
+                            onDelete: () => void removeThread(thread),
+                          }}
+                          onCreate={(kind, folderId) => {
+                            const alvo = recebidas(thread).at(-1) ?? thread.messages[0];
+                            void criarDoEmail(alvo, kind, folderId);
+                          }}
+                        />
                       </div>
-                      <button
-                        type="button"
-                        className={cn(iconButtonClass, 'hover:border-danger/40 hover:text-danger')}
-                        aria-label={`excluir ${titulo}`}
-                        onClick={() => void removeThread(thread)}
-                      >
-                        <Trash width={16} height={16} />
-                      </button>
-                      {/* A conversa vira nota ou tarefa a partir da mensagem
-                          recebida mais recente, que é a que se está olhando. */}
-                      <CreateFromEmailMenu
-                        subject={titulo}
-                        folders={noteFolders}
-                        busy={criando !== null}
-                        onOpen={() => void carregarPastasDeNota()}
-                        onCreate={(kind, folderId) => {
-                          const alvo = recebidas(thread).at(-1) ?? thread.messages[0];
-                          void criarDoEmail(alvo, kind, folderId);
-                        }}
-                      />
                     </div>
                   </div>
 

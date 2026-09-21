@@ -2,6 +2,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import { TasksPanel, formatDue } from '@/components/TasksPanel';
 import type { TodoTask } from '@/lib/types';
+import { FocusBlockProvider } from '@/components/FocusBlockProvider';
 
 function task(over: Partial<TodoTask>): TodoTask {
   return {
@@ -38,6 +39,21 @@ describe('formatDue', () => {
 });
 
 describe('TasksPanel', () => {
+  it('mostra agendar foco só quando há agenda Google', () => {
+    const props = {
+      onCompletedChanged: () => {}, onRemoved: () => {}, onSubtaskChanged: () => {},
+      tasks: { data: [task({ title: 'Planejar entrega' })], error: null }, onChanged: () => {},
+    };
+    const { rerender } = render(<TasksPanel {...props} />);
+    expect(screen.queryByLabelText('agendar foco para Planejar entrega')).not.toBeInTheDocument();
+    rerender(
+      <FocusBlockProvider calendars={[{ id: 'c', label: 'Google', account: 'a@b.com', canWrite: true }]} onCreated={() => {}}>
+        <TasksPanel {...props} />
+      </FocusBlockProvider>,
+    );
+    expect(screen.getByLabelText('agendar foco para Planejar entrega')).toBeInTheDocument();
+  });
+
   it('lista as tarefas agrupadas por faixa de prazo', () => {
     render(
       <TasksPanel

@@ -165,13 +165,14 @@ export const MODULES: Record<ModuleId, ModuleSpec> = {
       'Google Agenda: Configurações → clique na agenda à esquerda → "Integrar agenda" → "Endereço secreto no formato iCal" (termina em .ics).',
       'Outlook: Configurações → Agenda → Agendas compartilhadas → Publicar, e copie o link ICS.',
       'Em conta corporativa o administrador costuma bloquear o link iCal; nesse caso só a conexão pelo Google funciona.',
-      'É somente leitura: o painel mostra os compromissos, não cria nem edita.',
+      'O painel lê os compromissos e cria blocos de foco após sua confirmação.',
       'Quantos dias aparecem é escolha sua, nos botões do próprio painel.',
     ],
     fields: [
       { name: 'provider', label: 'Origem', type: 'text', hidden: true, defaultValue: 'ics' },
       { name: 'account', label: 'Conta Google', type: 'text', hidden: true },
       { name: 'refreshToken', label: 'Token do Google', type: 'password', secret: true, hidden: true },
+      { name: 'scope', label: 'Permissões do Google', type: 'text', hidden: true },
       { name: 'calendarIds', label: 'Agendas escolhidas', type: 'text', hidden: true },
       {
         name: 'icsUrl',

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useState, useEffect } from 'react';
-import { Plus, X, UserPlus } from 'lucide-react';
+import { CalendarPlus, Plus, X, UserPlus } from 'lucide-react';
 import { IconAction } from '@/components/data/IconAction';
 import { NavArrowRight } from 'iconoir-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -43,6 +43,8 @@ import { Input } from './ui/input';
 import { GLYPH } from './data/Status';
 import { cn } from '@/lib/utils';
 import { focusRing, tabular } from '@/lib/theme';
+import { FOCUS_DRAG_TYPE, type FocusSource } from '@/lib/focusBlock';
+import { useFocusBlock } from '@/components/FocusBlockProvider';
 
 /**
  * A panel that cannot reach its integration is information, not an alarm: the
@@ -896,6 +898,13 @@ function JiraRow({
   onAlternar?: () => void;
   pessoaNome?: string;
 }) {
+  const focus = useFocusBlock();
+  const source: FocusSource = {
+    kind: 'jira',
+    ref: issue.key,
+    title: issue.summary,
+    url: issue.url,
+  };
   const parado = stalenessLabel(issue);
   const prazo = issue.dueDate ? dueLabel(issue.dueDate) : null;
   const atrasado = issue.dueDate ? isOverdue(issue.dueDate) : false;
@@ -908,6 +917,12 @@ function JiraRow({
     <li
       className={rowShell}
       style={{ paddingLeft: depth > 0 ? `calc(${depth} * var(--s4))` : undefined }}
+      draggable={focus.enabled}
+      onDragStart={(event) => {
+        if (!focus.enabled) return;
+        event.dataTransfer.setData(FOCUS_DRAG_TYPE, JSON.stringify(source));
+        event.dataTransfer.effectAllowed = 'copy';
+      }}
     >
       {/* A branch tick reads as hierarchy without drawing a full tree of guides. */}
       {depth > 0 && (
@@ -978,6 +993,13 @@ function JiraRow({
           )}
         </div>
       </div>
+      {focus.enabled && (
+        <IconAction
+          label={`agendar foco para ${issue.key}`}
+          onClick={() => focus.schedule(source)}
+          icon={<CalendarPlus className="size-4" />}
+        />
+      )}
     </li>
   );
 }

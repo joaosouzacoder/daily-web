@@ -12,6 +12,11 @@ Only `main` is maintained; there are no release branches.
 - An optional Slack module using per-user OAuth: recent mentions and unread
   direct messages appear in their own panel and feed the notification bell
   and desktop alerts. The host configures one Slack app for the instance.
+- Focus blocks turn tasks, Jira issues and pull requests into events in the
+  person's own Google Calendar, by dragging or via the "Agendar foco" button,
+  always after confirmation. The connection uses the `calendar.events` scope
+  (already connected accounts must reconnect once), excludes iCal calendars and
+  now stores the scopes granted by Google.
 - A "Fundo" choice in the account menu, next to theme and density: the
   original iridescent gradient (the default) or the flat Catppuccin base —
   Latte in the light theme, Macchiato in the dark one. It is stored in a
@@ -23,6 +28,15 @@ Only `main` is maintained; there are no release branches.
   no longer applied to everyone; it is opt-in through the new choice.
 
 ### Fixed
+- On narrow screens each e-mail row keeps only the checkbox and the subject on
+  its first line; sender, message count, time, mailbox and the "⋮" menu move to
+  a second line aligned with the subject. The row no longer squeezes the
+  subject into a sliver. Desktop keeps the single-line row. The sender is
+  rendered twice (one copy per layout) and the narrow copy is `aria-hidden`, so
+  a screen reader still reads it once.
+- On narrow screens the e-mail panel moves bulk actions, filters, sort order,
+  full screen and each conversation's label/delete actions into "⋯" menus;
+  desktop controls and behaviour are unchanged.
 - The Catppuccin page background actually shows. `<body>` carried the
   `bg-background` utility, which beats the base-layer rule that paints
   `--mesh-base`, so the page colour was always `--surface-0`: the Catppuccin

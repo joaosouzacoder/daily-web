@@ -88,6 +88,7 @@ unverified app serves up to 100 accounts. Whoever hosts creates the client
 once (step by step in `.env.example`, under `GOOGLE_CLIENT_ID`); everyone else
 just clicks **Conectar com Google**. The same client serves the notes copy in
 Google Drive, through the same redirect URI.
+Focus blocks need the `calendar.events` scope; users who connected Google Calendar before this feature must reconnect once.
 
 Slack follows the same host-once, connect-per-user model. Whoever hosts creates
 one Slack app using the steps in `.env.example`; each person then clicks

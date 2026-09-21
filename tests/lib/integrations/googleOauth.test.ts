@@ -112,13 +112,13 @@ describe('authorizationUrl', () => {
 
   // `email` acompanha o escopo da agenda para sabermos qual conta autorizou —
   // sem isso a segunda conta Google sobrescrevia a primeira.
-  it('pede leitura da agenda e a identidade da conta', () => {
+  it('pede leitura, criação de eventos e a identidade da conta sem acesso total', () => {
     const escopo = new URL(authorizationUrl(CLIENT, 'e')).searchParams.get('scope') ?? '';
-    expect(escopo).toContain('https://www.googleapis.com/auth/calendar.readonly');
-    expect(escopo).toContain('email');
-    // Nada de escrita: o painel só lê a agenda.
-    expect(escopo).not.toContain('auth/calendar ');
-    expect(escopo).not.toContain('calendar.events');
+    const tokens = escopo.split(' ');
+    expect(tokens).toContain('https://www.googleapis.com/auth/calendar.readonly');
+    expect(tokens).toContain('https://www.googleapis.com/auth/calendar.events');
+    expect(tokens).toContain('email');
+    expect(tokens).not.toContain('https://www.googleapis.com/auth/calendar');
   });
 
   // `drive.file` alcança só o que a app criou; nada de ler o Drive inteiro,

@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
       user.id,
       'agenda',
       existing?.label ?? (email || 'Google Agenda'),
-      { ...(existing?.values ?? {}), provider: 'google', refreshToken, account: email },
+      { ...(existing?.values ?? {}), provider: 'google', refreshToken, account: email, scope },
       existing?.id,
     );
     // Autorizar no Google é intenção explícita de usar a agenda. Sem isto,

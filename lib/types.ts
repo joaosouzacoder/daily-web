@@ -71,6 +71,13 @@ export interface AgendaItem {
   title: string;
 }
 
+export interface AgendaCalendarRef {
+  id: string;
+  label: string;
+  account: string;
+  canWrite: boolean;
+}
+
 export interface PullRequestItem {
   repo: string;
   number: number;
@@ -276,6 +283,7 @@ export interface DashboardState {
   mailboxes: MailboxRef[];
   /** Quantos dias a agenda cobre, contando hoje. Escolha de cada usuário. */
   agendaDays: number;
+  agendaCalendars: AgendaCalendarRef[];
   /** Disposição única, de antes de existir gravação por tamanho de tela.
    *  Vale enquanto `layouts` estiver vazio. */
   layout: { i: string; x: number; y: number; w: number; h: number }[];

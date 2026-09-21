@@ -14,7 +14,8 @@ import { signOAuthState, verifyOAuthState } from '@/lib/integrations/oauthState'
 // Sem isso não dá para distinguir "reconectei a mesma conta" de "adicionei
 // outra", e a segunda sobrescrevia a primeira.
 export const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
-export const OAUTH_SCOPES = `${CALENDAR_SCOPE} openid email`;
+export const CALENDAR_EVENTS_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
+export const OAUTH_SCOPES = `${CALENDAR_SCOPE} ${CALENDAR_EVENTS_SCOPE} openid email`;
 // `drive.file` só alcança os arquivos que esta app criou: as notas, e nada
 // mais do Drive da pessoa.
 export const DRIVE_FILE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
