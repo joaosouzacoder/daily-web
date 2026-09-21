@@ -20,6 +20,9 @@ Only `main` is maintained; there are no release branches.
   no longer applied to everyone; it is opt-in through the new choice.
 
 ### Fixed
+- Em telas estreitas, o painel de e-mail agora move ações em lote, filtros,
+  ordenação, tela cheia e as ações de etiquetar/excluir de cada conversa para
+  menus de “⋯”; no desktop, os controles e o comportamento continuam iguais.
 - The Catppuccin page background actually shows. `<body>` carried the
   `bg-background` utility, which beats the base-layer rule that paints
   `--mesh-base`, so the page colour was always `--surface-0`: the Catppuccin
