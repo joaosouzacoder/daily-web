@@ -17,6 +17,7 @@ import {
   focusRing,
   isActivePath,
   persistSidebar,
+  type Backdrop,
   type Density,
   type SidebarState,
   type ThemePreference,
@@ -29,6 +30,7 @@ import { NAV_ITEMS, groupStart } from './nav-items';
 interface Props {
   theme: ThemePreference;
   density: Density;
+  backdrop: Backdrop;
   sidebar: SidebarState;
   username: string | null;
   children: ReactNode;
@@ -64,7 +66,7 @@ function RailTooltip({
   );
 }
 
-export function AppShell({ theme, density, sidebar, username, children }: Props) {
+export function AppShell({ theme, density, backdrop, sidebar, username, children }: Props) {
   const pathname = usePathname() ?? '/';
   const [paletteOpen, setPaletteOpen] = useState(false);
   // Server-rendered from the cookie, so a collapsed rail never expands for one
@@ -96,6 +98,7 @@ export function AppShell({ theme, density, sidebar, username, children }: Props)
     <AccountMenu
       initialTheme={theme}
       initialDensity={density}
+      initialBackdrop={backdrop}
       username={username}
       collapsed={collapsed}
     />
@@ -275,7 +278,12 @@ export function AppShell({ theme, density, sidebar, username, children }: Props)
                 <Search className="size-4" />
               </Button>
               <div className="w-40">
-                <AccountMenu initialTheme={theme} initialDensity={density} username={username} />
+                <AccountMenu
+                  initialTheme={theme}
+                  initialDensity={density}
+                  initialBackdrop={backdrop}
+                  username={username}
+                />
               </div>
             </div>
           </header>

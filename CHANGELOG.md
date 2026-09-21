@@ -8,6 +8,17 @@ Only `main` is maintained; there are no release branches.
 
 ## [Unreleased]
 
+### Added
+- A "Fundo" choice in the account menu, next to theme and density: the
+  original iridescent gradient (the default) or the flat Catppuccin base —
+  Latte in the light theme, Macchiato in the dark one. It is stored in a
+  `backdrop` cookie and stamped on `<html>` by the server, so the chosen
+  background paints on first load without a flash, like the other two.
+
+### Changed
+- The gradient is the default page background again. The Catppuccin base is
+  no longer applied to everyone; it is opt-in through the new choice.
+
 ### Fixed
 - The Catppuccin page background actually shows. `<body>` carried the
   `bg-background` utility, which beats the base-layer rule that paints

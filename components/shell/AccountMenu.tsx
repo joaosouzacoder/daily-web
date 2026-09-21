@@ -14,7 +14,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { applyDensity, applyTheme, type Density, type ThemePreference } from '@/lib/theme';
+import {
+  applyBackdrop,
+  applyDensity,
+  applyTheme,
+  type Backdrop,
+  type Density,
+  type ThemePreference,
+} from '@/lib/theme';
 
 const THEME_ICON = { system: Monitor, light: Sun, dark: Moon } as const;
 
@@ -29,9 +36,15 @@ const DENSITY_LABEL: Record<Density, string> = {
   compact: 'Compacto',
 };
 
+const BACKDROP_LABEL: Record<Backdrop, string> = {
+  mesh: 'Gradiente',
+  catppuccin: 'Catppuccin',
+};
+
 interface Props {
   initialTheme: ThemePreference;
   initialDensity: Density;
+  initialBackdrop: Backdrop;
   username: string | null;
   /** On the collapsed rail there is no room for a name: the trigger becomes the
    *  theme icon alone, with the name still reachable inside the menu. */
@@ -43,10 +56,17 @@ interface Props {
  * stamped. These handlers call the applier before the setter, so the element and
  * the state stay in step no matter which surface changed it.
  */
-export function AccountMenu({ initialTheme, initialDensity, username, collapsed = false }: Props) {
+export function AccountMenu({
+  initialTheme,
+  initialDensity,
+  initialBackdrop,
+  username,
+  collapsed = false,
+}: Props) {
   const router = useRouter();
   const [theme, setTheme] = useState<ThemePreference>(initialTheme);
   const [density, setDensity] = useState<Density>(initialDensity);
+  const [backdrop, setBackdrop] = useState<Backdrop>(initialBackdrop);
   const [leaving, setLeaving] = useState(false);
 
   // The root element is the source of truth; a cookie cleared in another tab
@@ -57,6 +77,7 @@ export function AccountMenu({ initialTheme, initialDensity, username, collapsed 
     else if (root.classList.contains('light')) setTheme('light');
     else setTheme('system');
     setDensity(root.dataset.density === 'compact' ? 'compact' : 'comfortable');
+    setBackdrop(root.dataset.backdrop === 'catppuccin' ? 'catppuccin' : 'mesh');
   }, []);
 
   const chooseTheme = (pref: ThemePreference) => {
@@ -67,6 +88,11 @@ export function AccountMenu({ initialTheme, initialDensity, username, collapsed 
   const chooseDensity = (d: Density) => {
     applyDensity(d);
     setDensity(d);
+  };
+
+  const chooseBackdrop = (b: Backdrop) => {
+    applyBackdrop(b);
+    setBackdrop(b);
   };
 
   const signOut = async () => {
@@ -119,6 +145,19 @@ export function AccountMenu({ initialTheme, initialDensity, username, collapsed 
           {(['comfortable', 'compact'] as const).map((value) => (
             <DropdownMenuRadioItem key={value} value={value}>
               {DENSITY_LABEL[value]}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+
+        <DropdownMenuLabel className="type-caption text-ink-dim">Fundo</DropdownMenuLabel>
+        <DropdownMenuRadioGroup
+          value={backdrop}
+          onValueChange={(v) => chooseBackdrop(v as Backdrop)}
+        >
+          {(['mesh', 'catppuccin'] as const).map((value) => (
+            <DropdownMenuRadioItem key={value} value={value}>
+              {BACKDROP_LABEL[value]}
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>

@@ -3,7 +3,14 @@ import { cookies } from 'next/headers';
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
 import { ServiceWorker } from '@/components/ServiceWorker';
-import { DENSITY_COOKIE, THEME_COOKIE, parseDensity, parseTheme } from '@/lib/theme';
+import {
+  BACKDROP_COOKIE,
+  DENSITY_COOKIE,
+  THEME_COOKIE,
+  parseBackdrop,
+  parseDensity,
+  parseTheme,
+} from '@/lib/theme';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -46,6 +53,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const jar = await cookies();
   const theme = parseTheme(jar.get(THEME_COOKIE)?.value);
   const density = parseDensity(jar.get(DENSITY_COOKIE)?.value);
+  const backdrop = parseBackdrop(jar.get(BACKDROP_COOKIE)?.value);
   const forced = theme === 'system' ? '' : theme;
 
   return (
@@ -54,6 +62,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       // The client changes both after hydration.
       suppressHydrationWarning
       data-density={density === 'compact' ? 'compact' : undefined}
+      data-backdrop={backdrop === 'catppuccin' ? 'catppuccin' : undefined}
       className={`${GeistSans.variable} ${GeistMono.variable} ${forced}`.trim()}
     >
       {/* No background utility here: body paints --mesh-base from globals.css,
