@@ -3,6 +3,9 @@ import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-li
 import { EmailPanel } from '@/components/EmailPanel';
 import type { EmailEnvelope, MailboxRef } from '@/lib/types';
 
+/** Ignora o que o leitor de tela não lê, além do que o getByText já ignora. */
+const SO_VISUAL = '[aria-hidden="true"], script, style';
+
 // Contas deixaram de ser 'work'/'personal' fixos: cada caixa é uma conexão
 // com id próprio e o nome que a pessoa escolheu.
 const MAILBOXES: MailboxRef[] = [
@@ -62,7 +65,17 @@ describe('EmailPanel', () => {
   it('lista os e-mails com assunto e remetente', () => {
     render(<EmailPanel onSeenChanged={() => {}} onRemoved={() => {}} mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={() => {}} />);
     expect(screen.getByText('Revisão do PR')).toBeInTheDocument();
-    expect(screen.getByText('Milton Yoshida')).toBeInTheDocument();
+    // A linha de baixo do celular repete o remetente só para a vista; a cópia
+    // é aria-hidden, e o que se confere é a que o leitor de tela lê.
+    expect(screen.getByText('Milton Yoshida', { ignore: SO_VISUAL })).toBeInTheDocument();
+  });
+
+  it('põe o remetente na linha de baixo do celular sem repeti-lo ao leitor de tela', () => {
+    render(<EmailPanel onSeenChanged={() => {}} onRemoved={() => {}} mailboxes={MAILBOXES} email={{ data: items, error: null }} onChanged={() => {}} />);
+    const [acessivel, visual] = screen.getAllByText('Milton Yoshida');
+    expect(acessivel).toHaveClass('hidden', 'lg:block');
+    expect(visual).toHaveAttribute('aria-hidden');
+    expect(visual).toHaveClass('lg:hidden');
   });
 
   it('filtra por busca textual sem chamar a API', () => {
@@ -480,7 +493,7 @@ describe('conversas', () => {
 
   it('mostra quem participou e quantas mensagens são', () => {
     montar();
-    expect(screen.getByText('você, Luan')).toBeInTheDocument();
+    expect(screen.getByText('você, Luan', { ignore: SO_VISUAL })).toBeInTheDocument();
     expect(screen.getByLabelText('3 mensagens, 1 enviadas por você')).toHaveTextContent('3');
   });
 

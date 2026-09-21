@@ -20,9 +20,15 @@ Only `main` is maintained; there are no release branches.
   no longer applied to everyone; it is opt-in through the new choice.
 
 ### Fixed
-- Em telas estreitas, o painel de e-mail agora move ações em lote, filtros,
-  ordenação, tela cheia e as ações de etiquetar/excluir de cada conversa para
-  menus de “⋯”; no desktop, os controles e o comportamento continuam iguais.
+- On narrow screens each e-mail row keeps only the checkbox and the subject on
+  its first line; sender, message count, time, mailbox and the "⋮" menu move to
+  a second line aligned with the subject. The row no longer squeezes the
+  subject into a sliver. Desktop keeps the single-line row. The sender is
+  rendered twice (one copy per layout) and the narrow copy is `aria-hidden`, so
+  a screen reader still reads it once.
+- On narrow screens the e-mail panel moves bulk actions, filters, sort order,
+  full screen and each conversation's label/delete actions into "⋯" menus;
+  desktop controls and behaviour are unchanged.
 - The Catppuccin page background actually shows. `<body>` carried the
   `bg-background` utility, which beats the base-layer rule that paints
   `--mesh-base`, so the page colour was always `--surface-0`: the Catppuccin
