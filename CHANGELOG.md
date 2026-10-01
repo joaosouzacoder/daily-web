@@ -27,6 +27,13 @@ Only `main` is maintained; there are no release branches.
   `backdrop` cookie and stamped on `<html>` by the server, so the chosen
   background paints on first load without a flash, like the other two.
 
+### Security
+- Next.js moved to 16.3.8, which closes the remote code execution in
+  `next/og`'s `ImageResponse` (GHSA-vcvr-r3jv-pc5j). This app never imported
+  `next/og`, so the path was not reachable here, but the package shipped with
+  it. The dependency floor was raised so an install cannot fall back below the
+  fix.
+
 ### Changed
 - The gradient is the default page background again. The Catppuccin base is
   no longer applied to everyone; it is opt-in through the new choice.
