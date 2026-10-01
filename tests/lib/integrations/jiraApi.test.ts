@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  fetchAncestors,
   fetchApproved,
   fetchDelivered,
   fetchIssues,
   fetchProblems,
   jiraBaseUrl,
+  toJiraItem,
 } from '@/lib/integrations/jiraApi';
 import type { Connection } from '@/lib/vault/connections';
 
@@ -434,5 +436,88 @@ describe('searchPeople & fetchPerson', () => {
 
     fetchMock.mockResolvedValue({ ok: false, status: 401, text: async () => '' });
     await expect(fetchPerson(CONN, '123')).rejects.toThrow('Jira recusou o e-mail');
+  });
+});
+
+describe('fetchAncestors', () => {
+  // A entrada da subida é o que as buscas do painel produzem, então o item
+  // vem do mesmo conversor que elas usam, e não de um objeto montado à mão.
+  const item = (key: string, parent?: string) =>
+    toJiraItem(
+      issue(key, parent ? { parent: { key: parent, fields: { summary: `pai ${parent}` } } } : {}),
+      'https://acme.atlassian.net',
+      'assignee',
+    );
+
+  it('sobe de pai em pai até o topo, uma ida por nível', async () => {
+    const fetchMock = stubSearchSequence([
+      [issue('TT-5', { parent: { key: 'TT-2', fields: { summary: 'iniciativa' } } })],
+      [issue('TT-2', { parent: { key: 'TT-1', fields: { summary: 'objetivo' } } })],
+      [issue('TT-1')],
+    ]);
+
+    const ancestors = await fetchAncestors(CONN, [item('TT-9', 'TT-5')]);
+
+    expect(ancestors.map((i) => i.key)).toEqual(['TT-5', 'TT-2', 'TT-1']);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(jqlOf(fetchMock, 0)).toBe('key in ("TT-5")');
+    expect(jqlOf(fetchMock, 2)).toBe('key in ("TT-1")');
+  });
+
+  it('pergunta pelas chaves do nível de uma vez, sem repetir a que se repete', async () => {
+    const fetchMock = stubSearchSequence([[issue('TT-5'), issue('TT-6')]]);
+
+    await fetchAncestors(CONN, [item('TT-9', 'TT-5'), item('TT-8', 'TT-5'), item('TT-7', 'TT-6')]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(jqlOf(fetchMock, 0)).toBe('key in ("TT-5", "TT-6")');
+  });
+
+  it('não busca o pai que já está na lista', async () => {
+    const fetchMock = stubSearchSequence([[]]);
+    const ancestors = await fetchAncestors(CONN, [item('TT-5'), item('TT-9', 'TT-5')]);
+    expect(ancestors).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('não volta para a filha quando o pai aponta de volta para ela', async () => {
+    const fetchMock = stubSearchSequence([
+      [issue('TT-5', { parent: { key: 'TT-9', fields: { summary: 'volta' } } })],
+    ]);
+
+    const ancestors = await fetchAncestors(CONN, [item('TT-9', 'TT-5')]);
+
+    expect(ancestors.map((i) => i.key)).toEqual(['TT-5']);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  // Uma corrente mais longa que o teto é defeito de dado, e a subida precisa
+  // terminar mesmo assim.
+  it('para no teto de níveis numa corrente sem fim', async () => {
+    const fetchMock = vi.fn();
+    let n = 100;
+    fetchMock.mockImplementation(async () => {
+      const key = `TT-${n}`;
+      n += 1;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          issues: [issue(key, { parent: { key: `TT-${n}`, fields: { summary: 'acima' } } })],
+        }),
+      };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const ancestors = await fetchAncestors(CONN, [item('TT-9', 'TT-100')]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+    expect(ancestors).toHaveLength(6);
+  });
+
+  it('não vai ao Jira quando não há issue nenhuma', async () => {
+    const fetchMock = stubSearch([]);
+    expect(await fetchAncestors(CONN, [])).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

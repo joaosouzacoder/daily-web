@@ -67,6 +67,7 @@ function state(over: Partial<DashboardState> = {}): DashboardState {
     jiraDelivered: { data: [], error: null },
     jiraApproved: { data: [], error: null },
     jiraProblems: { data: [], error: null },
+    jiraAncestors: [],
     jiraFollowedPeople: [],
     tasks: { data: [task({ id: 't1' }), task({ id: 't2' })], error: null },
     slack: { data: { mentions: [], directs: [], team: '' }, error: null },

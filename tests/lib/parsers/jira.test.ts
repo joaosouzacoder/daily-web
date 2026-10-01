@@ -123,4 +123,79 @@ describe('buildJiraTree', () => {
     expect(groups[0].roots[0].issue.key).toBe('TT-1');
     expect(groups[0].roots[0].children).toHaveLength(0);
   });
+
+  it('começa no objetivo quando os ancestrais vêm junto', () => {
+    const historia = item({
+      key: 'TT-9',
+      project: 'TT',
+      parent: { key: 'TT-5', summary: 'épico' },
+    });
+    const groups = buildJiraTree(
+      [historia],
+      [
+        item({ key: 'TT-5', project: 'TT', kind: 'Epic', parent: { key: 'TT-2', summary: 'ini' } }),
+        item({
+          key: 'TT-2',
+          project: 'TT',
+          kind: 'Iniciativa',
+          parent: { key: 'TT-1', summary: 'obj' },
+        }),
+        item({ key: 'TT-1', project: 'TT', kind: 'Objective' }),
+      ],
+    );
+
+    const objetivo = groups[0].roots[0];
+    expect(groups[0].roots).toHaveLength(1);
+    expect(objetivo.issue.key).toBe('TT-1');
+    expect(objetivo.children[0].issue.key).toBe('TT-2');
+    expect(objetivo.children[0].children[0].issue.key).toBe('TT-5');
+    expect(objetivo.children[0].children[0].children[0].issue.key).toBe('TT-9');
+  });
+
+  it('marca como caminho o ancestral, e como item o que veio da busca', () => {
+    const groups = buildJiraTree(
+      [item({ key: 'TT-9', project: 'TT', parent: { key: 'TT-1', summary: 'obj' } })],
+      [item({ key: 'TT-1', project: 'TT', kind: 'Objective' })],
+    );
+    expect(groups[0].roots[0].origin).toBe('ancestor');
+    expect(groups[0].roots[0].children[0].origin).toBe('match');
+  });
+
+  it('conta só o que veio da busca: o caminho não é trabalho', () => {
+    const groups = buildJiraTree(
+      [item({ key: 'TT-9', project: 'TT', parent: { key: 'TT-1', summary: 'obj' } })],
+      [item({ key: 'TT-1', project: 'TT', kind: 'Objective' })],
+    );
+    expect(groups[0].count).toBe(1);
+  });
+
+  it('descarta o ramo de ancestrais que não leva a nenhuma issue da busca', () => {
+    const groups = buildJiraTree(
+      [item({ key: 'TT-9', project: 'TT', parent: { key: 'TT-2', summary: 'ini viva' } })],
+      [
+        item({ key: 'TT-2', project: 'TT', parent: { key: 'TT-1', summary: 'obj' } }),
+        item({ key: 'TT-3', project: 'TT', parent: { key: 'TT-1', summary: 'obj' } }),
+        item({ key: 'TT-1', project: 'TT', kind: 'Objective' }),
+      ],
+    );
+    expect(groups[0].roots[0].children.map((n) => n.issue.key)).toEqual(['TT-2']);
+  });
+
+  it('agrupa pelo projeto do objetivo, que pode não ser o da história', () => {
+    const groups = buildJiraTree(
+      [item({ key: 'TT-9', project: 'TT', parent: { key: 'EST-1', summary: 'obj' } })],
+      [item({ key: 'EST-1', project: 'EST', kind: 'Objective' })],
+    );
+    expect(groups.map((g) => g.project)).toEqual(['EST']);
+  });
+
+  it('mantém como item a issue que também chegou como ancestral de outra', () => {
+    const epico = item({ key: 'TT-5', project: 'TT', kind: 'Epic' });
+    const groups = buildJiraTree(
+      [epico, item({ key: 'TT-9', project: 'TT', parent: { key: 'TT-5', summary: 'épico' } })],
+      [epico],
+    );
+    expect(groups[0].roots[0].origin).toBe('match');
+    expect(groups[0].count).toBe(2);
+  });
 });

@@ -220,6 +220,21 @@ async function buildState(userId: string, ciclo: symbol): Promise<DashboardState
       slackConnection ? slackPanel(slackConnection) : OFF,
     ]);
 
+  // A subida da hierarquia depende do que as buscas acima trouxeram, então é
+  // uma segunda rodada. É uma ida por nível para as quatro listas juntas, e
+  // não uma por lista. Falhar aqui não derruba o painel: sem os ancestrais a
+  // árvore só começa mais embaixo.
+  const jiraAncestors = jiraConnection
+    ? await jiraApi
+        .fetchAncestors(jiraConnection, [
+          ...(jira.data ?? []),
+          ...(jiraWatched.data ?? []),
+          ...(jiraDelivered.data ?? []),
+          ...(jiraApproved.data ?? []),
+        ])
+        .catch(() => [])
+    : [];
+
   // O que o usuário pediu vence o retrato do servidor. As ações que o retrato
   // já reflete saem do caminho aqui; as demais são sobrepostas a ele.
   const emailReconciliado = reconcileEmail(userId, email, retratoIniciadoEm);
@@ -256,6 +271,7 @@ async function buildState(userId: string, ciclo: symbol): Promise<DashboardState
     jiraDelivered,
     jiraApproved,
     jiraProblems,
+    jiraAncestors,
     tasks,
     slack,
     notifications,

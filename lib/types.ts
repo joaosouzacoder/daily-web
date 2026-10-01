@@ -273,6 +273,9 @@ export interface JiraPersonView {
   delivered: PanelResult<JiraDatedItem[]>;
   approved: PanelResult<JiraDatedItem[]>;
   problems: PanelResult<JiraProblemItem[]>;
+  /** O caminho até o objetivo das issues acima. Mesmo papel de
+   *  `jiraAncestors` no estado do painel. */
+  ancestors: JiraItem[];
 }
 
 export interface DashboardState {
@@ -313,6 +316,10 @@ export interface DashboardState {
   jiraApproved: PanelResult<JiraDatedItem[]>;
   /** Histórias e épicos seus com defeito de preenchimento. */
   jiraProblems: PanelResult<JiraProblemItem[]>;
+  /** Os pais das issues acima, subindo até o objetivo. Não são do usuário:
+   *  existem para a árvore do painel começar no topo da hierarquia, e não na
+   *  história. Lista vazia quando a subida falha — o painel desenha sem ela. */
+  jiraAncestors: JiraItem[];
   tasks: PanelResult<TodoTask[]>;
   slack: PanelResult<SlackDigest>;
   notifications: PanelResult<NotificationItem[]>;

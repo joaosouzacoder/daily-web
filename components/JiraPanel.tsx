@@ -28,7 +28,7 @@ import {
   normalizeStatus,
   stalenessLabel,
 } from '@/lib/parsers/jira';
-import type { JiraNode, JiraProjectGroup } from '@/lib/parsers/jira';
+import type { JiraNode, JiraNodeOrigin, JiraProjectGroup } from '@/lib/parsers/jira';
 import { PROBLEM_LABEL } from '@/lib/parsers/jiraProblems';
 import { Section } from './ui/Section';
 import { Tabs } from './ui/legacy-tabs';
@@ -127,6 +127,7 @@ const VISTA_VAZIA: JiraPersonView = {
   delivered: { data: [], error: null },
   approved: { data: [], error: null },
   problems: { data: [], error: null },
+  ancestors: [],
 };
 
 function parseAba(value: string | null): Aba {
@@ -153,6 +154,9 @@ interface Props {
   approved: PanelResult<JiraDatedItem[]>;
   /** Histórias e épicos com defeito de preenchimento. */
   problems: PanelResult<JiraProblemItem[]>;
+  /** Os pais das issues acima, até o objetivo. Não são suas: ligam o que é
+   *  seu ao topo da hierarquia. */
+  ancestors: JiraItem[];
   people: JiraPerson[];
   refreshedAt: string | null;
   onChanged: () => void;
@@ -165,6 +169,7 @@ export function JiraPanel({
   delivered: meDelivered,
   approved: meApproved,
   problems: meProblems,
+  ancestors: meAncestors,
   people,
   refreshedAt,
   onChanged,
@@ -193,14 +198,20 @@ export function JiraPanel({
     
     setQuery('');
     setFilter('both');
-    setExpandidos(new Set());
+    setRamos(new Map());
   };
 
   const { view, loading: personLoading, error: personError } = useJiraPersonView(pessoaAtiva, refreshedAt);
 
   const fonte = pessoaAtiva
     ? (view ?? VISTA_VAZIA)
-    : { jira: meJira, delivered: meDelivered, approved: meApproved, problems: meProblems };
+    : {
+        jira: meJira,
+        delivered: meDelivered,
+        approved: meApproved,
+        problems: meProblems,
+        ancestors: meAncestors,
+      };
 
   const jira = fonte.jira;
   const delivered = fonte.delivered;
@@ -222,9 +233,11 @@ export function JiraPanel({
   const [watchError, setWatchError] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [removendo, setRemovendo] = useState<Set<string>>(new Set());
-  // Ramos abertos da hierarquia, pela chave da issue. Começam fechados, como
-  // as subtarefas: a lista abre mostrando o topo, e você desce onde quer.
-  const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
+  // Ramos que o usuário abriu ou fechou na mão, pela chave da issue. O que
+  // não está aqui segue o padrão do nó: o caminho até o objetivo nasce
+  // aberto, porque esconder o trabalho atrás dele seria pior que a lista
+  // plana de antes; o que é da pessoa nasce fechado, como as subtarefas.
+  const [ramos, setRamos] = useState<Map<string, boolean>>(new Map());
 
   const [formAberta, setFormAberta] = useState(false);
   const [buscaNovaPessoa, setBuscaNovaPessoa] = useState('');
@@ -232,13 +245,8 @@ export function JiraPanel({
   const [buscandoPessoas, setBuscandoPessoas] = useState(false);
   const [erroPessoas, setErroPessoas] = useState<string | null>(null);
 
-  const alternarRamo = (chave: string) => {
-    setExpandidos((prev) => {
-      const next = new Set(prev);
-      if (next.has(chave)) next.delete(chave);
-      else next.add(chave);
-      return next;
-    });
+  const alternarRamo = (chave: string, aberto: boolean) => {
+    setRamos((prev) => new Map(prev).set(chave, aberto));
   };
 
   // O servidor é a verdade; `removendo` só antecipa a saída da lista até a
@@ -382,7 +390,12 @@ export function JiraPanel({
     [all, query, filter],
   );
 
-  const projects = useMemo(() => buildJiraTree(visible), [visible]);
+  // O caminho até o objetivo não é do usuário e por isso não entra em
+  // `visible`: ele não é filtrado por papel nem por busca, só liga o que foi
+  // filtrado ao topo da hierarquia.
+  const ancestors = fonte.ancestors;
+
+  const projects = useMemo(() => buildJiraTree(visible, ancestors), [visible, ancestors]);
   const situations = useMemo(() => groupByStatusCategory(visible), [visible]);
 
   // Entregues e Aprovados repetem a estrutura de "Em aberto": hierarquia,
@@ -395,10 +408,16 @@ export function JiraPanel({
   );
 
   const entregues = useMemo(() => noPeriodo(delivered.data ?? []), [delivered.data, noPeriodo]);
-  const entreguesProjects = useMemo(() => buildJiraTree(entregues), [entregues]);
+  const entreguesProjects = useMemo(
+    () => buildJiraTree(entregues, ancestors),
+    [entregues, ancestors],
+  );
 
   const aprovados = useMemo(() => noPeriodo(approved.data ?? []), [approved.data, noPeriodo]);
-  const aprovadosProjects = useMemo(() => buildJiraTree(aprovados), [aprovados]);
+  const aprovadosProjects = useMemo(
+    () => buildJiraTree(aprovados, ancestors),
+    [aprovados, ancestors],
+  );
 
   const problemas = problems.data ?? [];
 
@@ -540,7 +559,7 @@ export function JiraPanel({
 
           <JiraProjects
             groups={entreguesProjects}
-            expandidos={expandidos}
+            ramos={ramos}
             onAlternar={alternarRamo}
             pessoaNome={nome}
           />
@@ -569,7 +588,7 @@ export function JiraPanel({
 
           <JiraProjects
             groups={aprovadosProjects}
-            expandidos={expandidos}
+            ramos={ramos}
             onAlternar={alternarRamo}
             pessoaNome={nome}
           />
@@ -676,7 +695,14 @@ export function JiraPanel({
                         >
                           {issue.key}
                         </a>
-                        <span className="min-w-0 flex-1 truncate text-ink">{issue.summary}</span>
+                        <span
+            className={cn(
+              'min-w-0 flex-1 truncate',
+              origin === 'ancestor' ? 'text-ink-dim' : 'text-ink',
+            )}
+          >
+            {issue.summary}
+          </span>
                       </div>
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 type-caption text-ink-dim">
                         <JiraStatus issue={issue} />
@@ -744,7 +770,7 @@ export function JiraPanel({
             <JiraProjects
               groups={projects}
               showRole={filter === 'both'}
-              expandidos={expandidos}
+              ramos={ramos}
               onAlternar={alternarRamo}
               pessoaNome={nome}
             />
@@ -772,7 +798,14 @@ function JiraProblemRow({ issue }: { issue: JiraProblemItem }) {
           >
             {issue.key}
           </a>
-          <span className="min-w-0 flex-1 truncate text-ink">{issue.summary}</span>
+          <span
+            className={cn(
+              'min-w-0 flex-1 truncate',
+              origin === 'ancestor' ? 'text-ink-dim' : 'text-ink',
+            )}
+          >
+            {issue.summary}
+          </span>
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 type-caption text-ink-dim">
           <JiraStatus issue={issue} />
@@ -797,14 +830,14 @@ function JiraProblemRow({ issue }: { issue: JiraProblemItem }) {
 function JiraProjects({
   groups,
   showRole = false,
-  expandidos,
+  ramos,
   onAlternar,
   pessoaNome,
 }: {
   groups: JiraProjectGroup[];
   showRole?: boolean;
-  expandidos: Set<string>;
-  onAlternar: (chave: string) => void;
+  ramos: Map<string, boolean>;
+  onAlternar: (chave: string, aberto: boolean) => void;
   pessoaNome?: string;
 }) {
   return (
@@ -822,7 +855,7 @@ function JiraProjects({
                 node={node}
                 showRole={showRole}
                 depth={0}
-                expandidos={expandidos}
+                ramos={ramos}
                 onAlternar={onAlternar}
                 pessoaNome={pessoaNome}
               />
@@ -838,19 +871,19 @@ function JiraBranch({
   node,
   showRole,
   depth,
-  expandidos,
+  ramos,
   onAlternar,
   pessoaNome,
 }: {
   node: JiraNode;
   showRole: boolean;
   depth: number;
-  expandidos: Set<string>;
-  onAlternar: (chave: string) => void;
+  ramos: Map<string, boolean>;
+  onAlternar: (chave: string, aberto: boolean) => void;
   pessoaNome?: string;
 }) {
   const temFilhos = node.children.length > 0;
-  const aberto = expandidos.has(node.issue.key);
+  const aberto = ramos.get(node.issue.key) ?? node.origin === 'ancestor';
 
   return (
     <>
@@ -860,7 +893,8 @@ function JiraBranch({
         depth={depth}
         filhos={node.children.length}
         aberto={aberto}
-        onAlternar={() => onAlternar(node.issue.key)}
+        origin={node.origin}
+        onAlternar={() => onAlternar(node.issue.key, !aberto)}
         pessoaNome={pessoaNome}
       />
       {temFilhos &&
@@ -871,7 +905,7 @@ function JiraBranch({
             node={child}
             showRole={showRole}
             depth={depth + 1}
-            expandidos={expandidos}
+            ramos={ramos}
             onAlternar={onAlternar}
             pessoaNome={pessoaNome}
           />
@@ -886,12 +920,15 @@ function JiraRow({
   depth,
   filhos = 0,
   aberto = false,
+  origin = 'match',
   onAlternar,
   pessoaNome,
 }: {
   issue: JiraItem;
   showRole: boolean;
   depth: number;
+  /** Uma linha de caminho é lida como contexto, não como trabalho seu. */
+  origin?: JiraNodeOrigin;
   /** Quantas issues estão logo abaixo desta. Zero fora da hierarquia. */
   filhos?: number;
   aberto?: boolean;
@@ -958,7 +995,14 @@ function JiraRow({
           >
             {issue.key}
           </a>
-          <span className="min-w-0 flex-1 truncate text-ink">{issue.summary}</span>
+          <span
+            className={cn(
+              'min-w-0 flex-1 truncate',
+              origin === 'ancestor' ? 'text-ink-dim' : 'text-ink',
+            )}
+          >
+            {issue.summary}
+          </span>
           {showRole && eRelator && (
             <span className={cn(roleBadge, 'border-line-strong bg-neutral-tint text-ink-dim')}>
               REL

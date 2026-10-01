@@ -46,6 +46,7 @@ function Panel(props: Partial<ComponentProps<typeof JiraPanel>>) {
       delivered={{ data: [], error: null }}
       approved={{ data: [], error: null }}
       problems={{ data: [], error: null }}
+      ancestors={[]}
       people={[]}
       refreshedAt={null}
       onChanged={() => {}}
@@ -199,6 +200,101 @@ describe('JiraPanel', () => {
     expect(rows[0].textContent).toContain('TT-1');
     expect(rows[1].textContent).toContain('TT-9');
     expect(rows[1].getAttribute('style')).toContain('padding-left');
+  });
+
+  it('começa a árvore no objetivo, com o caminho já aberto', () => {
+    render(
+      <Panel
+        watched={{ data: [], error: null }}
+        onChanged={() => {}}
+        jira={{
+          data: [
+            issue({
+              key: 'TT-9',
+              project: 'TT',
+              summary: 'História minha',
+              parent: { key: 'TT-5', summary: 'Épico' },
+            }),
+          ],
+          error: null,
+        }}
+        ancestors={[
+          issue({
+            key: 'TT-5',
+            project: 'TT',
+            summary: 'Épico',
+            kind: 'Epic',
+            parent: { key: 'TT-1', summary: 'Objetivo' },
+          }),
+          issue({ key: 'TT-1', project: 'TT', summary: 'Objetivo', kind: 'Objective' }),
+        ]}
+      />,
+    );
+
+    // Nada de clicar: o caminho até o objetivo nasce aberto, senão a história
+    // ficaria escondida atrás de dois níveis que não são de ninguém.
+    const rows = screen.getAllByRole('listitem');
+    expect(rows.map((row) => row.textContent?.match(/TT-\d+/)?.[0])).toEqual([
+      'TT-1',
+      'TT-5',
+      'TT-9',
+    ]);
+  });
+
+  it('recolhe o caminho quando o usuário fecha o ramo', () => {
+    render(
+      <Panel
+        watched={{ data: [], error: null }}
+        onChanged={() => {}}
+        jira={{
+          data: [
+            issue({
+              key: 'TT-9',
+              project: 'TT',
+              summary: 'História minha',
+              parent: { key: 'TT-1', summary: 'Objetivo' },
+            }),
+          ],
+          error: null,
+        }}
+        ancestors={[
+          issue({ key: 'TT-1', project: 'TT', summary: 'Objetivo', kind: 'Objective' }),
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText(/recolher a issue sob TT-1/));
+
+    const rows = screen.getAllByRole('listitem');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].textContent).toContain('TT-1');
+  });
+
+  // O contador do projeto diz quanto trabalho há ali. O caminho até o
+  // objetivo não é trabalho de ninguém e não entra na conta.
+  it('não conta o caminho no total do projeto', () => {
+    render(
+      <Panel
+        watched={{ data: [], error: null }}
+        onChanged={() => {}}
+        jira={{
+          data: [
+            issue({
+              key: 'TT-9',
+              project: 'TT',
+              summary: 'História minha',
+              parent: { key: 'TT-1', summary: 'Objetivo' },
+            }),
+          ],
+          error: null,
+        }}
+        ancestors={[
+          issue({ key: 'TT-1', project: 'TT', summary: 'Objetivo', kind: 'Objective' }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByRole('heading', { name: /TT/ }).textContent).toContain('1');
   });
 
   // Fora da hierarquia, o agrupamento passou a ser por situação. Agrupar por
