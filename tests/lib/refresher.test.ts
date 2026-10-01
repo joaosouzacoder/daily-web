@@ -7,7 +7,11 @@ vi.mock('@/lib/integrations/imap', () => ({ fetchBodies: vi.fn() }));
 vi.mock('@/lib/email/inbox', () => ({ loadInbox: vi.fn() }));
 vi.mock('@/lib/integrations/ics', () => ({ fetchAgenda: vi.fn() }));
 vi.mock('@/lib/integrations/githubApi', () => ({ fetchPulls: vi.fn() }));
-vi.mock('@/lib/integrations/jiraApi', () => ({ fetchIssues: vi.fn(), fetchMentions: vi.fn() }));
+vi.mock('@/lib/integrations/jiraApi', () => ({
+  fetchIssues: vi.fn(),
+  fetchMentions: vi.fn(),
+  fetchAncestors: vi.fn(async () => []),
+}));
 vi.mock('@/lib/tasks', () => ({ fetchTasks: vi.fn() }));
 
 import { loadInbox } from '@/lib/email/inbox';

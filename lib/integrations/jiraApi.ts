@@ -299,6 +299,62 @@ export async function fetchByKeys(conn: Connection, keys: string[]): Promise<Jir
   return raw.map((issue) => toJiraItem(issue, auth.baseUrl, 'assignee'));
 }
 
+// Quantos degraus a subida percorre. Uma subtarefa fica a quatro degraus do
+// objetivo (história, épico, iniciativa, objetivo) e a hierarquia do Jira
+// admite outro nível acima do épico, então o teto tem folga sobre isso. Ele
+// existe para a subida terminar mesmo diante de uma corrente sem fim; cada
+// degrau só custa uma consulta quando ainda há pai novo para buscar.
+const ANCESTOR_LEVELS = 6;
+
+// Chaves por consulta de ancestrais: o mesmo teto da busca de filhas.
+const ANCESTOR_CHUNK = 50;
+
+/** Os ancestrais das issues dadas, de pai em pai até o topo da hierarquia.
+ *
+ *  As buscas do painel trazem só o que é da pessoa — em geral a história e o
+ *  épico. O que dá sentido a elas, a iniciativa e o objetivo, não é delas e
+ *  nunca vem. Sem estes ancestrais a árvore começa no meio.
+ *
+ *  Um nível é uma ida ao Jira, não uma por issue: as chaves do nível inteiro
+ *  vão juntas em `key in (...)`. O que já está na lista não é buscado de novo.
+ *
+ *  O papel não se aplica a um ancestral — ele está na lista por causa de uma
+ *  descendente, não por ser de alguém. Quem separa os dois é a árvore, que
+ *  marca estes nós como contexto. */
+export async function fetchAncestors(conn: Connection, items: JiraItem[]): Promise<JiraItem[]> {
+  if (items.length === 0) return [];
+  const auth = jiraAuth(conn);
+
+  const known = new Set(items.map((i) => i.key));
+  const ancestors: JiraItem[] = [];
+  let level: JiraItem[] = items;
+
+  for (let degrau = 0; degrau < ANCESTOR_LEVELS && level.length > 0; degrau += 1) {
+    // As chaves vêm do próprio Jira, mas entram numa JQL: a mesma validação
+    // da lista de acompanhamento vale aqui.
+    const keys = [...new Set(level.map((i) => i.parent?.key ?? ''))]
+      .filter((key) => key && !known.has(key) && isJiraKey(key));
+    if (keys.length === 0) break;
+    for (const key of keys) known.add(key);
+
+    const chunks: string[][] = [];
+    for (let i = 0; i < keys.length; i += ANCESTOR_CHUNK) {
+      chunks.push(keys.slice(i, i + ANCESTOR_CHUNK));
+    }
+
+    const raw = (
+      await Promise.all(
+        chunks.map((lote) => search(auth, `key in (${lote.map((k) => `"${k}"`).join(', ')})`)),
+      )
+    ).flat();
+
+    level = raw.map((issue) => toJiraItem(issue, auth.baseUrl, 'assignee'));
+    ancestors.push(...level);
+  }
+
+  return ancestors;
+}
+
 // A aba de problemas não pode parar na primeira página como as outras: uma
 // filha que ficasse de fora faria o épico dela aparecer como "sem histórias".
 // Então pagina até o fim, com um teto — passar dele é erro dito, não uma

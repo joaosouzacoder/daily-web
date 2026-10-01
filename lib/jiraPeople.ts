@@ -1,7 +1,13 @@
 import type { Connection } from '@/lib/vault/connections';
 import { enabledModules, listConnections } from '@/lib/vault/connections';
 import { panel } from '@/lib/refresher';
-import { fetchIssues, fetchDelivered, fetchApproved, fetchProblems } from '@/lib/integrations/jiraApi';
+import {
+  fetchIssues,
+  fetchDelivered,
+  fetchApproved,
+  fetchProblems,
+  fetchAncestors,
+} from '@/lib/integrations/jiraApi';
 import type { JiraPersonView } from '@/lib/types';
 
 /** A conexão do Jira de quem está logado, ou nula se o módulo está desligado
@@ -21,10 +27,19 @@ export async function fetchPersonView(conn: Connection, accountId: string): Prom
     panel(() => fetchProblems(conn, subject)),
   ]);
 
+  // Mesma segunda rodada do painel do próprio usuário: a árvore da pessoa
+  // acompanhada também começa no objetivo.
+  const ancestors = await fetchAncestors(conn, [
+    ...(jira.data ?? []),
+    ...(delivered.data ?? []),
+    ...(approved.data ?? []),
+  ]).catch(() => []);
+
   return {
     jira,
     delivered,
     approved,
     problems,
+    ancestors,
   };
 }

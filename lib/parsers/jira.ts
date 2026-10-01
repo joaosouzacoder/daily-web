@@ -53,8 +53,14 @@ export function groupByParent(items: JiraItem[]): JiraGroup[] {
 
 export type JiraFilter = 'assignee' | 'reporter' | 'both';
 
+/** Por que a issue está na árvore: ou ela atende ao recorte da aba, ou está
+ *  ali só para ligar o que atende ao topo da hierarquia. O painel conta,
+ *  recorta e marca apenas a primeira; a segunda é caminho. */
+export type JiraNodeOrigin = 'match' | 'ancestor';
+
 export interface JiraNode {
   issue: JiraItem;
+  origin: JiraNodeOrigin;
   children: JiraNode[];
 }
 
@@ -65,34 +71,50 @@ export interface JiraProjectGroup {
 }
 
 function countNode(node: JiraNode): number {
-  return 1 + node.children.reduce((sum, child) => sum + countNode(child), 0);
+  const proprio = node.origin === 'match' ? 1 : 0;
+  return proprio + node.children.reduce((sum, child) => sum + countNode(child), 0);
 }
 
-// Uma lista plana esconde a relação entre iniciativa, épico e história.
-// Aqui cada issue vira um nó sob o seu pai (quando o pai está na lista) e o
-// resultado é separado por projeto — assim PDS, que é chamado de serviço,
-// não se mistura com as histórias de produto.
-export function buildJiraTree(items: JiraItem[]): JiraProjectGroup[] {
-  const byKey = new Map(items.map((i) => [i.key, i]));
-  const nodes = new Map<string, JiraNode>(
-    items.map((i) => [i.key, { issue: i, children: [] }]),
-  );
-  const roots: JiraItem[] = [];
+/** Um ramo só de ancestrais não mostra nada: ele existia para chegar a uma
+ *  issue que o recorte da aba deixou de fora. */
+function hasMatch(node: JiraNode): boolean {
+  return node.origin === 'match' || node.children.some(hasMatch);
+}
 
-  for (const item of items) {
-    const parentKey = item.parent?.key;
-    if (parentKey && parentKey !== item.key && byKey.has(parentKey)) {
-      nodes.get(parentKey)!.children.push(nodes.get(item.key)!);
-    } else {
-      roots.push(item);
-    }
+function pruneNode(node: JiraNode): void {
+  node.children = node.children.filter(hasMatch);
+  for (const child of node.children) pruneNode(child);
+}
+
+// Uma lista plana esconde a relação entre objetivo, iniciativa, épico e
+// história. Aqui cada issue vira um nó sob o seu pai e o resultado é separado
+// por projeto — assim PDS, que é chamado de serviço, não se mistura com as
+// histórias de produto.
+//
+// `ancestors` são os pais que a busca da aba não traz, porque não são de
+// ninguém: sem eles a árvore começaria na história ou no épico, e não no
+// objetivo. Entram como caminho, nunca como item do recorte.
+export function buildJiraTree(items: JiraItem[], ancestors: JiraItem[] = []): JiraProjectGroup[] {
+  const nodes = new Map<string, JiraNode>();
+  // O item do recorte vence o ancestral de mesma chave: o épico que é seu
+  // continua sendo seu, mesmo que outra issue também aponte para ele.
+  for (const issue of ancestors) nodes.set(issue.key, { issue, origin: 'ancestor', children: [] });
+  for (const issue of items) nodes.set(issue.key, { issue, origin: 'match', children: [] });
+
+  const roots: JiraNode[] = [];
+  for (const node of nodes.values()) {
+    const parentKey = node.issue.parent?.key;
+    const parent = parentKey && parentKey !== node.issue.key ? nodes.get(parentKey) : undefined;
+    if (parent) parent.children.push(node);
+    else roots.push(node);
   }
 
   const groups = new Map<string, JiraNode[]>();
-  for (const root of roots) {
-    const list = groups.get(root.project) ?? [];
-    list.push(nodes.get(root.key)!);
-    groups.set(root.project, list);
+  for (const root of roots.filter(hasMatch)) {
+    pruneNode(root);
+    const list = groups.get(root.issue.project) ?? [];
+    list.push(root);
+    groups.set(root.issue.project, list);
   }
 
   return [...groups.entries()]

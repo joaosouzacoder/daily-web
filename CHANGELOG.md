@@ -9,6 +9,10 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Added
+- The Jira tree now starts at the top of the hierarchy. The panel climbs from
+  each issue to its objective, fetching the parents the user's queries never
+  return, and nests objective, initiative, epic and story in one tree. Those
+  context rows are dimmed, open by default, and left out of the project count.
 - An optional Slack module using per-user OAuth: recent mentions and unread
   direct messages appear in their own panel and feed the notification bell
   and desktop alerts. The host configures one Slack app for the instance.
