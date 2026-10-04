@@ -1776,3 +1776,103 @@ describe('soltar numa pasta com mais de uma conta na tela', () => {
     expect(corpo.targets).toEqual([{ account: WORK, id: '20' }]);
   });
 });
+
+describe('agrupamento dos e-mails', () => {
+  const envelope = (id: string, over: Partial<EmailEnvelope>): EmailEnvelope => ({
+    ...items[0],
+    id,
+    messageId: `<g${id}@x>`,
+    subject: `Mensagem ${id}`,
+    unread: false,
+    ...over,
+  });
+
+  // Intercaladas de propósito: na ordem por data, as contas se alternam.
+  const caixaMista: EmailEnvelope[] = [
+    envelope('1', { account: 'mail-1', accountLabel: 'Trabalho', date: '2026-08-25T10:00:00Z' }),
+    envelope('2', { account: 'mail-2', accountLabel: 'Pessoal', date: '2026-08-25T09:00:00Z' }),
+    envelope('3', { account: 'mail-1', accountLabel: 'Trabalho', date: '2026-08-25T08:00:00Z' }),
+  ];
+
+  function montar() {
+    render(
+      <EmailPanel
+        onSeenChanged={() => {}}
+        onRemoved={() => {}}
+        mailboxes={MAILBOXES}
+        email={{ data: caixaMista, error: null }}
+        onChanged={() => {}}
+      />,
+    );
+  }
+
+  const assuntos = (dentro: HTMLElement = document.body) =>
+    within(dentro)
+      .getAllByText(/^Mensagem \d$/, { ignore: SO_VISUAL })
+      .map((el) => el.textContent);
+
+  const agrupar = (valor: string) =>
+    fireEvent.change(screen.getByLabelText('agrupar e-mails'), { target: { value: valor } });
+
+  const marcada = (n: number) =>
+    (screen.getByLabelText(`selecionar Mensagem ${n}`) as HTMLInputElement).checked;
+
+  it('sem escolha, a lista não tem cabeçalho de grupo', () => {
+    montar();
+    expect(screen.queryAllByRole('group')).toHaveLength(0);
+    expect(assuntos()).toEqual(['Mensagem 1', 'Mensagem 2', 'Mensagem 3']);
+  });
+
+  it('agrupa por conta, com o nome de cada grupo', () => {
+    montar();
+    agrupar('account');
+
+    const [trabalho, pessoal] = screen.getAllByRole('group');
+    expect(trabalho).toHaveAccessibleName('Trabalho');
+    expect(pessoal).toHaveAccessibleName('Pessoal');
+    expect(assuntos(trabalho)).toEqual(['Mensagem 1', 'Mensagem 3']);
+    expect(assuntos(pessoal)).toEqual(['Mensagem 2']);
+  });
+
+  // O nome do grupo vem do remetente, e "Milton Yoshida" tem espaço: usado
+  // como id, o espaço partiria a referência do aria-labelledby em duas.
+  it('dá nome ao grupo de remetente com espaço no nome', () => {
+    montar();
+    agrupar('sender');
+    expect(screen.getByRole('group')).toHaveAccessibleName('Milton Yoshida');
+  });
+
+  it('grava a escolha na URL e tira de lá ao voltar para "sem agrupar"', async () => {
+    montar();
+
+    agrupar('sender');
+    await waitFor(() =>
+      expect(new URLSearchParams(window.location.search).get('mail_group')).toBe('sender'),
+    );
+
+    agrupar('none');
+    await waitFor(() =>
+      expect(new URLSearchParams(window.location.search).has('mail_group')).toBe(false),
+    );
+  });
+
+  it('abre já agrupado quando o link traz o agrupamento', () => {
+    window.history.replaceState(null, '', '/?mail_group=account');
+    montar();
+    expect(screen.getAllByRole('group')).toHaveLength(2);
+  });
+
+  // A faixa do Shift é a da tela: com grupos, quem está entre as duas
+  // marcadas na vista é quem entra, não quem estaria entre elas por data.
+  it('o Shift+clique marca a faixa na ordem dos grupos', () => {
+    montar();
+    agrupar('account');
+
+    fireEvent.click(screen.getByLabelText('selecionar Mensagem 1'));
+    fireEvent.click(screen.getByLabelText('selecionar Mensagem 3'), { shiftKey: true });
+
+    expect(marcada(1)).toBe(true);
+    expect(marcada(3)).toBe(true);
+    expect(marcada(2)).toBe(false);
+  });
+});

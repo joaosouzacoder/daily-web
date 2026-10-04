@@ -6,6 +6,8 @@
  * Os nomes são prefixados porque o painel divide a URL com o resto do quadro.
  */
 
+import { parseEmailGroupBy, type EmailGroupBy } from '@/lib/emailGroups';
+
 export type EmailSort = 'recent' | 'oldest';
 
 export interface EmailViewState {
@@ -20,6 +22,7 @@ export interface EmailViewState {
   /** Id da conta, ou vazio para todas. */
   account: string;
   sort: EmailSort;
+  group: EmailGroupBy;
   /** Mensagem aberta, na forma "conta:uid". */
   open: string;
   maximized: boolean;
@@ -32,6 +35,7 @@ export const DEFAULT_EMAIL_VIEW: EmailViewState = {
   onlyUnread: false,
   account: '',
   sort: 'recent',
+  group: 'none',
   open: '',
   maximized: false,
 };
@@ -44,6 +48,7 @@ const KEYS = {
   onlyUnread: `${PREFIX}unread`,
   account: `${PREFIX}account`,
   sort: `${PREFIX}sort`,
+  group: `${PREFIX}group`,
   open: `${PREFIX}open`,
   maximized: `${PREFIX}max`,
 } as const;
@@ -66,6 +71,7 @@ export function parseEmailView(params: URLSearchParams): EmailViewState {
     onlyUnread: params.get(KEYS.onlyUnread) === '1',
     account: text(params.get(KEYS.account)),
     sort: sort === 'oldest' ? 'oldest' : 'recent',
+    group: parseEmailGroupBy(params.get(KEYS.group)),
     open: text(params.get(KEYS.open)),
     maximized: params.get(KEYS.maximized) === '1',
   };
@@ -91,6 +97,7 @@ export function emailViewToParams(
   put(KEYS.onlyUnread, view.onlyUnread ? '1' : '0', '0');
   put(KEYS.account, view.account, DEFAULT_EMAIL_VIEW.account);
   put(KEYS.sort, view.sort, DEFAULT_EMAIL_VIEW.sort);
+  put(KEYS.group, view.group, DEFAULT_EMAIL_VIEW.group);
   put(KEYS.open, view.open, DEFAULT_EMAIL_VIEW.open);
   put(KEYS.maximized, view.maximized ? '1' : '0', '0');
   return params;
