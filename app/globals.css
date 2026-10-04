@@ -325,14 +325,123 @@
   --mesh-5: transparent;
 }
 
+/* Catppuccin Mocha. The dark theme takes the whole palette, not only the
+   page base: every semantic color derives from the primitives remapped below,
+   so cards, text, borders, the accent (Mauve) and the status colors all follow.
+   The palette is declared once; the mapping is written twice for the same
+   reason the dark theme is (system preference and explicit choice). */
+:root[data-backdrop='catppuccin'] {
+  --ctp-crust: oklch(0.183 0.02 284.204); /* #11111b */
+  --ctp-mantle: oklch(0.216 0.025 284.065); /* #181825 */
+  --ctp-base: oklch(0.243 0.03 283.911); /* #1e1e2e */
+  --ctp-surface0: oklch(0.324 0.032 281.978); /* #313244 */
+  --ctp-surface1: oklch(0.404 0.032 280.152); /* #45475a */
+  --ctp-surface2: oklch(0.477 0.034 278.643); /* #585b70 */
+  --ctp-overlay0: oklch(0.55 0.034 277.095); /* #6c7086 */
+  --ctp-subtext0: oklch(0.751 0.04 273.932); /* #a6adc8 */
+  --ctp-subtext1: oklch(0.817 0.04 272.862); /* #bac2de */
+  --ctp-text: oklch(0.879 0.043 272.277); /* #cdd6f4 */
+  --ctp-mauve: oklch(0.787 0.119 304.769); /* #cba6f7 */
+  --ctp-pink: oklch(0.87 0.075 336.304); /* #f5c2e7 */
+  --ctp-red: oklch(0.756 0.13 2.764); /* #f38ba8 */
+  --ctp-yellow: oklch(0.919 0.07 86.528); /* #f9e2af */
+  --ctp-green: oklch(0.858 0.109 142.715); /* #a6e3a1 */
+  --ctp-teal: oklch(0.858 0.079 182.75); /* #94e2d5 */
+  --ctp-blue: oklch(0.766 0.111 259.885); /* #89b4fa */
+}
+
 @media (prefers-color-scheme: dark) {
   :root[data-backdrop='catppuccin']:not(.light) {
-    --mesh-base: oklch(0.279 0.035 276.9); /* Catppuccin Macchiato base, #24273a */
+    --surface-0: var(--ctp-base);
+    --surface-1: var(--ctp-mantle);
+    --surface-2: var(--ctp-surface0);
+    --surface-3: var(--ctp-surface1);
+    --surface-4: var(--ctp-surface2);
+    --surface-5: var(--ctp-overlay0);
+    --mesh-base: var(--ctp-base);
+
+    --ink: var(--ctp-text);
+    --ink-mid: var(--ctp-subtext1);
+    --ink-dim: var(--ctp-subtext0);
+
+    --line: var(--ctp-surface1);
+    --line-soft: var(--ctp-surface0);
+    --line-strong: var(--ctp-overlay0);
+    --glass-line: oklch(0.404 0.032 280.152 / 70%);
+
+    --brand: var(--ctp-mauve);
+    --brand-ink: var(--ctp-crust);
+    --brand-tint: oklch(0.787 0.119 304.769 / 14%);
+    --brand-edge: oklch(0.787 0.119 304.769 / 45%);
+
+    --signal-success: var(--ctp-green);
+    --signal-warning: var(--ctp-yellow);
+    --signal-danger: var(--ctp-red);
+    --signal-info: var(--ctp-blue);
+    --signal-success-tint: oklch(0.858 0.109 142.715 / 16%);
+    --signal-warning-tint: oklch(0.919 0.07 86.528 / 16%);
+    --signal-danger-tint: oklch(0.756 0.13 2.764 / 16%);
+    --signal-info-tint: oklch(0.766 0.111 259.885 / 16%);
+    --signal-neutral-tint: oklch(0.687 0.037 274.725 / 16%);
+
+    --secondary: var(--ctp-text);
+    --secondary-foreground: var(--ctp-base);
+    --muted: var(--ctp-surface0);
+    --accent: var(--ctp-surface1);
+    --destructive-foreground: var(--ctp-crust);
+    --input: var(--ctp-surface1);
+
+    --chart-2: var(--ctp-blue);
+    --chart-3: var(--ctp-yellow);
+    --chart-4: var(--ctp-pink);
+    --chart-5: var(--ctp-teal);
   }
 }
 
 :root.dark[data-backdrop='catppuccin'] {
-  --mesh-base: oklch(0.279 0.035 276.9); /* Catppuccin Macchiato base, #24273a */
+  --surface-0: var(--ctp-base);
+  --surface-1: var(--ctp-mantle);
+  --surface-2: var(--ctp-surface0);
+  --surface-3: var(--ctp-surface1);
+  --surface-4: var(--ctp-surface2);
+  --surface-5: var(--ctp-overlay0);
+  --mesh-base: var(--ctp-base);
+
+  --ink: var(--ctp-text);
+  --ink-mid: var(--ctp-subtext1);
+  --ink-dim: var(--ctp-subtext0);
+
+  --line: var(--ctp-surface1);
+  --line-soft: var(--ctp-surface0);
+  --line-strong: var(--ctp-overlay0);
+  --glass-line: oklch(0.404 0.032 280.152 / 70%);
+
+  --brand: var(--ctp-mauve);
+  --brand-ink: var(--ctp-crust);
+  --brand-tint: oklch(0.787 0.119 304.769 / 14%);
+  --brand-edge: oklch(0.787 0.119 304.769 / 45%);
+
+  --signal-success: var(--ctp-green);
+  --signal-warning: var(--ctp-yellow);
+  --signal-danger: var(--ctp-red);
+  --signal-info: var(--ctp-blue);
+  --signal-success-tint: oklch(0.858 0.109 142.715 / 16%);
+  --signal-warning-tint: oklch(0.919 0.07 86.528 / 16%);
+  --signal-danger-tint: oklch(0.756 0.13 2.764 / 16%);
+  --signal-info-tint: oklch(0.766 0.111 259.885 / 16%);
+  --signal-neutral-tint: oklch(0.687 0.037 274.725 / 16%);
+
+  --secondary: var(--ctp-text);
+  --secondary-foreground: var(--ctp-base);
+  --muted: var(--ctp-surface0);
+  --accent: var(--ctp-surface1);
+  --destructive-foreground: var(--ctp-crust);
+  --input: var(--ctp-surface1);
+
+  --chart-2: var(--ctp-blue);
+  --chart-3: var(--ctp-yellow);
+  --chart-4: var(--ctp-pink);
+  --chart-5: var(--ctp-teal);
 }
 
 @theme inline {
