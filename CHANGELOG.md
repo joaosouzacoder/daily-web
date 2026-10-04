@@ -48,6 +48,11 @@ Only `main` is maintained; there are no release branches.
   fix.
 
 ### Changed
+- In the dark theme, the Catppuccin choice is now the full Mocha palette
+  instead of only a Macchiato page base: background and sidebar (Base,
+  Mantle), raised surfaces (Surface 0–2), text (Text, Subtext 1/0), borders,
+  the accent (Mauve, with Crust text on it) and the status colors (Green,
+  Yellow, Red, Blue). The light theme keeps the flat Latte base.
 - The gradient is the default page background again. The Catppuccin base is
   no longer applied to everyone; it is opt-in through the new choice.
 
