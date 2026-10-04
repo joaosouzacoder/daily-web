@@ -200,6 +200,51 @@ describe('a intenção é confirmada ou falha em definitivo', () => {
       expect.objectContaining({ id: '1', actionError: expect.stringContaining('recusou') }),
     ]);
   });
+
+  // A exclusão que desistiu continua sendo o que o usuário pediu. Quando a
+  // mensagem enfim some do retrato, o pedido está cumprido: a linha de erro
+  // não pode ficar na fila para sempre.
+  it('esquece a exclusão que tinha desistido quando a mensagem some do retrato', async () => {
+    vi.mocked(loadInbox).mockResolvedValue([envelope(), envelope({ id: '2', messageId: '<b@b>' })] as never);
+    const { refreshAll } = await import('@/lib/refresher');
+    await refreshAll(ME.id);
+
+    vi.mocked(deleteEmails).mockRejectedValue(new Error('caixa recusou a conexão'));
+    await batchRoute(req({ targets: [{ account: mailId, id: '1' }], action: 'delete' }));
+    const { replayPendingActions } = await import('@/lib/email/replay');
+    const { listConnections } = await import('@/lib/vault/connections');
+    const conns = listConnections(ME.id, 'email');
+    for (let i = 0; i < 10; i += 1) {
+      await replayPendingActions(ME.id, conns, new Date(Date.now() + i * 3_600_000));
+    }
+    const { listPendingActions } = await import('@/lib/email/pendingActions');
+    expect(listPendingActions(ME.id)).toEqual([expect.objectContaining({ state: 'failed' })]);
+
+    vi.mocked(loadInbox).mockResolvedValue([envelope({ id: '2', messageId: '<b@b>' })] as never);
+    await refreshAll(ME.id);
+
+    expect(listPendingActions(ME.id)).toEqual([]);
+    expect(await emailsNoCache()).toEqual([expect.objectContaining({ id: '2' })]);
+  });
+
+  it('mantém a exclusão que desistiu enquanto a mensagem continua no retrato', async () => {
+    vi.mocked(loadInbox).mockResolvedValue([envelope()] as never);
+    const { refreshAll } = await import('@/lib/refresher');
+    await refreshAll(ME.id);
+
+    vi.mocked(deleteEmails).mockRejectedValue(new Error('caixa recusou a conexão'));
+    await batchRoute(req({ targets: [{ account: mailId, id: '1' }], action: 'delete' }));
+    const { replayPendingActions } = await import('@/lib/email/replay');
+    const { listConnections } = await import('@/lib/vault/connections');
+    const conns = listConnections(ME.id, 'email');
+    for (let i = 0; i < 10; i += 1) {
+      await replayPendingActions(ME.id, conns, new Date(Date.now() + i * 3_600_000));
+    }
+    await refreshAll(ME.id);
+
+    const { listPendingActions } = await import('@/lib/email/pendingActions');
+    expect(listPendingActions(ME.id)).toEqual([expect.objectContaining({ state: 'failed' })]);
+  });
 });
 
 describe('uma conexão IMAP por conta de cada vez', () => {

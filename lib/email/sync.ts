@@ -12,6 +12,7 @@ import {
   applyFlagWindow,
   dropFolderMessages,
   listStoredMessages,
+  oldestStoredUid,
   pruneFolder,
   putMessages,
 } from './messages';
@@ -60,6 +61,17 @@ export function folderCursor(userId: string, connection: Connection, folder: str
   return conhecido && ultimoUid > 0 ? String(ultimoUid) : null;
 }
 
+/** O uid mais antigo que o banco guarda desta pasta, para a reconferência
+ *  descer até ele. Nulo quando a pasta nunca foi lida. */
+export function oldestKnownUid(
+  userId: string,
+  connection: Connection,
+  folder: string,
+): number | null {
+  const conhecido = getMailboxUidValidity(userId, connection.id, folder);
+  return conhecido ? oldestStoredUid(userId, connection.id, folder, conhecido) : null;
+}
+
 export async function syncFolder(
   userId: string,
   connection: Connection,
@@ -67,7 +79,14 @@ export async function syncFolder(
   limit: number = INITIAL_LIMIT,
 ): Promise<SyncResult> {
   const desde = folderCursor(userId, connection, folder);
-  const mudancas = await fetchFolderChanges(connection, folder, desde, FLAG_WINDOW, limit);
+  const mudancas = await fetchFolderChanges(
+    connection,
+    folder,
+    desde,
+    FLAG_WINDOW,
+    limit,
+    oldestKnownUid(userId, connection, folder),
+  );
   return applyFolderChanges(userId, connection, folder, limit, mudancas);
 }
 
@@ -130,7 +149,7 @@ async function recarregar(
   folder: string,
   limit: number,
 ): Promise<SyncResult> {
-  const mudancas = await fetchFolderChanges(connection, folder, null, FLAG_WINDOW, limit);
+  const mudancas = await fetchFolderChanges(connection, folder, null, FLAG_WINDOW, limit, null);
   putMessages(userId, mudancas.uidvalidity, mudancas.added);
   const maiorUid = mudancas.added.reduce((maior, e) => Math.max(maior, Number(e.id)), 0);
   setMailboxUidValidity(userId, connection.id, folder, mudancas.uidvalidity);

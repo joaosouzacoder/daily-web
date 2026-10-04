@@ -567,6 +567,24 @@ export interface FolderChanges {
 }
 
 /**
+ * Onde a reconferência de flags começa. A janela recente sozinha não basta:
+ * no Gmail a numeração da entrada é esparsa, e quem arquiva muito guarda
+ * mensagens bem abaixo de `uidNext - windowSize`. Sem descer até a mais antiga
+ * guardada, a que foi apagada nunca é perguntada, nunca sai do banco, e a
+ * exclusão parece não ter pegado. O custo segue limitado: o servidor só
+ * devolve as que existem na faixa, e o banco guarda um teto por pasta.
+ */
+export function flagWindowStart(
+  uidNext: number,
+  windowSize: number,
+  oldestKnownUid: number | null,
+): number {
+  const recente = uidNext - windowSize;
+  const inicio = oldestKnownUid === null ? recente : Math.min(recente, oldestKnownUid);
+  return Math.max(inicio, 1);
+}
+
+/**
  * O que mudou na pasta desde a última vez, numa conexão só.
  *
  * São dois comandos: um traz as mensagens novas a partir do último uid
@@ -579,8 +597,11 @@ export async function fetchFolderChanges(
   sinceUid: string | null,
   windowSize: number,
   limit: number,
+  oldestKnownUid: number | null,
 ): Promise<FolderChanges> {
-  return withClient(conn, (client) => changesIn(client, conn, path, sinceUid, windowSize, limit));
+  return withClient(conn, (client) =>
+    changesIn(client, conn, path, sinceUid, windowSize, limit, oldestKnownUid),
+  );
 }
 
 export interface InboxSnapshot {
@@ -600,9 +621,18 @@ export async function fetchInboxAndSent(
   sinceUid: string | null,
   windowSize: number,
   limit: number,
+  oldestKnownUid: number | null,
 ): Promise<InboxSnapshot> {
   return withClient(conn, async (client) => {
-    const changes = await changesIn(client, conn, INBOX_PATH, sinceUid, windowSize, limit);
+    const changes = await changesIn(
+      client,
+      conn,
+      INBOX_PATH,
+      sinceUid,
+      windowSize,
+      limit,
+      oldestKnownUid,
+    );
     // Uma pasta de enviados que não existe ou não abre não pode derrubar a
     // caixa de entrada: sem ela a conversa fica incompleta, sem a entrada não
     // há painel nenhum.
@@ -618,6 +648,7 @@ async function changesIn(
   sinceUid: string | null,
   windowSize: number,
   limit: number,
+  oldestKnownUid: number | null,
 ): Promise<FolderChanges> {
   const enviados = findSpecialUse(await client.list(), '\\Sent');
   const kind: MailboxKind = path === enviados ? 'sent' : 'inbox';
@@ -646,7 +677,7 @@ async function changesIn(
     // A janela é de uid, não de quantidade: é o que o servidor sabe contar
     // num comando só. Fora dela nada é concluído, para uma mensagem antiga
     // não sumir da lista por não ter sido perguntada.
-    const inicioJanela = Math.max(proximoUid - windowSize, 1);
+    const inicioJanela = flagWindowStart(proximoUid, windowSize, oldestKnownUid);
     const flags: FolderFlags[] = [];
     for await (const message of client.fetch(
       `${inicioJanela}:*`,

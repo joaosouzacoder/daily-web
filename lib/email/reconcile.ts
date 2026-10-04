@@ -116,11 +116,25 @@ export function confirmAgainstSnapshot(
   }
 
   for (const acao of pending) {
-    if (acao.userId !== userId || acao.state !== 'pending' || acao.appliedAt === null) continue;
-    if (new Date(acao.appliedAt) > snapshotStartedAt) continue;
+    if (acao.userId !== userId) continue;
 
     const envelope = doRetrato.get(chave(acao.account, acao.mailbox, acao.uid));
     const pasta = daPasta(acao.account, acao.mailbox);
+
+    // A que desistiu continua sendo o que o usuário pediu. Se a mensagem saiu
+    // da pasta mesmo assim — a escrita pegou e só a conferência atrasou, ou
+    // outro cliente a apagou —, o pedido está cumprido e o erro não tem mais
+    // o que apontar.
+    if (acao.state === 'failed') {
+      const saiDaPasta = acao.kind === 'delete' || acao.kind === 'move';
+      if (saiDaPasta && pastasNoRetrato.has(pasta) && envelope === undefined) {
+        confirmPendingAction(acao.id);
+      }
+      continue;
+    }
+
+    if (acao.state !== 'pending' || acao.appliedAt === null) continue;
+    if (new Date(acao.appliedAt) > snapshotStartedAt) continue;
 
     let concorda: boolean;
     if (acao.kind === 'read_folder') {

@@ -57,6 +57,13 @@ Only `main` is maintained; there are no release branches.
   no longer applied to everyone; it is opt-in through the new choice.
 
 ### Fixed
+- Deleting or moving an older e-mail no longer comes back as "o servidor ainda
+  não refletiu esta ação". The flag re-check only covered the last 200 UIDs,
+  and Gmail numbers the inbox sparsely, so a message stored below that window
+  was never re-checked: the delete worked on the server, the stored copy
+  stayed, and every confirmation disagreed until the action gave up. The
+  re-check now reaches down to the oldest stored message, and a delete or move
+  that had given up is cleared once its message is gone.
 - On narrow screens each e-mail row keeps only the checkbox and the subject on
   its first line; sender, message count, time, mailbox and the "⋮" menu move to
   a second line aligned with the subject. The row no longer squeezes the
