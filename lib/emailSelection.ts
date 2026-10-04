@@ -24,6 +24,14 @@ export type SelectionEvent =
   | { type: 'toggle'; id: string }
   | { type: 'move'; direction: 1 | -1; extend?: boolean }
   | { type: 'all' }
+  /** O checkbox do cabeçalho de um grupo: grupo inteiro marcado desmarca,
+   *  qualquer outro caso marca o grupo todo. O resto da seleção fica. */
+  | { type: 'group'; ids: string[] }
+  /** Botão direito numa linha. Dentro da seleção, ela fica como está e o menu
+   *  vale para todas; fora, a linha passa a ser a seleção, como no
+   *  gerenciador de arquivos — agir sobre outras que nem foram clicadas seria
+   *  surpresa. */
+  | { type: 'context'; id: string }
   | { type: 'clear' }
   /** A lista mudou: o que não está mais nela sai da seleção. */
   | { type: 'sync' };
@@ -98,6 +106,23 @@ export function selectionReducer(
 
     case 'all':
       return { selected: [...ordem], anchor: ordem[0] ?? null, cursor: ordem.at(-1) ?? null };
+
+    case 'group': {
+      const naLista = new Set(ordem);
+      const doGrupo = event.ids.filter((id) => naLista.has(id));
+      if (doGrupo.length === 0) return state;
+      const atual = new Set(state.selected);
+      const inteiro = doGrupo.every((id) => atual.has(id));
+      for (const id of doGrupo) {
+        if (inteiro) atual.delete(id);
+        else atual.add(id);
+      }
+      return { selected: naOrdem(atual, ordem), anchor: doGrupo[0], cursor: doGrupo[0] };
+    }
+
+    case 'context':
+      if (state.selected.includes(event.id)) return state;
+      return { selected: [event.id], anchor: event.id, cursor: event.id };
 
     case 'clear':
       return EMPTY_SELECTION;

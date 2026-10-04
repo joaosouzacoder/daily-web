@@ -49,6 +49,7 @@ import {
   EMAIL_GROUP_LABEL,
   groupThreads,
   type EmailGroupBy,
+  type EmailThreadGroup,
 } from '@/lib/emailGroups';
 import { Section } from './ui/Section';
 import { FilterBar } from './ui/FilterBar';
@@ -77,6 +78,17 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 
 interface Props {
   email: PanelResult<EmailEnvelope[]>;
@@ -878,6 +890,56 @@ export function EmailPanel({
 
   const openMessageData = all.find((m) => key(m) === openKey) ?? null;
 
+  // O mesmo lote da barra de ações, no botão direito. A linha clicada já
+  // entrou na seleção pelo evento `context`, então tudo aqui vale para o que
+  // está marcado.
+  const menuDoLote = (grupo: EmailThreadGroup) => {
+    const idsDoGrupo = grupo.threads.map((t) => t.id);
+    const grupoInteiro = idsDoGrupo.every((id) => selecionadas.has(id));
+    return (
+      <ContextMenuContent className="w-64">
+        <ContextMenuLabel>
+          {sel.selected.length} {sel.selected.length === 1 ? 'conversa' : 'conversas'}
+        </ContextMenuLabel>
+        <ContextMenuItem onSelect={() => void executarLote('read')}>
+          <MailOpen />
+          Marcar lido
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => void executarLote('unread')}>
+          <Mail />
+          Marcar não lido
+        </ContextMenuItem>
+        <ContextMenuSub>
+          <ContextMenuSubTrigger disabled={folders.length === 0}>
+            <FolderInput />
+            Mover para
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent className="max-h-80 overflow-y-auto">
+            {folders.map((folder) => (
+              <ContextMenuItem key={folder} onSelect={() => void executarLote('move', folder)}>
+                {folder}
+              </ContextMenuItem>
+            ))}
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+        <ContextMenuSeparator />
+        {groupBy !== 'none' && !grupoInteiro && (
+          <ContextMenuItem onSelect={() => despachar({ type: 'group', ids: idsDoGrupo })}>
+            Selecionar todo o grupo {grupo.label}
+          </ContextMenuItem>
+        )}
+        <ContextMenuItem onSelect={() => despachar({ type: 'clear' })}>
+          Limpar seleção
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem variant="destructive" onSelect={() => void confirmarExclusaoEmLote()}>
+          <Trash2 />
+          Excluir
+        </ContextMenuItem>
+      </ContextMenuContent>
+    );
+  };
+
   const acoesEmLote =
     sel.selected.length > 0 ? (
       <>
@@ -1247,220 +1309,226 @@ export function EmailPanel({
                         : undefined
                     }
                   >
-                    <div
-                      className={cn(
-                        // `row` and `row-unread` stay as behavioural markers: the suite
-                        // reads the unread state of a conversation off this element.
-                        // Em tela estreita a linha quebra: só checkbox e título ficam
-                        // em cima, e o resto desce para a segunda linha.
-                        'row flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line-soft px-2 py-3 transition-colors duration-100 ease-brand even:bg-muted/25 motion-reduce:transition-none lg:flex-nowrap lg:gap-3',
-                        isOpen ? 'bg-brand-tint' : 'hover:bg-brand-tint',
-                        thread.unreadCount > 0 && 'row-unread',
-                        marcada && 'bg-brand-tint/70',
-                        // Onde o teclado está, para a seta não andar às cegas.
-                        cursorAqui && 'ring-1 ring-inset ring-brand-edge',
-                        noMaco && 'opacity-70 shadow-e2',
-                      )}
-                      // O arraste vive na linha, não na `<li>`: se subisse para
-                      // ela, o e-mail aberto embaixo herdaria o `draggable` e o
-                      // navegador passaria a tratar toda seleção de texto ali
-                      // como o início de um arraste, em vez de selecionar.
-                      draggable
-                      onDragStart={(e) => aoComecarArraste(thread, e)}
-                      onDragEnd={aoTerminarArraste}
-                    >
-                      <span
-                        aria-hidden
-                        className={cn(
-                          'size-1.5 shrink-0 rounded-full',
-                          thread.unreadCount > 0 ? 'bg-brand' : 'bg-transparent',
-                        )}
-                      />
-                      <input
-                        type="checkbox"
-                        className={cn('size-4 shrink-0 accent-brand', focusRing)}
-                        checked={marcada}
-                        onChange={() => {}}
-                        // O checkbox nativo não conta se o Shift estava
-                        // pressionado no `change`; o clique, sim.
-                        onClick={(e) => aoMarcar(thread, e)}
-                        aria-label={`selecionar ${titulo}`}
-                      />
-                      <button
-                        type="button"
-                        className={cn(
-                          'flex min-w-0 flex-1 cursor-pointer flex-col items-start gap-0.5 rounded-sm text-left',
-                          focusRing,
-                        )}
-                        aria-expanded={isOpen}
-                        onClick={(e) => {
-                          // Com modificador o clique é seleção; sem ele, a linha
-                          // abre a mensagem como sempre abriu.
-                          if (e.shiftKey || e.metaKey || e.ctrlKey) {
-                            aoClicarNaLinha(thread, e);
-                            return;
-                          }
-                          if (sozinha) {
-                            setOpenKey(isOpen ? null : key(sozinha));
-                            if (!isOpen) void loadTagFolders(sozinha.account);
-                            return;
-                          }
-                          setExpanded((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(thread.id)) next.delete(thread.id);
-                            else next.add(thread.id);
-                            return next;
-                          });
-                          void loadTagFolders(thread.messages[0].account);
-                        }}
-                      >
-                        <span
+                    <ContextMenu>
+                      <ContextMenuTrigger asChild>
+                        <div
                           className={cn(
-                            'w-full truncate',
-                            thread.unreadCount > 0 ? 'font-medium text-ink' : 'text-ink-mid',
+                            // `row` and `row-unread` stay as behavioural markers: the suite
+                            // reads the unread state of a conversation off this element.
+                            // Em tela estreita a linha quebra: só checkbox e título ficam
+                            // em cima, e o resto desce para a segunda linha.
+                            'row flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line-soft px-2 py-3 transition-colors duration-100 ease-brand even:bg-muted/25 motion-reduce:transition-none lg:flex-nowrap lg:gap-3',
+                            isOpen ? 'bg-brand-tint' : 'hover:bg-brand-tint',
+                            thread.unreadCount > 0 && 'row-unread',
+                            marcada && 'bg-brand-tint/70',
+                            // Onde o teclado está, para a seta não andar às cegas.
+                            cursorAqui && 'ring-1 ring-inset ring-brand-edge',
+                            noMaco && 'opacity-70 shadow-e2',
                           )}
+                          // O arraste vive na linha, não na `<li>`: se subisse para
+                          // ela, o e-mail aberto embaixo herdaria o `draggable` e o
+                          // navegador passaria a tratar toda seleção de texto ali
+                          // como o início de um arraste, em vez de selecionar.
+                          draggable
+                          onDragStart={(e) => aoComecarArraste(thread, e)}
+                          onDragEnd={aoTerminarArraste}
+                          onContextMenu={() => despachar({ type: 'context', id: thread.id })}
                         >
-                          {titulo}
-                        </span>
-                        <span className="hidden w-full truncate type-caption text-ink-dim lg:block">
-                          {thread.participants.join(', ') || EM_DASH}
-                        </span>
-                        {acaoComErro && (
-                          <span role="alert" className="w-full truncate type-caption text-danger">
-                            {acaoComErro}
-                          </span>
-                        )}
-                      </button>
-                      {/* A segunda linha do celular, alinhada ao título. No desktop
-                          o invólucro some (`contents`) e cada item volta a ser
-                          vizinho do título na mesma linha. */}
-                      <div className="flex w-full min-w-0 items-center gap-2 pl-[2.875rem] lg:contents">
-                        {/* Os participantes já aparecem sob o título no desktop; esta
-                            cópia é só da linha de baixo, e o leitor de tela não a lê
-                            duas vezes. */}
-                        <span
-                          aria-hidden
-                          className="min-w-0 flex-1 truncate type-caption text-ink-dim lg:hidden"
-                        >
-                          {thread.participants.join(', ') || EM_DASH}
-                        </span>
-                        {thread.messages.length > 1 && (
                           <span
+                            aria-hidden
                             className={cn(
-                              'shrink-0 rounded-full border px-1.5 type-caption leading-relaxed',
-                              tabular,
-                              thread.unreadCount > 0
-                                ? 'border-brand-edge bg-brand-tint text-brand'
-                                : 'border-line-strong bg-neutral-tint text-ink-dim',
+                              'size-1.5 shrink-0 rounded-full',
+                              thread.unreadCount > 0 ? 'bg-brand' : 'bg-transparent',
                             )}
-                            aria-label={
-                              enviadas > 0
-                                ? `${thread.messages.length} mensagens, ${enviadas} enviadas por você`
-                                : `${thread.messages.length} mensagens`
-                            }
-                          >
-                            {thread.messages.length}
-                          </span>
-                        )}
-                        <span
-                          className={cn(
-                            'min-w-[3.5ch] shrink-0 text-right type-caption text-ink-dim',
-                            tabular,
-                          )}
-                        >
-                          {relativeTime(thread.lastDate) || EM_DASH}
-                        </span>
-                        {mailboxes.length > 1 && (
-                          <Badge variant="secondary" className="shrink-0">
-                            {thread.messages[0].accountLabel ?? EM_DASH}
-                          </Badge>
-                        )}
-                        <div className="flex shrink-0 items-center gap-0.5">
-                          <div className="hidden items-center gap-0.5 lg:flex">
-                            <div className="relative flex">
-                              <button
-                                type="button"
-                                // `is-tagged` stays as a behavioural marker: the suite reads
-                                // whether a conversation already carries a label off it.
-                                className={cn(
-                                  iconButtonClass,
-                                  tags.length > 0 && 'is-tagged text-brand',
-                                )}
-                                aria-label={`etiquetar ${titulo}`}
-                                aria-expanded={tagMenuKey === thread.id}
-                                onClick={() => {
-                                  const next = tagMenuKey === thread.id ? null : thread.id;
-                                  setTagMenuKey(next);
-                                  if (next) void loadTagFolders(thread.messages[0].account);
-                                }}
-                              >
-                                <Label width={16} height={16} />
-                              </button>
-                              {tagMenuKey === thread.id && (
-                                <>
-                                  <div
-                                    className="fixed inset-0 z-40"
-                                    onClick={() => setTagMenuKey(null)}
-                                  />
-                                  <div
-                                    className="absolute top-full right-0 z-50 mt-2 flex max-h-80 min-w-45 flex-col overflow-y-auto rounded-xl border border-line-strong bg-surface-4 p-2 shadow-e4"
-                                    role="menu"
-                                    aria-label="etiquetas"
-                                  >
-                                    {(tagFolders[thread.messages[0].account] ?? []).length === 0 ? (
-                                      <p className="px-3 py-2 text-sm text-ink-dim">
-                                        Carregando etiquetas…
-                                      </p>
-                                    ) : (
-                                      (tagFolders[thread.messages[0].account] ?? []).map((f) => (
-                                        <button
-                                          key={f}
-                                          type="button"
-                                          role="menuitem"
-                                          className={cn(
-                                            'rounded-md px-3 py-2 text-left text-sm text-ink-mid transition-colors duration-100 ease-brand hover:bg-brand-tint hover:text-ink motion-reduce:transition-none',
-                                            focusRing,
-                                          )}
-                                          onClick={() => void applyTagToThread(thread, f)}
-                                        >
-                                          {f}
-                                        </button>
-                                      ))
-                                    )}
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                            <button
-                              type="button"
-                              className={cn(iconButtonClass, 'hover:border-danger/40 hover:text-danger')}
-                              aria-label={`excluir ${titulo}`}
-                              onClick={() => void removeThread(thread)}
-                            >
-                              <Trash width={16} height={16} />
-                            </button>
-                          </div>
-                          {/* A conversa vira nota ou tarefa a partir da mensagem
-                              recebida mais recente, que é a que se está olhando. */}
-                          <CreateFromEmailMenu
-                            subject={titulo}
-                            folders={noteFolders}
-                            busy={criando !== null}
-                            onOpen={() => void carregarPastasDeNota()}
-                            narrow={{
-                              tagFolders: tagFolders[thread.messages[0].account] ?? [],
-                              onOpenTags: () => void loadTagFolders(thread.messages[0].account),
-                              onTag: (folder) => void applyTagToThread(thread, folder),
-                              onDelete: () => void removeThread(thread),
-                            }}
-                            onCreate={(kind, folderId) => {
-                              const alvo = recebidas(thread).at(-1) ?? thread.messages[0];
-                              void criarDoEmail(alvo, kind, folderId);
-                            }}
                           />
+                          <input
+                            type="checkbox"
+                            className={cn('size-4 shrink-0 accent-brand', focusRing)}
+                            checked={marcada}
+                            onChange={() => {}}
+                            // O checkbox nativo não conta se o Shift estava
+                            // pressionado no `change`; o clique, sim.
+                            onClick={(e) => aoMarcar(thread, e)}
+                            aria-label={`selecionar ${titulo}`}
+                          />
+                          <button
+                            type="button"
+                            className={cn(
+                              'flex min-w-0 flex-1 cursor-pointer flex-col items-start gap-0.5 rounded-sm text-left',
+                              focusRing,
+                            )}
+                            aria-expanded={isOpen}
+                            onClick={(e) => {
+                              // Com modificador o clique é seleção; sem ele, a linha
+                              // abre a mensagem como sempre abriu.
+                              if (e.shiftKey || e.metaKey || e.ctrlKey) {
+                                aoClicarNaLinha(thread, e);
+                                return;
+                              }
+                              if (sozinha) {
+                                setOpenKey(isOpen ? null : key(sozinha));
+                                if (!isOpen) void loadTagFolders(sozinha.account);
+                                return;
+                              }
+                              setExpanded((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(thread.id)) next.delete(thread.id);
+                                else next.add(thread.id);
+                                return next;
+                              });
+                              void loadTagFolders(thread.messages[0].account);
+                            }}
+                          >
+                            <span
+                              className={cn(
+                                'w-full truncate',
+                                thread.unreadCount > 0 ? 'font-medium text-ink' : 'text-ink-mid',
+                              )}
+                            >
+                              {titulo}
+                            </span>
+                            <span className="hidden w-full truncate type-caption text-ink-dim lg:block">
+                              {thread.participants.join(', ') || EM_DASH}
+                            </span>
+                            {acaoComErro && (
+                              <span role="alert" className="w-full truncate type-caption text-danger">
+                                {acaoComErro}
+                              </span>
+                            )}
+                          </button>
+                          {/* A segunda linha do celular, alinhada ao título. No desktop
+                              o invólucro some (`contents`) e cada item volta a ser
+                              vizinho do título na mesma linha. */}
+                          <div className="flex w-full min-w-0 items-center gap-2 pl-[2.875rem] lg:contents">
+                            {/* Os participantes já aparecem sob o título no desktop; esta
+                                cópia é só da linha de baixo, e o leitor de tela não a lê
+                                duas vezes. */}
+                            <span
+                              aria-hidden
+                              className="min-w-0 flex-1 truncate type-caption text-ink-dim lg:hidden"
+                            >
+                              {thread.participants.join(', ') || EM_DASH}
+                            </span>
+                            {thread.messages.length > 1 && (
+                              <span
+                                className={cn(
+                                  'shrink-0 rounded-full border px-1.5 type-caption leading-relaxed',
+                                  tabular,
+                                  thread.unreadCount > 0
+                                    ? 'border-brand-edge bg-brand-tint text-brand'
+                                    : 'border-line-strong bg-neutral-tint text-ink-dim',
+                                )}
+                                aria-label={
+                                  enviadas > 0
+                                    ? `${thread.messages.length} mensagens, ${enviadas} enviadas por você`
+                                    : `${thread.messages.length} mensagens`
+                                }
+                              >
+                                {thread.messages.length}
+                              </span>
+                            )}
+                            <span
+                              className={cn(
+                                'min-w-[3.5ch] shrink-0 text-right type-caption text-ink-dim',
+                                tabular,
+                              )}
+                            >
+                              {relativeTime(thread.lastDate) || EM_DASH}
+                            </span>
+                            {mailboxes.length > 1 && (
+                              <Badge variant="secondary" className="shrink-0">
+                                {thread.messages[0].accountLabel ?? EM_DASH}
+                              </Badge>
+                            )}
+                            <div className="flex shrink-0 items-center gap-0.5">
+                              <div className="hidden items-center gap-0.5 lg:flex">
+                                <div className="relative flex">
+                                  <button
+                                    type="button"
+                                    // `is-tagged` stays as a behavioural marker: the suite reads
+                                    // whether a conversation already carries a label off it.
+                                    className={cn(
+                                      iconButtonClass,
+                                      tags.length > 0 && 'is-tagged text-brand',
+                                    )}
+                                    aria-label={`etiquetar ${titulo}`}
+                                    aria-expanded={tagMenuKey === thread.id}
+                                    onClick={() => {
+                                      const next = tagMenuKey === thread.id ? null : thread.id;
+                                      setTagMenuKey(next);
+                                      if (next) void loadTagFolders(thread.messages[0].account);
+                                    }}
+                                  >
+                                    <Label width={16} height={16} />
+                                  </button>
+                                  {tagMenuKey === thread.id && (
+                                    <>
+                                      <div
+                                        className="fixed inset-0 z-40"
+                                        onClick={() => setTagMenuKey(null)}
+                                      />
+                                      <div
+                                        className="absolute top-full right-0 z-50 mt-2 flex max-h-80 min-w-45 flex-col overflow-y-auto rounded-xl border border-line-strong bg-surface-4 p-2 shadow-e4"
+                                        role="menu"
+                                        aria-label="etiquetas"
+                                      >
+                                        {(tagFolders[thread.messages[0].account] ?? []).length === 0 ? (
+                                          <p className="px-3 py-2 text-sm text-ink-dim">
+                                            Carregando etiquetas…
+                                          </p>
+                                        ) : (
+                                          (tagFolders[thread.messages[0].account] ?? []).map((f) => (
+                                            <button
+                                              key={f}
+                                              type="button"
+                                              role="menuitem"
+                                              className={cn(
+                                                'rounded-md px-3 py-2 text-left text-sm text-ink-mid transition-colors duration-100 ease-brand hover:bg-brand-tint hover:text-ink motion-reduce:transition-none',
+                                                focusRing,
+                                              )}
+                                              onClick={() => void applyTagToThread(thread, f)}
+                                            >
+                                              {f}
+                                            </button>
+                                          ))
+                                        )}
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  className={cn(iconButtonClass, 'hover:border-danger/40 hover:text-danger')}
+                                  aria-label={`excluir ${titulo}`}
+                                  onClick={() => void removeThread(thread)}
+                                >
+                                  <Trash width={16} height={16} />
+                                </button>
+                              </div>
+                              {/* A conversa vira nota ou tarefa a partir da mensagem
+                                  recebida mais recente, que é a que se está olhando. */}
+                              <CreateFromEmailMenu
+                                subject={titulo}
+                                folders={noteFolders}
+                                busy={criando !== null}
+                                onOpen={() => void carregarPastasDeNota()}
+                                narrow={{
+                                  tagFolders: tagFolders[thread.messages[0].account] ?? [],
+                                  onOpenTags: () => void loadTagFolders(thread.messages[0].account),
+                                  onTag: (folder) => void applyTagToThread(thread, folder),
+                                  onDelete: () => void removeThread(thread),
+                                }}
+                                onCreate={(kind, folderId) => {
+                                  const alvo = recebidas(thread).at(-1) ?? thread.messages[0];
+                                  void criarDoEmail(alvo, kind, folderId);
+                                }}
+                              />
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
+                      </ContextMenuTrigger>
+                      {menuDoLote(grupo)}
+                    </ContextMenu>
 
                     {sozinha && isOpen && (
                       <EmailDetail
@@ -1534,9 +1602,23 @@ export function EmailPanel({
               });
               if (groupBy === 'none') return <Fragment key={grupo.key}>{linhas}</Fragment>;
               const rotuloId = `${grupoIdBase}-grupo-${posicaoDoGrupo}`;
+              const idsDoGrupo = grupo.threads.map((t) => t.id);
+              const todasDoGrupo = idsDoGrupo.every((id) => selecionadas.has(id));
+              const algumasDoGrupo = idsDoGrupo.some((id) => selecionadas.has(id));
               return (
                 <li key={grupo.key} role="group" aria-labelledby={rotuloId}>
-                  <div className="flex items-baseline gap-2 px-2 pt-4 pb-1 type-caption font-semibold text-ink-dim">
+                  <div className="flex items-center gap-3 px-2 pt-4 pb-1 type-caption font-semibold text-ink-dim">
+                    <span aria-hidden className="size-1.5 shrink-0" />
+                    <input
+                      type="checkbox"
+                      className={cn('size-4 shrink-0 accent-brand', focusRing)}
+                      checked={todasDoGrupo}
+                      ref={(el) => {
+                        if (el) el.indeterminate = algumasDoGrupo && !todasDoGrupo;
+                      }}
+                      onChange={() => despachar({ type: 'group', ids: idsDoGrupo })}
+                      aria-label={`selecionar todo o grupo ${grupo.label}`}
+                    />
                     <span id={rotuloId} className="truncate">
                       {grupo.label}
                     </span>
