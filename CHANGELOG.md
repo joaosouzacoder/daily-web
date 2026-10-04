@@ -9,6 +9,11 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Added
+- E-mail conversations can be grouped by account, by sender or by date
+  (today, yesterday, last 7 days, last 30 days, older). The choice sits next
+  to the sort control, and in the "⋯" menu on narrow screens, and lives in the
+  URL as `mail_group`. Groups follow the chosen sort, a conversation belongs to
+  whoever wrote to you last, and shift-click ranges follow the grouped order.
 - The Jira tree now starts at the top of the hierarchy. The panel climbs from
   each issue to its objective, fetching the parents the user's queries never
   return, and nests objective, initiative, epic and story in one tree. Those

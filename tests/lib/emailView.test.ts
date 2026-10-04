@@ -21,6 +21,7 @@ describe('estado da tela de e-mail na URL', () => {
       onlyUnread: true,
       account: '',
       sort: 'oldest',
+      group: 'none',
       open: 'mail-1:7',
       maximized: true,
     });
@@ -108,5 +109,22 @@ describe('o que empilha no histórico', () => {
     expect(isNavigation(DEFAULT_EMAIL_VIEW, { ...DEFAULT_EMAIL_VIEW, query: 'a' })).toBe(false);
     expect(isNavigation(DEFAULT_EMAIL_VIEW, { ...DEFAULT_EMAIL_VIEW, onlyUnread: true })).toBe(false);
     expect(isNavigation(DEFAULT_EMAIL_VIEW, { ...DEFAULT_EMAIL_VIEW, sort: 'oldest' })).toBe(false);
+  });
+
+  it('lê o agrupamento e cai em "sem agrupar" quando o valor não existe', () => {
+    expect(parseEmailView(new URLSearchParams('mail_group=sender')).group).toBe('sender');
+    expect(parseEmailView(new URLSearchParams('mail_group=lixo')).group).toBe('none');
+  });
+
+  it('grava o agrupamento e tira da URL quando volta para "sem agrupar"', () => {
+    const agrupado = emailViewToParams(new URLSearchParams(), { ...DEFAULT_EMAIL_VIEW, group: 'date' });
+    expect(agrupado.get('mail_group')).toBe('date');
+
+    const limpo = emailViewToParams(agrupado, { ...DEFAULT_EMAIL_VIEW, group: 'none' });
+    expect(limpo.has('mail_group')).toBe(false);
+  });
+
+  it('trocar o agrupamento não é navegação, como a ordenação', () => {
+    expect(isNavigation(DEFAULT_EMAIL_VIEW, { ...DEFAULT_EMAIL_VIEW, group: 'account' })).toBe(false);
   });
 });
