@@ -1876,3 +1876,195 @@ describe('agrupamento dos e-mails', () => {
     expect(marcada(2)).toBe(false);
   });
 });
+
+describe('seleção por grupo e menu do botão direito', () => {
+  const envelope = (id: string, over: Partial<EmailEnvelope>): EmailEnvelope => ({
+    ...items[0],
+    id,
+    messageId: `<c${id}@x>`,
+    subject: `Mensagem ${id}`,
+    unread: true,
+    ...over,
+  });
+
+  const caixa: EmailEnvelope[] = [
+    envelope('1', { account: 'mail-1', accountLabel: 'Trabalho', date: '2026-08-25T10:00:00Z' }),
+    envelope('2', { account: 'mail-2', accountLabel: 'Pessoal', date: '2026-08-25T09:00:00Z' }),
+    envelope('3', { account: 'mail-1', accountLabel: 'Trabalho', date: '2026-08-25T08:00:00Z' }),
+  ];
+
+  let lotes: { action: string; targets: { account: string; id: string }[]; folder?: string }[];
+
+  beforeEach(() => {
+    lotes = [];
+    vi.mocked(global.fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/api/email/batch')) {
+        const corpo = JSON.parse(String(init?.body));
+        lotes.push(corpo);
+        return new Response(
+          JSON.stringify({
+            results: corpo.targets.map((t: { account: string; id: string }) => ({ ...t, ok: true })),
+          }),
+        );
+      }
+      return new Response(JSON.stringify({ folders: ['Arquivo', 'Clientes'] }));
+    });
+  });
+
+  function montar(onRemoved = vi.fn()) {
+    window.history.replaceState(null, '', '/?mail_group=account');
+    render(
+      <EmailPanel
+        onSeenChanged={() => {}}
+        onRemoved={onRemoved}
+        mailboxes={MAILBOXES}
+        email={{ data: caixa, error: null }}
+        onChanged={() => {}}
+      />,
+    );
+    return onRemoved;
+  }
+
+  const caixaDe = (n: number) =>
+    screen.getByLabelText(`selecionar Mensagem ${n}`) as HTMLInputElement;
+  const caixaDoGrupo = (nome: string) =>
+    screen.getByLabelText(`selecionar todo o grupo ${nome}`) as HTMLInputElement;
+  const linha = (n: number) => caixaDe(n).closest('.row') as HTMLElement;
+
+  function abrirMenu(n: number) {
+    fireEvent.contextMenu(linha(n));
+    return screen.getByRole('menu');
+  }
+
+  it('o checkbox do grupo marca todas as conversas dele, e só elas', () => {
+    montar();
+    fireEvent.click(caixaDoGrupo('Trabalho'));
+
+    expect(caixaDe(1).checked).toBe(true);
+    expect(caixaDe(3).checked).toBe(true);
+    expect(caixaDe(2).checked).toBe(false);
+    expect(caixaDoGrupo('Trabalho').checked).toBe(true);
+  });
+
+  it('fica indeterminado com parte do grupo marcada, e completa ao clicar', () => {
+    montar();
+    fireEvent.click(caixaDe(1));
+    expect(caixaDoGrupo('Trabalho').indeterminate).toBe(true);
+    expect(caixaDoGrupo('Trabalho').checked).toBe(false);
+
+    fireEvent.click(caixaDoGrupo('Trabalho'));
+    expect(caixaDe(3).checked).toBe(true);
+    expect(caixaDoGrupo('Trabalho').indeterminate).toBe(false);
+  });
+
+  it('desmarca o grupo inteiro e preserva o que está marcado em outro grupo', () => {
+    montar();
+    fireEvent.click(caixaDoGrupo('Pessoal'));
+    fireEvent.click(caixaDoGrupo('Trabalho'));
+    fireEvent.click(caixaDoGrupo('Trabalho'));
+
+    expect(caixaDe(1).checked).toBe(false);
+    expect(caixaDe(3).checked).toBe(false);
+    expect(caixaDe(2).checked).toBe(true);
+  });
+
+  it('o botão direito sobre a seleção aplica a ação em todas as marcadas', async () => {
+    montar();
+    fireEvent.click(caixaDoGrupo('Trabalho'));
+
+    const menu = abrirMenu(3);
+    expect(within(menu).getByText('2 conversas')).toBeInTheDocument();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Marcar lido' }));
+
+    await waitFor(() => expect(lotes).toHaveLength(1));
+    expect(lotes[0].action).toBe('read');
+    expect(lotes[0].targets).toEqual([
+      { account: 'mail-1', id: '1' },
+      { account: 'mail-1', id: '3' },
+    ]);
+  });
+
+  it('o botão direito fora da seleção troca a seleção pela linha clicada', async () => {
+    montar();
+    fireEvent.click(caixaDoGrupo('Trabalho'));
+
+    const menu = abrirMenu(2);
+    expect(within(menu).getByText('1 conversa')).toBeInTheDocument();
+    expect(caixaDe(1).checked).toBe(false);
+    expect(caixaDe(2).checked).toBe(true);
+
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Marcar não lido' }));
+    await waitFor(() => expect(lotes).toHaveLength(1));
+    expect(lotes[0]).toMatchObject({ action: 'unread', targets: [{ account: 'mail-2', id: '2' }] });
+  });
+
+  it('move as selecionadas para a pasta escolhida no submenu', async () => {
+    const onRemoved = montar();
+    fireEvent.click(caixaDoGrupo('Trabalho'));
+
+    const menu = abrirMenu(1);
+    const mover = within(menu).getByRole('menuitem', { name: 'Mover para' });
+    await waitFor(() => expect(mover).not.toHaveAttribute('data-disabled'));
+    fireEvent.keyDown(mover, { key: 'ArrowRight' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Clientes' }));
+
+    await waitFor(() => expect(lotes).toHaveLength(1));
+    expect(lotes[0]).toMatchObject({ action: 'move', folder: 'Clientes' });
+    expect(lotes[0].targets).toHaveLength(2);
+    expect(onRemoved).toHaveBeenCalled();
+  });
+
+  it('excluir pelo menu confirma antes e apaga todas as marcadas', async () => {
+    montar();
+    fireEvent.click(caixaDoGrupo('Trabalho'));
+
+    fireEvent.click(within(abrirMenu(1)).getByRole('menuitem', { name: 'Excluir' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Excluir estes 2 e-mails?')).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Excluir' }));
+
+    await waitFor(() => expect(lotes).toHaveLength(1));
+    expect(lotes[0].action).toBe('delete');
+    expect(lotes[0].targets).toHaveLength(2);
+  });
+
+  it('pelo menu, seleciona o grupo inteiro da linha clicada', () => {
+    montar();
+    fireEvent.click(within(abrirMenu(3)).getByRole('menuitem', { name: 'Selecionar todo o grupo Trabalho' }));
+
+    expect(caixaDe(1).checked).toBe(true);
+    expect(caixaDe(3).checked).toBe(true);
+    expect(caixaDe(2).checked).toBe(false);
+  });
+
+  it('sem agrupar, o menu continua valendo e não oferece selecionar grupo', async () => {
+    render(
+      <EmailPanel
+        onSeenChanged={() => {}}
+        onRemoved={() => {}}
+        mailboxes={MAILBOXES}
+        email={{ data: caixa, error: null }}
+        onChanged={() => {}}
+      />,
+    );
+    fireEvent.click(caixaDe(1));
+    fireEvent.click(caixaDe(2));
+
+    const menu = abrirMenu(2);
+    expect(within(menu).queryByRole('menuitem', { name: /Selecionar todo o grupo/ })).toBeNull();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Marcar lido' }));
+
+    await waitFor(() => expect(lotes).toHaveLength(1));
+    expect(lotes[0].targets).toHaveLength(2);
+  });
+
+  it('limpa a seleção pelo menu', () => {
+    montar();
+    fireEvent.click(caixaDoGrupo('Trabalho'));
+    fireEvent.click(within(abrirMenu(1)).getByRole('menuitem', { name: 'Limpar seleção' }));
+
+    expect(caixaDe(1).checked).toBe(false);
+    expect(caixaDe(3).checked).toBe(false);
+  });
+});

@@ -194,3 +194,68 @@ describe('a lista muda debaixo da seleção', () => {
     expect(selectionReducer(state, { type: 'sync' }, ORDEM)).toBe(state);
   });
 });
+
+describe('checkbox do grupo', () => {
+  it('marca o grupo inteiro e mantém o que já estava marcado fora dele', () => {
+    const state = reduzir(
+      EMPTY_SELECTION,
+      { type: 'click', id: 'a' },
+      { type: 'group', ids: ['c', 'd'] },
+    );
+    expect(state.selected).toEqual(['a', 'c', 'd']);
+  });
+
+  it('completa o grupo quando só parte dele está marcada', () => {
+    const state = reduzir(
+      EMPTY_SELECTION,
+      { type: 'click', id: 'c' },
+      { type: 'group', ids: ['c', 'd', 'e'] },
+    );
+    expect(state.selected).toEqual(['c', 'd', 'e']);
+  });
+
+  it('desmarca o grupo quando ele já está todo marcado, sem tocar no resto', () => {
+    const state = reduzir(
+      EMPTY_SELECTION,
+      { type: 'click', id: 'a' },
+      { type: 'group', ids: ['c', 'd'] },
+      { type: 'group', ids: ['c', 'd'] },
+    );
+    expect(state.selected).toEqual(['a']);
+  });
+
+  it('a faixa do Shift parte do grupo marcado', () => {
+    const state = reduzir(
+      EMPTY_SELECTION,
+      { type: 'group', ids: ['b', 'c'] },
+      { type: 'click', id: 'e', shift: true },
+    );
+    expect(state.selected).toEqual(['b', 'c', 'd', 'e']);
+  });
+
+  it('ignora id que não está mais na lista', () => {
+    const state = reduzir(EMPTY_SELECTION, { type: 'group', ids: ['sumiu'] });
+    expect(state).toBe(EMPTY_SELECTION);
+  });
+});
+
+describe('botão direito', () => {
+  it('numa linha da seleção, mantém a seleção inteira', () => {
+    const antes = reduzir(EMPTY_SELECTION, { type: 'group', ids: ['b', 'c', 'd'] });
+    expect(reduzir(antes, { type: 'context', id: 'c' })).toBe(antes);
+  });
+
+  it('numa linha fora da seleção, ela passa a ser a seleção', () => {
+    const state = reduzir(
+      EMPTY_SELECTION,
+      { type: 'group', ids: ['b', 'c'] },
+      { type: 'context', id: 'e' },
+    );
+    expect(state.selected).toEqual(['e']);
+    expect(state.anchor).toBe('e');
+  });
+
+  it('sem nada marcado, seleciona a linha clicada', () => {
+    expect(reduzir(EMPTY_SELECTION, { type: 'context', id: 'a' }).selected).toEqual(['a']);
+  });
+});

@@ -9,6 +9,14 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Added
+- Each e-mail group header has a checkbox that selects or clears the whole
+  group, and shows a partial state when only some of it is selected.
+- Right-clicking a conversation row opens a context menu with the batch
+  actions (mark read or unread, move to a folder, delete, select the row's
+  group, clear selection), applied to every selected conversation. A row
+  outside the selection becomes the selection first, as in a file manager.
+  The menu is bound to the row only, so the opened message body keeps the
+  browser's own menu for copying text.
 - E-mail conversations can be grouped by account, by sender or by date
   (today, yesterday, last 7 days, last 30 days, older). The choice sits next
   to the sort control, and in the "⋯" menu on narrow screens, and lives in the
