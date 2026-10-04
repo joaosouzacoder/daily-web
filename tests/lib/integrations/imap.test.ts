@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { ListResponse } from 'imapflow';
-import { findSpecialUse, mailConfig, usableFolders, userLabels } from '@/lib/integrations/imap';
+import {
+  findSpecialUse,
+  flagWindowStart,
+  mailConfig,
+  usableFolders,
+  userLabels,
+} from '@/lib/integrations/imap';
 import type { Connection } from '@/lib/vault/connections';
 
 function box(path: string, specialUse?: string, flags: string[] = []): ListResponse {
@@ -79,5 +85,26 @@ describe('userLabels', () => {
   // sem `labels`. Isso não é erro, é uma conta que não tem etiquetas.
   it('devolve lista vazia quando o servidor não reporta etiquetas', () => {
     expect(userLabels(undefined)).toEqual([]);
+  });
+});
+
+describe('flagWindowStart', () => {
+  it('cobre os uids recentes quando não há nada guardado', () => {
+    expect(flagWindowStart(3858, 200, null)).toBe(3658);
+  });
+
+  // Caso medido em produção: entrada com 29 mensagens espalhadas entre os uids
+  // 2581 e 3857. A janela recente começava em 3658 e as apagadas abaixo disso
+  // nunca eram reconferidas.
+  it('desce até a mais antiga guardada quando ela está abaixo da janela recente', () => {
+    expect(flagWindowStart(3858, 200, 2581)).toBe(2581);
+  });
+
+  it('não sobe a janela quando a mais antiga guardada já está dentro dela', () => {
+    expect(flagWindowStart(3858, 200, 3700)).toBe(3658);
+  });
+
+  it('não passa de 1 numa caixa pequena', () => {
+    expect(flagWindowStart(50, 200, null)).toBe(1);
   });
 });

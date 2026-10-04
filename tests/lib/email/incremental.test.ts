@@ -174,6 +174,47 @@ describe('reconferência da janela recente', () => {
 
     expect(resultado.envelopes.map((e) => e.id).sort()).toEqual(['10', '900']);
   });
+
+  // No Gmail a numeração da entrada é esparsa: quem arquiva muito tem
+  // mensagens guardadas bem abaixo da janela recente. Se a reconferência não
+  // chega a elas, a apagada nunca sai do banco e a exclusão parece não ter
+  // pegado.
+  it('pede para reconferir a partir da mais antiga guardada', async () => {
+    vi.mocked(fetchFolderChanges).mockResolvedValue(
+      changes({ added: [envelope('10'), envelope('900')], total: 2 }) as never,
+    );
+    const { syncFolder } = await import('@/lib/email/sync');
+    await syncFolder(ME, CONN, 'INBOX', 50);
+
+    vi.mocked(fetchFolderChanges).mockResolvedValue(changes({ windowFrom: '10' }) as never);
+    await syncFolder(ME, CONN, 'INBOX', 50);
+
+    expect(vi.mocked(fetchFolderChanges).mock.calls[1][5]).toBe(10);
+  });
+
+  it('na primeira leitura não há mais antiga guardada', async () => {
+    vi.mocked(fetchFolderChanges).mockResolvedValue(changes() as never);
+    const { syncFolder } = await import('@/lib/email/sync');
+    await syncFolder(ME, CONN, 'INBOX', 50);
+
+    expect(vi.mocked(fetchFolderChanges).mock.calls[0][5]).toBeNull();
+  });
+
+  it('tira a apagada que estava abaixo da janela recente', async () => {
+    vi.mocked(fetchFolderChanges).mockResolvedValue(
+      changes({ added: [envelope('10'), envelope('900')], total: 2 }) as never,
+    );
+    const { syncFolder } = await import('@/lib/email/sync');
+    await syncFolder(ME, CONN, 'INBOX', 50);
+
+    // O servidor reconferiu desde a 10, como pedido, e a 10 não voltou.
+    vi.mocked(fetchFolderChanges).mockResolvedValue(
+      changes({ flags: [{ uid: '900', unread: true, labels: [] }], windowFrom: '10' }) as never,
+    );
+    const resultado = await syncFolder(ME, CONN, 'INBOX', 50);
+
+    expect(resultado.envelopes.map((e) => e.id)).toEqual(['900']);
+  });
 });
 
 describe('reindexação da pasta', () => {
@@ -252,5 +293,19 @@ describe('uma conexão por conta a cada ciclo', () => {
     expect(fetchInboxAndSent).toHaveBeenCalledTimes(1);
     expect(fetchFolderChanges).not.toHaveBeenCalled();
     expect(lista.map((e) => e.id).sort()).toEqual(['10', '99']);
+  });
+
+  it('o ciclo do painel também reconfere a partir da mais antiga guardada', async () => {
+    const { fetchInboxAndSent } = await import('@/lib/integrations/imap');
+    vi.mocked(fetchInboxAndSent).mockResolvedValue({
+      changes: changes({ added: [envelope('10'), envelope('900')], total: 2 }) as never,
+      sent: [],
+    });
+    const { loadInbox } = await import('@/lib/email/inbox');
+    await loadInbox(ME, CONN, 30);
+    await loadInbox(ME, CONN, 30);
+
+    expect(vi.mocked(fetchInboxAndSent).mock.calls[0][4]).toBeNull();
+    expect(vi.mocked(fetchInboxAndSent).mock.calls[1][4]).toBe(10);
   });
 });

@@ -140,6 +140,23 @@ export function dropFolderMessages(userId: string, account: string, folder: stri
     .run(userId, account, folder);
 }
 
+/** O menor uid guardado da pasta, ou nulo quando nada foi guardado. É até ele
+ *  que a reconferência precisa descer. */
+export function oldestStoredUid(
+  userId: string,
+  account: string,
+  folder: string,
+  uidvalidity: string,
+): number | null {
+  const row = getDb()
+    .prepare(
+      `SELECT MIN(uid) AS uid FROM email_messages
+       WHERE user_id = ? AND account = ? AND folder = ? AND uidvalidity = ?`,
+    )
+    .get(userId, account, folder, uidvalidity) as { uid: number | null };
+  return row.uid;
+}
+
 export function listStoredMessages(
   userId: string,
   account: string,

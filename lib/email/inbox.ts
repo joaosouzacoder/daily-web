@@ -1,6 +1,6 @@
 import { fetchInboxAndSent } from '@/lib/integrations/imap';
 import { INBOX_PATH } from './pendingActions';
-import { applyFolderChanges, folderCursor, FLAG_WINDOW } from './sync';
+import { applyFolderChanges, folderCursor, FLAG_WINDOW, oldestKnownUid } from './sync';
 import type { Connection } from '@/lib/vault/connections';
 import type { EmailEnvelope } from '@/lib/types';
 
@@ -21,7 +21,13 @@ export async function loadInbox(
   limit: number,
 ): Promise<EmailEnvelope[]> {
   const desde = folderCursor(userId, connection, INBOX_PATH);
-  const { changes, sent } = await fetchInboxAndSent(connection, desde, FLAG_WINDOW, limit);
+  const { changes, sent } = await fetchInboxAndSent(
+    connection,
+    desde,
+    FLAG_WINDOW,
+    limit,
+    oldestKnownUid(userId, connection, INBOX_PATH),
+  );
   const entrada = await applyFolderChanges(userId, connection, INBOX_PATH, limit, changes);
   return [...entrada.envelopes, ...sent];
 }
