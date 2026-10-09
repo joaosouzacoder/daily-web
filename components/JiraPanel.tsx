@@ -18,7 +18,18 @@ import type {
 } from '@/lib/types';
 import { PanelError } from '@/components/data/PanelError';
 import type { ActiveFilter } from '@/lib/filters';
-import { matchesQuery } from '@/lib/filters';
+import {
+  EMPTY_JIRA_FILTERS,
+  JIRA_TIERS,
+  JIRA_TIER_LABEL,
+  hasJiraFilters,
+  jiraFilterOptions,
+  jiraFiltersToParams,
+  matchesJiraFilters,
+  parseJiraFilters,
+  type JiraFilterState,
+} from '@/lib/jiraFilters';
+import { selectClass } from '@/lib/theme';
 import {
   buildJiraTree,
   dueLabel,
@@ -122,6 +133,13 @@ const ABA_PADRAO: Aba = 'abertas';
 // A pessoa vive na URL para manter a aba ativa.
 const PESSOA_PARAM = 'jiraPessoa';
 
+// O papel também: um recorte que some ao recarregar não é recorte.
+const PAPEL_PARAM = 'jiraPapel';
+
+function parsePapel(value: string | null): Filter {
+  return value === 'assignee' || value === 'reporter' ? value : 'both';
+}
+
 const VISTA_VAZIA: JiraPersonView = {
   jira: { data: [], error: null },
   delivered: { data: [], error: null },
@@ -183,8 +201,11 @@ export function JiraPanel({
   const pessoaAtiva = rawPessoa && isJiraAccountId(rawPessoa) && people.some(p => p.accountId === rawPessoa) ? rawPessoa : null;
   const pessoaAtivaObj = pessoaAtiva ? people.find(p => p.accountId === pessoaAtiva) : null;
   
+  // Os filtros são da lista de quem está sendo olhado: trocar de pessoa
+  // começa limpo, na mesma navegação, para o voltar desfazer as duas coisas.
   const setPessoa = (next: string) => {
-    const params = new URLSearchParams(searchParams.toString());
+    const params = jiraFiltersToParams(searchParams, EMPTY_JIRA_FILTERS);
+    params.delete(PAPEL_PARAM);
     const removing = next === 'eu';
     if (removing) params.delete(PESSOA_PARAM);
     else params.set(PESSOA_PARAM, next);
@@ -196,8 +217,6 @@ export function JiraPanel({
       router.push(dest, { scroll: false });
     }
     
-    setQuery('');
-    setFilter('both');
     setRamos(new Map());
   };
 
@@ -370,11 +389,58 @@ export function JiraPanel({
     };
   }, [buscaNovaPessoa, formAberta]);
 
-  const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<Filter>('both');
+  const filtros = useMemo(() => parseJiraFilters(searchParams), [searchParams]);
+  const filter = parsePapel(searchParams.get(PAPEL_PARAM));
+
+  // Mexer num filtro não é navegação: substitui a URL em vez de empilhar,
+  // para o voltar não refazer cada tecla da busca.
+  const trocarUrl = (params: URLSearchParams) => {
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
+  const setFiltros = (next: Partial<JiraFilterState>) =>
+    trocarUrl(jiraFiltersToParams(searchParams, { ...filtros, ...next }));
+  const setFilter = (next: Filter) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === 'both') params.delete(PAPEL_PARAM);
+    else params.set(PAPEL_PARAM, next);
+    trocarUrl(params);
+  };
   const [grouped, setGrouped] = useState(false);
 
   const all = useMemo(() => jira.data ?? [], [jira.data]);
+
+  // O caminho até o objetivo não é do usuário e por isso não entra em
+  // `visible`: ele não é filtrado por papel nem por busca, só liga o que foi
+  // filtrado ao topo da hierarquia.
+  const ancestors = fonte.ancestors;
+
+  // Tudo o que se conhece de cada issue, para subir dela até a iniciativa:
+  // é o que o filtro de hierarquia e a busca pelo caminho precisam.
+  const conhecidas = useMemo(
+    () =>
+      new Map(
+        [
+          ...ancestors,
+          ...(delivered.data ?? []),
+          ...(approved.data ?? []),
+          ...(problems.data ?? []),
+          ...all,
+        ].map((i) => [i.key, i]),
+      ),
+    [ancestors, delivered.data, approved.data, problems.data, all],
+  );
+  // O caminho de cada árvore sai de tudo o que se conhece, não só dos
+  // ancestrais buscados: o servidor não busca de novo o que já está numa
+  // lista, então o épico que é seu em aberto não vem como ancestral da
+  // história que você entregou. O que não liga a nada da aba é podado.
+  const caminho = useMemo(() => [...conhecidas.values()], [conhecidas]);
+
+  const recortar = useCallback(
+    <T extends JiraItem>(itens: T[]): T[] =>
+      itens.filter((i) => matchesJiraFilters(i, filtros, conhecidas)),
+    [filtros, conhecidas],
+  );
 
   // Uma issue com papel 'both' é genuinamente das duas naturezas: aparece
   // tanto em "minhas" quanto em "relator". O que espera pela sua aprovação
@@ -382,20 +448,13 @@ export function JiraPanel({
   // por responsável ou relator tiraria da tela justamente o que pede decisão.
   const visible = useMemo(
     () =>
-      all.filter(
-        (i) =>
-          matchesQuery([i.key, i.summary], query) &&
-          (filter === 'both' || i.role === filter || i.role === 'both' || i.awaitingApproval),
+      recortar(all).filter(
+        (i) => filter === 'both' || i.role === filter || i.role === 'both' || i.awaitingApproval,
       ),
-    [all, query, filter],
+    [all, recortar, filter],
   );
 
-  // O caminho até o objetivo não é do usuário e por isso não entra em
-  // `visible`: ele não é filtrado por papel nem por busca, só liga o que foi
-  // filtrado ao topo da hierarquia.
-  const ancestors = fonte.ancestors;
-
-  const projects = useMemo(() => buildJiraTree(visible, ancestors), [visible, ancestors]);
+  const projects = useMemo(() => buildJiraTree(visible, caminho), [visible, caminho]);
   const situations = useMemo(() => groupByStatusCategory(visible), [visible]);
 
   // Entregues e Aprovados repetem a estrutura de "Em aberto": hierarquia,
@@ -407,34 +466,80 @@ export function JiraPanel({
     [periodo],
   );
 
-  const entregues = useMemo(() => noPeriodo(delivered.data ?? []), [delivered.data, noPeriodo]);
+  const noPeriodoEntregues = useMemo(
+    () => noPeriodo(delivered.data ?? []),
+    [delivered.data, noPeriodo],
+  );
+  const entregues = useMemo(() => recortar(noPeriodoEntregues), [noPeriodoEntregues, recortar]);
   const entreguesProjects = useMemo(
-    () => buildJiraTree(entregues, ancestors),
-    [entregues, ancestors],
+    () => buildJiraTree(entregues, caminho),
+    [entregues, caminho],
   );
 
-  const aprovados = useMemo(() => noPeriodo(approved.data ?? []), [approved.data, noPeriodo]);
+  const noPeriodoAprovados = useMemo(
+    () => noPeriodo(approved.data ?? []),
+    [approved.data, noPeriodo],
+  );
+  const aprovados = useMemo(() => recortar(noPeriodoAprovados), [noPeriodoAprovados, recortar]);
   const aprovadosProjects = useMemo(
-    () => buildJiraTree(aprovados, ancestors),
-    [aprovados, ancestors],
+    () => buildJiraTree(aprovados, caminho),
+    [aprovados, caminho],
   );
 
-  const problemas = problems.data ?? [];
+  const problemas = useMemo(() => recortar(problems.data ?? []), [problems.data, recortar]);
+
+  // As opções falam da aba aberta, antes do recorte: o seletor de status
+  // mostra os status desta lista, não os de outra aba.
+  const baseDaAba: JiraItem[] =
+    aba === 'entregues'
+      ? noPeriodoEntregues
+      : aba === 'aprovados'
+        ? noPeriodoAprovados
+        : aba === 'problemas'
+          ? (problems.data ?? [])
+          : all;
+  const opcoes = jiraFilterOptions(baseDaAba, conhecidas, filtros);
+
+  const rotuloDe = (chave: string) => {
+    const issue = conhecidas.get(chave);
+    return issue ? `${chave} ${issue.summary}` : chave;
+  };
 
   const activeFilters: ActiveFilter[] = [
-    ...(query.trim() ? [{ id: 'query', label: `Busca: ${query.trim()}` }] : []),
-    ...(filter !== 'both' ? [{ id: 'role', label: pessoaAtiva ? FILTER_LABEL_PESSOA[filter] : FILTER_LABEL[filter] }] : []),
+    ...(filtros.query.trim() ? [{ id: 'query', label: `Busca: ${filtros.query.trim()}` }] : []),
+    ...(filtros.status ? [{ id: 'status', label: `Status: ${filtros.status}` }] : []),
+    ...(filtros.tier ? [{ id: 'tier', label: `Tipo: ${JIRA_TIER_LABEL[filtros.tier]}` }] : []),
+    ...(filtros.initiative
+      ? [{ id: 'initiative', label: `Iniciativa: ${rotuloDe(filtros.initiative)}` }]
+      : []),
+    ...(filtros.epic ? [{ id: 'epic', label: `Épico: ${rotuloDe(filtros.epic)}` }] : []),
+    ...(filtros.story ? [{ id: 'story', label: `História: ${rotuloDe(filtros.story)}` }] : []),
+    ...(aba === 'abertas' && filter !== 'both'
+      ? [{ id: 'role', label: pessoaAtiva ? FILTER_LABEL_PESSOA[filter] : FILTER_LABEL[filter] }]
+      : []),
   ];
 
   const clearFilter = (id: string) => {
-    if (id === 'query') setQuery('');
-    if (id === 'role') setFilter('both');
+    if (id === 'role') return setFilter('both');
+    if (id === 'query') return setFiltros({ query: '' });
+    if (id === 'status') return setFiltros({ status: '' });
+    if (id === 'tier') return setFiltros({ tier: null });
+    // Tirar um degrau de cima solta os de baixo, que só faziam sentido nele.
+    if (id === 'initiative') return setFiltros({ initiative: '', epic: '', story: '' });
+    if (id === 'epic') return setFiltros({ epic: '', story: '' });
+    if (id === 'story') return setFiltros({ story: '' });
   };
 
   const clearAll = () => {
-    setQuery('');
-    setFilter('both');
+    const params = jiraFiltersToParams(searchParams, EMPTY_JIRA_FILTERS);
+    params.delete(PAPEL_PARAM);
+    trocarUrl(params);
   };
+
+  const filtrando = hasJiraFilters(filtros);
+  // Com filtro, o que casou é o que se quer ver: a árvore abre inteira em vez
+  // de esconder o resultado num ramo fechado.
+  const abertura: Abertura = filtrando ? 'tudo' : 'caminho';
 
   const nome = pessoaAtivaObj?.displayName.split(' ')[0] ?? '';
 
@@ -537,13 +642,81 @@ export function JiraPanel({
         </FilterBar>
       )}
 
+      <FilterBar label="Filtrar o Jira">
+        <SearchInput
+          value={filtros.query}
+          onChange={(query) => setFiltros({ query })}
+          label="buscar issues"
+          placeholder="chave ou resumo, até do épico"
+        />
+        <select
+          className={cn(selectClass, focusRing)}
+          aria-label="filtrar por status"
+          value={filtros.status}
+          onChange={(e) => setFiltros({ status: e.target.value })}
+        >
+          <option value="">Todos os status</option>
+          {comSelecionado(opcoes.statuses, filtros.status).map((status) => (
+            <option key={status} value={status}>
+              {status}
+            </option>
+          ))}
+        </select>
+        <select
+          className={cn(selectClass, focusRing)}
+          aria-label="filtrar por tipo"
+          value={filtros.tier ?? ''}
+          onChange={(e) =>
+            setFiltros({ tier: JIRA_TIERS.find((t) => t === e.target.value) ?? null })
+          }
+        >
+          <option value="">Todos os tipos</option>
+          {JIRA_TIERS.map((tier) => (
+            <option key={tier} value={tier}>
+              {JIRA_TIER_LABEL[tier]}
+            </option>
+          ))}
+        </select>
+        <JiraIssueSelect
+          label="filtrar por iniciativa"
+          placeholder="Todas as iniciativas"
+          value={filtros.initiative}
+          options={opcoes.initiatives}
+          rotuloDe={rotuloDe}
+          // Os degraus de baixo dependiam da iniciativa anterior.
+          onChange={(initiative) => setFiltros({ initiative, epic: '', story: '' })}
+        />
+        <JiraIssueSelect
+          label="filtrar por épico"
+          placeholder="Todos os épicos"
+          value={filtros.epic}
+          options={opcoes.epics}
+          rotuloDe={rotuloDe}
+          onChange={(epic) => setFiltros({ epic, story: '' })}
+        />
+        <JiraIssueSelect
+          label="filtrar por história"
+          placeholder="Todas as histórias"
+          value={filtros.story}
+          options={opcoes.stories}
+          rotuloDe={rotuloDe}
+          onChange={(story) => setFiltros({ story })}
+        />
+      </FilterBar>
+
+      <ActiveFilters filters={activeFilters} onRemove={clearFilter} onClearAll={clearAll} />
+
       {aba === 'entregues' && (
         <div id="jira-panel-entregues" role="tabpanel" aria-labelledby="jira-tab-entregues">
           {delivered.error && <PanelError>{delivered.error}</PanelError>}
 
           {loading && entregues.length === 0 && <SkeletonRows count={3} />}
 
-          {!loading && entregues.length === 0 && !delivered.error && (
+          {filtrando && noPeriodoEntregues.length > 0 && entregues.length === 0 && (
+            <EmptyState title="Nenhuma issue com esses filtros." />
+          )}
+
+          {!loading && noPeriodoEntregues.length === 0 && !delivered.error && (
             <EmptyState
               title={
                 pessoaAtivaObj
@@ -560,6 +733,7 @@ export function JiraPanel({
           <JiraProjects
             groups={entreguesProjects}
             ramos={ramos}
+            abertura={abertura}
             onAlternar={alternarRamo}
             pessoaNome={nome}
           />
@@ -572,7 +746,11 @@ export function JiraPanel({
 
           {loading && aprovados.length === 0 && <SkeletonRows count={3} />}
 
-          {!loading && aprovados.length === 0 && !approved.error && (
+          {filtrando && noPeriodoAprovados.length > 0 && aprovados.length === 0 && (
+            <EmptyState title="Nenhuma issue com esses filtros." />
+          )}
+
+          {!loading && noPeriodoAprovados.length === 0 && !approved.error && (
             <EmptyState
               title={
                 pessoaAtivaObj
@@ -589,6 +767,7 @@ export function JiraPanel({
           <JiraProjects
             groups={aprovadosProjects}
             ramos={ramos}
+            abertura={abertura}
             onAlternar={alternarRamo}
             pessoaNome={nome}
           />
@@ -601,7 +780,11 @@ export function JiraPanel({
 
           {loading && problemas.length === 0 && <SkeletonRows count={3} />}
 
-          {!loading && problemas.length === 0 && !problems.error && (
+          {filtrando && (problems.data ?? []).length > 0 && problemas.length === 0 && (
+            <EmptyState title="Nenhuma issue com esses filtros." />
+          )}
+
+          {!loading && (problems.data ?? []).length === 0 && !problems.error && (
             <EmptyState title={pessoaAtivaObj ? `Nenhuma história ou épico de ${nome} com problema.` : "Nenhuma história ou épico com problema."} />
           )}
 
@@ -615,13 +798,7 @@ export function JiraPanel({
 
       {aba === 'abertas' && (
         <div id="jira-panel-abertas" role="tabpanel" aria-labelledby="jira-tab-abertas">
-          <FilterBar label="Filtrar issues">
-            <SearchInput
-              value={query}
-              onChange={setQuery}
-              label="buscar issues"
-              placeholder="chave ou resumo"
-            />
+          <FilterBar label="Papel e exibição">
             {(Object.keys(FILTER_LABEL) as Filter[]).map((f) => (
               <Chip key={f} active={filter === f} onClick={() => setFilter(f)}>
                 {pessoaAtiva ? FILTER_LABEL_PESSOA[f] : FILTER_LABEL[f]}
@@ -631,8 +808,6 @@ export function JiraPanel({
               {grouped ? 'Lista simples' : 'Hierarquia'}
             </Chip>
           </FilterBar>
-
-          <ActiveFilters filters={activeFilters} onRemove={clearFilter} onClearAll={clearAll} />
 
           {/* Acompanhar uma issue que não é sua: o Jira do time vizinho que trava
               o seu, ou o que você abriu para outra pessoa. */}
@@ -771,6 +946,7 @@ export function JiraPanel({
               groups={projects}
               showRole={filter === 'both'}
               ramos={ramos}
+              abertura={abertura}
               onAlternar={alternarRamo}
               pessoaNome={nome}
             />
@@ -825,18 +1001,66 @@ function JiraProblemRow({ issue }: { issue: JiraProblemItem }) {
   );
 }
 
+/** O que nasce aberto na árvore, até o usuário abrir ou fechar na mão: só o
+ *  caminho até o objetivo, ou tudo, quando um filtro já escolheu o que ver. */
+type Abertura = 'caminho' | 'tudo';
+
+/** O valor escolhido continua na lista mesmo quando a aba aberta não tem
+ *  nada dele: um seletor que perde o próprio valor parece ter se desfeito. */
+function comSelecionado(options: string[], selected: string): string[] {
+  return selected && !options.includes(selected) ? [selected, ...options] : options;
+}
+
+function JiraIssueSelect({
+  label,
+  placeholder,
+  value,
+  options,
+  rotuloDe,
+  onChange,
+}: {
+  label: string;
+  placeholder: string;
+  value: string;
+  options: JiraItem[];
+  rotuloDe: (chave: string) => string;
+  onChange: (chave: string) => void;
+}) {
+  const chaves = comSelecionado(
+    options.map((o) => o.key),
+    value,
+  );
+  return (
+    <select
+      className={cn(selectClass, 'max-w-56 truncate', focusRing)}
+      aria-label={label}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      <option value="">{placeholder}</option>
+      {chaves.map((chave) => (
+        <option key={chave} value={chave}>
+          {rotuloDe(chave)}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 /** A hierarquia por projeto: um bloco por projeto, e dentro dele a árvore de
  *  pais e filhas. É o que as duas abas têm em comum. */
 function JiraProjects({
   groups,
   showRole = false,
   ramos,
+  abertura,
   onAlternar,
   pessoaNome,
 }: {
   groups: JiraProjectGroup[];
   showRole?: boolean;
   ramos: Map<string, boolean>;
+  abertura: Abertura;
   onAlternar: (chave: string, aberto: boolean) => void;
   pessoaNome?: string;
 }) {
@@ -856,6 +1080,7 @@ function JiraProjects({
                 showRole={showRole}
                 depth={0}
                 ramos={ramos}
+                abertura={abertura}
                 onAlternar={onAlternar}
                 pessoaNome={pessoaNome}
               />
@@ -872,6 +1097,7 @@ function JiraBranch({
   showRole,
   depth,
   ramos,
+  abertura,
   onAlternar,
   pessoaNome,
 }: {
@@ -879,11 +1105,12 @@ function JiraBranch({
   showRole: boolean;
   depth: number;
   ramos: Map<string, boolean>;
+  abertura: Abertura;
   onAlternar: (chave: string, aberto: boolean) => void;
   pessoaNome?: string;
 }) {
   const temFilhos = node.children.length > 0;
-  const aberto = ramos.get(node.issue.key) ?? node.origin === 'ancestor';
+  const aberto = ramos.get(node.issue.key) ?? (abertura === 'tudo' || node.origin === 'ancestor');
 
   return (
     <>
@@ -906,6 +1133,7 @@ function JiraBranch({
             showRole={showRole}
             depth={depth + 1}
             ramos={ramos}
+            abertura={abertura}
             onAlternar={onAlternar}
             pessoaNome={pessoaNome}
           />

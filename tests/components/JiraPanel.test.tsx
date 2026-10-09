@@ -24,13 +24,22 @@ vi.mock('next/navigation', async () => {
     nav.search = url.split('?')[1] ?? '';
     nav.listeners.forEach((listener) => listener());
   };
+  // Filtros substituem a última entrada em vez de empilhar uma nova.
+  const replace = (url: string) => {
+    nav.history[nav.history.length > 0 ? nav.history.length - 1 : 0] = url;
+    nav.search = url.split('?')[1] ?? '';
+    nav.listeners.forEach((listener) => listener());
+  };
   return {
     usePathname: () => '/',
-    useRouter: () => ({ push }),
+    useRouter: () => ({ push, replace }),
     useSearchParams: () =>
       new URLSearchParams(useSyncExternalStore(subscribe, () => nav.search)),
   };
 });
+
+/** O status aparece também como opção do filtro; estes testes falam da linha. */
+const NA_LISTA = 'script, style, option';
 
 vi.mock('@/lib/hooks/useJiraPersonView', () => ({
   useJiraPersonView: vi.fn().mockReturnValue({ view: null, loading: false, error: null }),
@@ -68,6 +77,7 @@ function issue(over: Partial<JiraItem>): JiraItem {
     awaitingApproval: false,
     kind: 'História',
     subtask: false,
+    hierarchyLevel: null,
     updatedAt: new Date().toISOString(),
     dueDate: '',
     ...over,
@@ -347,7 +357,7 @@ describe('situação, idade e prazo na linha', () => {
   // coisa. O status tem cinco valores distintos e é o que faltava.
   it('mostra o status em vez do papel padrão', () => {
     render(<Panel watched={{ data: [], error: null }} onChanged={() => {}} jira={{ data: [issue({ status: 'Freezing' })], error: null }} />);
-    expect(screen.getByText('Freezing')).toBeInTheDocument();
+    expect(screen.getByText('Freezing', { ignore: NA_LISTA })).toBeInTheDocument();
     expect(screen.queryByText('RES')).toBeNull();
   });
 
@@ -370,7 +380,7 @@ describe('situação, idade e prazo na linha', () => {
         }}
       />,
     );
-    expect(screen.getAllByText('Em andamento')).toHaveLength(2);
+    expect(screen.getAllByText('Em andamento', { ignore: NA_LISTA })).toHaveLength(2);
   });
 
   function diasAtras(dias: number): string {
@@ -608,7 +618,7 @@ describe('aba Entregues', () => {
   it('marca o status da entregue como concluída', () => {
     render(<Panel delivered={{ data: [entregue({ key: 'TT-9' })], error: null }} />);
     fireEvent.click(screen.getByRole('tab', { name: /Entregues/ }));
-    expect(screen.getByText('Resolvido')).toHaveClass('jira-status-done');
+    expect(screen.getByText('Resolvido', { ignore: NA_LISTA })).toHaveClass('jira-status-done');
   });
 
   // Mesma estrutura da outra aba: DAD e PDS não se misturam só porque
@@ -861,6 +871,7 @@ describe('Visão de Pessoa (pessoaAtiva)', () => {
         delivered: { data: [], error: null },
         approved: { data: [], error: null },
         problems: { data: [], error: null },
+        ancestors: [],
       },
       loading: false,
       error: null
@@ -894,5 +905,212 @@ describe('Visão de Pessoa (pessoaAtiva)', () => {
     nav.search = 'jiraPessoa=123:abc';
     render(<Panel people={people} watched={{ data: [issue({ key: 'WATCH-1' })], error: null }} />);
     expect(screen.queryByText('WATCH-1')).not.toBeInTheDocument();
+  });
+});
+
+describe('filtros do Jira', () => {
+  // Uma iniciativa com um épico e duas histórias, e outra iniciativa com uma
+  // história. Os níveis são os que a API desta instância devolve.
+  const iniFidelidade = issue({ key: 'TT-10', summary: 'Programa de fidelidade', kind: 'Iniciativa', hierarchyLevel: 2 });
+  const iniPagamentos = issue({ key: 'TT-20', summary: 'Pagamentos', kind: 'Iniciativa', hierarchyLevel: 2 });
+  const epicPontos = issue({
+    key: 'TT-11',
+    summary: 'Pontos por aposta',
+    kind: 'Epic',
+    hierarchyLevel: 1,
+    parent: { key: 'TT-10', summary: 'Programa de fidelidade' },
+  });
+  const epicPix = issue({
+    key: 'TT-21',
+    summary: 'Pix',
+    kind: 'Epic',
+    hierarchyLevel: 1,
+    parent: { key: 'TT-20', summary: 'Pagamentos' },
+  });
+  const saldo = issue({
+    key: 'TT-111',
+    summary: 'Tela de saldo',
+    hierarchyLevel: 0,
+    status: 'Em Andamento',
+    parent: { key: 'TT-11', summary: 'Pontos por aposta' },
+  });
+  const extrato = issue({
+    key: 'TT-112',
+    summary: 'API de extrato',
+    hierarchyLevel: 0,
+    status: 'Backlog',
+    parent: { key: 'TT-11', summary: 'Pontos por aposta' },
+  });
+  const qr = issue({
+    key: 'TT-211',
+    summary: 'QR code',
+    hierarchyLevel: 0,
+    status: 'Em Andamento',
+    parent: { key: 'TT-21', summary: 'Pix' },
+  });
+
+  function montar(props: Partial<ComponentProps<typeof JiraPanel>> = {}) {
+    render(
+      <Panel
+        jira={{ data: [saldo, extrato, qr, epicPix], error: null }}
+        ancestors={[epicPontos, iniFidelidade, iniPagamentos]}
+        {...props}
+      />,
+    );
+  }
+
+  const escolher = (rotulo: string, valor: string) =>
+    fireEvent.change(screen.getByLabelText(rotulo), { target: { value: valor } });
+
+  const naTela = (chave: string) => screen.queryByRole('link', { name: chave }) !== null;
+  const minhasNaTela = () =>
+    ['TT-111', 'TT-112', 'TT-211', 'TT-21'].filter((chave) => naTela(chave));
+  const params = () => new URLSearchParams(nav.search);
+  const opcoesDe = (rotulo: string) =>
+    within(screen.getByLabelText(rotulo))
+      .getAllByRole('option')
+      .map((o) => (o as HTMLOptionElement).value)
+      .filter(Boolean);
+
+  it('filtra por status e grava na URL', () => {
+    montar();
+    escolher('filtrar por status', 'Backlog');
+
+    expect(params().get('jiraStatus')).toBe('Backlog');
+    expect(minhasNaTela()).toEqual(['TT-112']);
+  });
+
+  it('oferece só os status que existem na lista', () => {
+    montar();
+    expect(opcoesDe('filtrar por status')).toEqual(['Aberto', 'Backlog', 'Em Andamento']);
+  });
+
+  it('filtra pelo tipo, mantendo o caminho até o topo', () => {
+    montar();
+    escolher('filtrar por tipo', 'epic');
+
+    expect(params().get('jiraTipo')).toBe('epic');
+    expect(minhasNaTela()).toEqual(['TT-21']);
+    // A iniciativa acima do épico continua desenhada, como caminho.
+    expect(naTela('TT-20')).toBe(true);
+  });
+
+  it('escolher uma iniciativa mostra só o que está debaixo dela', () => {
+    montar();
+    escolher('filtrar por iniciativa', 'TT-10');
+
+    expect(params().get('jiraIniciativa')).toBe('TT-10');
+    expect(minhasNaTela()).toEqual(['TT-111', 'TT-112']);
+  });
+
+  it('os épicos e histórias oferecidos descem em cascata da iniciativa', () => {
+    montar();
+    expect(opcoesDe('filtrar por épico')).toEqual(['TT-21', 'TT-11']);
+
+    escolher('filtrar por iniciativa', 'TT-10');
+    expect(opcoesDe('filtrar por épico')).toEqual(['TT-11']);
+    expect(opcoesDe('filtrar por história')).toEqual(['TT-112', 'TT-111']);
+  });
+
+  it('trocar a iniciativa solta o épico e a história escolhidos antes', () => {
+    nav.search = 'jiraIniciativa=TT-10&jiraEpico=TT-11&jiraHistoria=TT-111';
+    montar();
+    escolher('filtrar por iniciativa', 'TT-20');
+
+    expect(params().get('jiraIniciativa')).toBe('TT-20');
+    expect(params().has('jiraEpico')).toBe(false);
+    expect(params().has('jiraHistoria')).toBe(false);
+    expect(minhasNaTela()).toEqual(['TT-211', 'TT-21']);
+  });
+
+  it('escolher uma história mostra só ela', () => {
+    montar();
+    escolher('filtrar por história', 'TT-112');
+    expect(minhasNaTela()).toEqual(['TT-112']);
+  });
+
+  it('a busca acha pelo título da iniciativa', () => {
+    montar();
+    fireEvent.change(screen.getByLabelText('buscar issues'), { target: { value: 'fidelidade' } });
+
+    expect(params().get('jiraBusca')).toBe('fidelidade');
+    expect(minhasNaTela()).toEqual(['TT-111', 'TT-112']);
+  });
+
+  it('abre já filtrado quando o link traz os filtros', () => {
+    nav.search = 'jiraStatus=Em+Andamento&jiraTipo=story';
+    montar();
+    // TT-21 continua na tela como caminho da TT-211; a TT-112 (Backlog) sai.
+    expect(minhasNaTela()).toEqual(['TT-111', 'TT-211', 'TT-21']);
+    expect(naTela('TT-112')).toBe(false);
+  });
+
+  it('mostra cada filtro ativo e limpa tudo de uma vez, sem mexer na aba', () => {
+    nav.search = 'jira=abertas&jiraStatus=Backlog&jiraIniciativa=TT-10';
+    montar();
+    expect(screen.getByText('Status: Backlog')).toBeInTheDocument();
+    expect(screen.getByText('Iniciativa: TT-10 Programa de fidelidade')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /limpar/i }));
+
+    expect(params().has('jiraStatus')).toBe(false);
+    expect(params().has('jiraIniciativa')).toBe(false);
+    expect(params().get('jira')).toBe('abertas');
+    // De volta ao padrão: o épico que é seu nasce fechado, com a história dentro.
+    expect(minhasNaTela()).toEqual(['TT-111', 'TT-112', 'TT-21']);
+  });
+
+  it('os mesmos filtros valem na aba Entregues', () => {
+    nav.search = 'jira=entregues&jiraIniciativa=TT-20';
+    montar({
+      jira: { data: [], error: null },
+      ancestors: [epicPontos, epicPix, iniFidelidade, iniPagamentos],
+      delivered: {
+        data: [
+          { ...saldo, today: true },
+          { ...qr, today: true },
+        ],
+        error: null,
+      },
+    });
+    expect(naTela('TT-211')).toBe(true);
+    expect(naTela('TT-111')).toBe(false);
+  });
+
+  // O servidor não busca como ancestral o que já está numa lista: o épico que
+  // é seu em aberto não vem em `ancestors`. A árvore da aba Entregues precisa
+  // achá-lo mesmo assim para desenhar o caminho da história entregue.
+  it('usa o épico que está em aberto como caminho da história entregue', () => {
+    nav.search = 'jira=entregues';
+    montar({
+      jira: { data: [epicPix], error: null },
+      ancestors: [iniPagamentos],
+      delivered: { data: [{ ...qr, today: true }], error: null },
+    });
+    const linhas = screen.getAllByRole('listitem').map((li) => li.textContent?.match(/TT-\d+/)?.[0]);
+    expect(linhas).toEqual(['TT-20', 'TT-21', 'TT-211']);
+  });
+
+  it('diz que nada casa com os filtros, em vez de dizer que nada foi entregue', () => {
+    nav.search = 'jira=entregues&jiraStatus=Backlog';
+    montar({
+      jira: { data: [], error: null },
+      delivered: { data: [{ ...saldo, today: true }], error: null },
+    });
+    expect(screen.getByText('Nenhuma issue com esses filtros.')).toBeInTheDocument();
+    expect(screen.queryByText('Nenhuma issue entregue hoje.')).toBeNull();
+  });
+
+  it('o papel também vai para a URL', () => {
+    montar();
+    fireEvent.click(screen.getByRole('button', { name: 'Relator' }));
+    expect(params().get('jiraPapel')).toBe('reporter');
+  });
+
+  it('valor inventado na URL cai no padrão', () => {
+    nav.search = 'jiraTipo=objetivo&jiraIniciativa=nada%20disso';
+    montar();
+    expect(screen.queryByText(/^Tipo:|^Iniciativa:/)).toBeNull();
+    expect(minhasNaTela()).toEqual(['TT-111', 'TT-112', 'TT-21']);
   });
 });

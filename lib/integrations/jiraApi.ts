@@ -70,7 +70,11 @@ interface RawIssue {
       statusCategory?: { key?: string | null } | null;
     } | null;
     project?: { key?: string | null } | null;
-    issuetype?: { name?: string | null; subtask?: boolean | null } | null;
+    issuetype?: {
+      name?: string | null;
+      subtask?: boolean | null;
+      hierarchyLevel?: number | null;
+    } | null;
     parent?: { key?: string; fields?: { summary?: string | null } | null } | null;
   } | null;
 }
@@ -100,6 +104,8 @@ export function toJiraItem(raw: RawIssue, baseUrl: string, role: JiraRole): Jira
     awaitingApproval: false,
     kind: fields.issuetype?.name ?? '',
     subtask: fields.issuetype?.subtask ?? false,
+    hierarchyLevel:
+      typeof fields.issuetype?.hierarchyLevel === 'number' ? fields.issuetype.hierarchyLevel : null,
   };
 }
 

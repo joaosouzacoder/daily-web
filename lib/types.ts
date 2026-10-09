@@ -137,6 +137,11 @@ export interface JiraItem {
   awaitingApproval: boolean;
   kind: string;
   subtask: boolean;
+  /** O degrau do tipo na hierarquia do Jira: -1 subtarefa, 0 história, 1
+   *  épico, e acima disso os níveis da instância (aqui 2 é iniciativa e 3 é
+   *  objetivo). Nulo quando o Jira não informa. Diferente do nome do tipo,
+   *  ele não muda por idioma nem por esquema de tipos do projeto. */
+  hierarchyLevel: number | null;
   /** ISO da última alteração. É daqui que sai "parado há X dias". */
   updatedAt: string;
   /** AAAA-MM-DD, ou vazio quando a issue não tem prazo. */

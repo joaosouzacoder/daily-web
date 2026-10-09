@@ -9,6 +9,14 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Added
+- Jira filters shared by every tab: status, type (initiatives, epics or
+  stories, read from the issue type's hierarchy level rather than its name),
+  and a specific initiative, epic or story, cascading so each picker only
+  offers what sits under the one above. The search now also matches the key
+  and title of any ancestor, so searching an initiative's name brings its
+  stories. Every filter, plus the role filter, lives in the URL; switching
+  person clears them, and with a filter on the tree opens fully so matches are
+  not hidden in a collapsed branch.
 - Each e-mail group header has a checkbox that selects or clears the whole
   group, and shows a partial state when only some of it is selected.
 - Right-clicking a conversation row opens a context menu with the batch
@@ -57,6 +65,10 @@ Only `main` is maintained; there are no release branches.
   no longer applied to everyone; it is opt-in through the new choice.
 
 ### Fixed
+- A delivered or approved story whose epic is still one of your open issues
+  now shows under that epic. The server never re-fetches as an ancestor what
+  is already in a list, so the tree of each tab now takes its path from every
+  issue the panel knows, not only from the fetched ancestors.
 - Deleting or moving an older e-mail no longer comes back as "o servidor ainda
   não refletiu esta ação". The flag re-check only covered the last 200 UIDs,
   and Gmail numbers the inbox sparsely, so a message stored below that window
