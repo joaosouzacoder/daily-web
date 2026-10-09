@@ -16,6 +16,7 @@ function item(over: Partial<JiraItem> = {}): JiraItem {
     awaitingApproval: false,
     kind: 'História',
     subtask: false,
+    hierarchyLevel: null,
     updatedAt: '2026-09-10T12:00:00.000Z',
     dueDate: '',
     ...over,

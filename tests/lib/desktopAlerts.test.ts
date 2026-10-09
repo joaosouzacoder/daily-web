@@ -48,6 +48,7 @@ function jira(over: Partial<JiraItem> = {}): JiraItem {
     awaitingApproval: false,
     kind: 'Story',
     subtask: false,
+    hierarchyLevel: null,
     updatedAt: '2026-09-18T10:00:00Z',
     dueDate: '',
     ...over,
