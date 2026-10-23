@@ -15,6 +15,7 @@ function task(over: Partial<TodoTask>): TodoTask {
     recur: '',
     notes: '',
     subtasks: [],
+    doing: false,
     ...over,
   };
 }

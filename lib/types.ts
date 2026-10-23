@@ -291,7 +291,14 @@ export interface TodoTask {
   recur: string;
   notes: string;
   subtasks: SubTask[];
+  /** Marked "Fazendo" on the board. Not a provider field — Microsoft To Do
+   *  has no "in progress" — so it is overlaid from this app's own database
+   *  and is always false for a completed task. */
+  doing: boolean;
 }
+
+/** A task as a provider returns it, before the board overlay is applied. */
+export type ProviderTask = Omit<TodoTask, 'doing'>;
 
 /** Uma aba do bloco de notas. Vive no servidor, então acompanha o usuário
  *  entre máquinas. */
