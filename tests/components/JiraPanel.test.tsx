@@ -941,10 +941,33 @@ describe('Visão de Pessoa (pessoaAtiva)', () => {
     expect(await screen.findByLabelText('buscar pessoa no Jira')).toBeInTheDocument();
   });
 
-  it('offers to stop following only on a followed person', async () => {
+  it('puts the focus in the person search, not back on the title', async () => {
     render(<Panel people={people} />);
     const menu = await abrirPessoas('Jira · Eu');
-    expect(within(menu).queryByRole('menuitem', { name: /Parar de acompanhar/ })).not.toBeInTheDocument();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Acompanhar pessoa' }));
+    const campo = await screen.findByRole('textbox', { name: 'buscar pessoa no Jira' });
+    await waitFor(() => expect(campo).toHaveFocus());
+  });
+
+  it('closes the person search from its own button', async () => {
+    render(<Panel people={people} />);
+    const menu = await abrirPessoas('Jira · Eu');
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Acompanhar pessoa' }));
+    await screen.findByRole('textbox', { name: 'buscar pessoa no Jira' });
+    fireEvent.click(screen.getByRole('button', { name: 'fechar busca de pessoa' }));
+    expect(screen.queryByRole('textbox', { name: 'buscar pessoa no Jira' })).not.toBeInTheDocument();
+  });
+
+  it('offers to stop following only on a followed person', async () => {
+    const { unmount } = render(<Panel people={people} />);
+    const proprio = await abrirPessoas('Jira · Eu');
+    expect(within(proprio).queryByRole('menuitem', { name: /Parar de acompanhar/ })).not.toBeInTheDocument();
+    unmount();
+
+    nav.search = 'jiraPessoa=123:abc';
+    render(<Panel people={people} />);
+    const seguido = await abrirPessoas('Jira · Ana Souza');
+    expect(within(seguido).getByRole('menuitem', { name: 'Parar de acompanhar Ana Souza' })).toBeInTheDocument();
   });
 
   it('stops following the person on screen and goes back to your own Jira', async () => {

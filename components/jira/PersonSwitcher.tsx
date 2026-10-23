@@ -1,5 +1,6 @@
 'use client';
 
+import { useRef, type RefObject } from 'react';
 import { ChevronDown, UserPlus, X } from 'lucide-react';
 import type { JiraPerson } from '@/lib/types';
 import {
@@ -20,6 +21,8 @@ interface Props {
   active: JiraPerson | null;
   onSelect: (accountId: string | 'eu') => void;
   onFollow: () => void;
+  /** The person search field that "Acompanhar pessoa" opens, focused once the menu closes. */
+  searchField: RefObject<HTMLInputElement | null>;
   onUnfollow: (accountId: string) => void;
 }
 
@@ -29,7 +32,15 @@ interface Props {
  * followed) on a fixed-height panel for something switched now and then; the
  * title already named the person, so the tabs only repeated it.
  */
-export function PersonSwitcher({ people, active, onSelect, onFollow, onUnfollow }: Props) {
+export function PersonSwitcher({
+  people,
+  active,
+  onSelect,
+  onFollow,
+  onUnfollow,
+  searchField,
+}: Props) {
+  const seguindo = useRef(false);
   return (
     <DropdownMenu>
       {/* The visible text is the accessible name: "Jira · Eu" says both what
@@ -43,7 +54,20 @@ export function PersonSwitcher({ people, active, onSelect, onFollow, onUnfollow 
         <span className="truncate">Jira · {active ? active.displayName : 'Eu'}</span>
         <ChevronDown aria-hidden className="size-4 shrink-0 text-ink-dim" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-56">
+      <DropdownMenuContent
+        align="start"
+        className="min-w-56"
+        // Radix gives focus back to the trigger on close, which would pull it
+        // out of the search the item just opened: choosing it means typing a
+        // name next, so the field gets the focus instead.
+        onCloseAutoFocus={(e) => {
+          if (!seguindo.current) return;
+          seguindo.current = false;
+          if (!searchField.current) return;
+          e.preventDefault();
+          searchField.current.focus();
+        }}
+      >
         <DropdownMenuRadioGroup
           value={active?.accountId ?? 'eu'}
           onValueChange={(value) => onSelect(value)}
@@ -56,7 +80,12 @@ export function PersonSwitcher({ people, active, onSelect, onFollow, onUnfollow 
           ))}
         </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={onFollow}>
+        <DropdownMenuItem
+          onSelect={() => {
+            seguindo.current = true;
+            onFollow();
+          }}
+        >
           <UserPlus />
           Acompanhar pessoa
         </DropdownMenuItem>

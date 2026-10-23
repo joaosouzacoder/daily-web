@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useMemo, useState, useEffect } from 'react';
+import { createContext, useCallback, useContext, useMemo, useRef, useState, useEffect } from 'react';
 import { CalendarPlus, ChevronRight, Flag, GitPullRequest, Plus, X } from 'lucide-react';
 import { IconAction } from '@/components/data/IconAction';
 import { NavArrowRight } from 'iconoir-react';
@@ -304,6 +304,7 @@ export function JiraPanel({
   const [ramos, setRamos] = useState<Map<string, boolean>>(new Map());
 
   const [formAberta, setFormAberta] = useState(false);
+  const campoBuscaPessoa = useRef<HTMLInputElement>(null);
   const [buscaNovaPessoa, setBuscaNovaPessoa] = useState('');
   const [resultadosPessoas, setResultadosPessoas] = useState<JiraPerson[]>([]);
   const [buscandoPessoas, setBuscandoPessoas] = useState(false);
@@ -616,6 +617,7 @@ export function JiraPanel({
               active={pessoaAtivaObj ?? null}
               onSelect={setPessoa}
               onFollow={() => setFormAberta(true)}
+              searchField={campoBuscaPessoa}
               onUnfollow={(accountId) => void pararPessoa(accountId)}
             />
           }
@@ -639,16 +641,26 @@ export function JiraPanel({
         >
           {formAberta && (
             <div className="mb-4 rounded-lg border border-line-soft bg-muted/30 p-4">
-              <Input
-                autoFocus
-                aria-label="buscar pessoa no Jira"
-                placeholder="nome da pessoa"
-                value={buscaNovaPessoa}
-                onChange={(e) => setBuscaNovaPessoa(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') setFormAberta(false);
-                }}
-              />
+              {/* The menu that opens this card closes on choosing it, so this
+                  is the only way out besides Escape inside the field. */}
+              <div className="flex items-center gap-2">
+                <Input
+                  ref={campoBuscaPessoa}
+                  autoFocus
+                  aria-label="buscar pessoa no Jira"
+                  placeholder="nome da pessoa"
+                  value={buscaNovaPessoa}
+                  onChange={(e) => setBuscaNovaPessoa(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') setFormAberta(false);
+                  }}
+                />
+                <IconAction
+                  label="fechar busca de pessoa"
+                  onClick={() => setFormAberta(false)}
+                  icon={<X className="size-4" />}
+                />
+              </div>
               {erroPessoas && <PanelError>{erroPessoas}</PanelError>}
               {buscandoPessoas && <p className="mt-2 text-sm text-ink-dim">Buscando…</p>}
               {!buscandoPessoas && resultadosPessoas.length > 0 && (
