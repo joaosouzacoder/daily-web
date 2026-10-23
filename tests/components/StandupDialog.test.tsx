@@ -108,7 +108,9 @@ describe('StandupDialog', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Copiar' }));
 
     await within(dialog).findByRole('button', { name: 'Copiado' });
-    expect(writeText).toHaveBeenCalledWith(expect.stringMatching(/^Entregue na semana/));
+    expect(writeText).toHaveBeenCalledWith(
+      'Entregue na semana\n- Nada entregue\n\nPRs abertos na semana\n- Nenhum\n\nBloqueios\n- A-3 — Travada',
+    );
   });
 
   it('opens on the daily summary again after the weekly one', () => {
@@ -118,7 +120,9 @@ describe('StandupDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Resumo para a daily' }));
 
     const reopened = screen.getByRole('dialog', { name: 'Resumo para a daily' });
-    const texto = within(reopened).getByRole('textbox', { name: 'texto do resumo' }) as HTMLTextAreaElement;
-    expect(texto.value).toMatch(/^Ontem/);
+    expect(within(reopened).getByRole('button', { name: 'Diário' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(reopened).getByRole('textbox', { name: 'texto do resumo' })).toHaveValue(
+      'Ontem\n- Nada entregue\n\nHoje\n- A-2 — Andando\n\nBloqueios\n- A-3 — Travada',
+    );
   });
 });
