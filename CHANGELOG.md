@@ -110,6 +110,17 @@ Only `main` is maintained; there are no release branches.
   fix.
 
 ### Changed
+- The task create/edit form shows every field explicitly. Priority and
+  recurrence are native selects ("Prioridade": Alta, Normal, Baixa;
+  "Repetição": Não repete, Diária, Semanal, Mensal) instead of buttons that
+  cycled through hidden values. The date is a date input plus a time input,
+  with "Hoje", "Amanhã", "Próx. semana" and "Sem data" shortcuts; the free-text
+  date ("amanhã 14:30", "+3d") is still there under "Digitar data", with a
+  live preview and an inline error that gives examples. Recurrence is
+  disabled until there is a date, because a recurring task without one is
+  completed for good instead of coming back. Enter saves, an empty title is
+  reported on the field instead of a disabled "Salvar", and editing a task
+  offers "Apagar" with a confirmation.
 - Choosing whose Jira is on screen moved into the panel title: "Jira · Eu"
   opens a menu with you, the people you follow, "Acompanhar pessoa" and, on a
   followed person, "Parar de acompanhar". The row of person tabs above the
@@ -132,6 +143,17 @@ Only `main` is maintained; there are no release branches.
   `components/data/EmptyState`.
 
 ### Fixed
+- Editing a local monthly task no longer wipes its recurrence. The form only
+  recognised Microsoft To Do's `absoluteMonthly`, so a task stored as
+  `monthly` opened as "Não repete" and saving sent `recur: 'none'`.
+- The task form opens as a real dialog over the whole page instead of inside
+  the tasks panel. On a 390px screen "Salvar" was below the bottom navigation
+  and out of reach; now focus stays inside the dialog, Escape closes it,
+  focus returns to the button that opened it, and clicking outside with
+  unsaved changes asks before discarding them.
+- Answering a confirmation ("Apagar a nota?" and the like) puts focus back
+  where it was instead of on the page body. Inside another dialog, focus used
+  to land outside it, so Tab no longer reached the form.
 - A local task with a date but no time no longer shows "none" after the date
   ("24/10 none"), and clearing a task's date no longer files it under
   "Depois". The local store kept the word 'none', which callers use to mean

@@ -660,6 +660,10 @@ export function TasksPanel({
             setEditing(null);
             onChanged();
           }}
+          onDeleted={(id) => {
+            setEditing(null);
+            onRemoved(id);
+          }}
         />
       )}
     </Section>
