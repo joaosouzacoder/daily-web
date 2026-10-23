@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useMemo, useState, useEffect } from 'react';
-import { CalendarPlus, ChevronRight, Flag, GitPullRequest, Plus, X, UserPlus } from 'lucide-react';
+import { CalendarPlus, ChevronRight, Flag, GitPullRequest, Plus, X } from 'lucide-react';
 import { IconAction } from '@/components/data/IconAction';
 import { NavArrowRight } from 'iconoir-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -20,6 +20,7 @@ import { pullsByJiraKey } from '@/lib/pullJira';
 import { PanelError } from '@/components/data/PanelError';
 import type { ActiveFilter } from '@/lib/filters';
 import { JiraMultiFilterDropdown } from './JiraMultiFilterDropdown';
+import { PersonSwitcher } from './jira/PersonSwitcher';
 import {
   EMPTY_JIRA_FILTERS,
   JIRA_TIERS,
@@ -609,7 +610,15 @@ export function JiraPanel({
     <JiraActionsProvider value={{ viewer, onChanged }}>
       <JiraPullsContext.Provider value={prsPorChave}>
         <Section
-          eyebrow={pessoaAtivaObj ? `Jira · ${pessoaAtivaObj.displayName}` : 'Jira'}
+          eyebrow={
+            <PersonSwitcher
+              people={people}
+              active={pessoaAtivaObj ?? null}
+              onSelect={setPessoa}
+              onFollow={() => setFormAberta(true)}
+              onUnfollow={(accountId) => void pararPessoa(accountId)}
+            />
+          }
           count={
             aba === 'abertas' && activeFilters.length > 0
               ? `${visible.length} de ${all.length}`
@@ -628,40 +637,6 @@ export function JiraPanel({
             )
           }
         >
-          <div className="flex min-w-0 items-start gap-2">
-            <Tabs
-              wrap
-              id="jira-pessoa"
-              label="de quem é o Jira"
-              active={pessoaAtiva ?? 'eu'}
-              onChange={setPessoa}
-              tabs={[
-                { id: 'eu', label: 'Eu' },
-                ...people.map((p) => ({
-                  id: p.accountId,
-                  label: p.displayName,
-                })),
-              ]}
-            />
-            <IconAction
-              variant="outline"
-              size="icon"
-              label="Acompanhar pessoa"
-              onClick={() => setFormAberta(!formAberta)}
-              icon={<UserPlus className="size-4" />}
-            />
-            {pessoaAtivaObj && (
-              <IconAction
-                variant="outline"
-                size="icon"
-                className="text-danger hover:bg-danger-tint hover:text-danger"
-                label={`parar de acompanhar ${pessoaAtivaObj.displayName}`}
-                onClick={() => void pararPessoa(pessoaAtivaObj.accountId)}
-                icon={<X className="size-4" />}
-              />
-            )}
-          </div>
-
           {formAberta && (
             <div className="mb-4 rounded-lg border border-line-soft bg-muted/30 p-4">
               <Input

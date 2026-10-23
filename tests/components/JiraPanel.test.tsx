@@ -905,16 +905,60 @@ describe('Visão de Pessoa (pessoaAtiva)', () => {
     });
   });
 
-  it('exibe as abas de pessoa e inicia em "Eu"', () => {
+  /** The person switcher is the panel title; Radix opens it on pointer down. */
+  const abrirPessoas = (titulo: string | RegExp) => {
+    fireEvent.pointerDown(screen.getByRole('button', { name: titulo }), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: 'mouse',
+    });
+    return screen.findByRole('menu');
+  };
+
+  it('starts on your own Jira and lists the followed people in the title menu', async () => {
     render(<Panel people={people} />);
-    expect(screen.getByRole('tab', { name: 'Eu' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: 'Ana Souza' })).toBeInTheDocument();
+    const menu = await abrirPessoas('Jira · Eu');
+    expect(within(menu).getByRole('menuitemradio', { name: 'Eu' })).toHaveAttribute('aria-checked', 'true');
+    expect(within(menu).getByRole('menuitemradio', { name: 'Ana Souza' })).toBeInTheDocument();
   });
 
-  it('troca para a pessoa, altera o título e atualiza URL', () => {
+  it('switching person from the title menu writes it to the URL', async () => {
     render(<Panel people={people} />);
-    fireEvent.click(screen.getByRole('tab', { name: 'Ana Souza' }));
+    const menu = await abrirPessoas('Jira · Eu');
+    fireEvent.click(within(menu).getByRole('menuitemradio', { name: 'Ana Souza' }));
     expect(nav.history.at(-1)).toBe('/?jiraPessoa=123%3Aabc');
+  });
+
+  it('takes no row of its own above the lists', () => {
+    render(<Panel people={people} />);
+    expect(screen.queryByRole('tablist', { name: 'de quem é o Jira' })).not.toBeInTheDocument();
+  });
+
+  it('opens the person search from the title menu', async () => {
+    render(<Panel people={people} />);
+    const menu = await abrirPessoas('Jira · Eu');
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Acompanhar pessoa' }));
+    expect(await screen.findByLabelText('buscar pessoa no Jira')).toBeInTheDocument();
+  });
+
+  it('offers to stop following only on a followed person', async () => {
+    render(<Panel people={people} />);
+    const menu = await abrirPessoas('Jira · Eu');
+    expect(within(menu).queryByRole('menuitem', { name: /Parar de acompanhar/ })).not.toBeInTheDocument();
+  });
+
+  it('stops following the person on screen and goes back to your own Jira', async () => {
+    nav.search = 'jiraPessoa=123:abc';
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<Panel people={people} />);
+    const menu = await abrirPessoas('Jira · Ana Souza');
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Parar de acompanhar Ana Souza' }));
+    await waitFor(() => expect(nav.search).toBe(''));
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/jira/people',
+      expect.objectContaining({ method: 'DELETE', body: JSON.stringify({ accountId: '123:abc' }) }),
+    );
   });
 
   it('usa a view da pessoa e não a do usuário local quando selecionada', () => {
