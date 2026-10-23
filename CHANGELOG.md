@@ -121,6 +121,10 @@ Only `main` is maintained; there are no release branches.
   completed for good instead of coming back. Enter saves, an empty title is
   reported on the field instead of a disabled "Salvar", and editing a task
   offers "Apagar" with a confirmation.
+- The board's notes hang from a side-view plastic pushpin, in red, blue,
+  yellow or green, instead of a flat dot. A pin never takes the colour its
+  paper would hide, and about one note in three has its bottom corner peeling
+  off. The pin rises with its note on hover.
 - Choosing whose Jira is on screen moved into the panel title: "Jira · Eu"
   opens a menu with you, the people you follow, "Acompanhar pessoa" and, on a
   followed person, "Parar de acompanhar". The row of person tabs above the
@@ -154,6 +158,15 @@ Only `main` is maintained; there are no release branches.
 - Answering a confirmation ("Apagar a nota?" and the like) puts focus back
   where it was instead of on the page body. Inside another dialog, focus used
   to land outside it, so Tab no longer reached the form.
+- Deleting a task from the list asks for confirmation first, as notes and
+  e-mail already do. With Microsoft To Do behind the panel there is no trash
+  to restore from.
+- A repeating task now needs a date. Without one, completing it finished it
+  for good while the panel announced it would come back with its next date;
+  the API refuses the combination and the announcement only promises a next
+  date when there is one.
+- A completed note is struck through because it is completed, not because it
+  is green.
 - A local task with a date but no time no longer shows "none" after the date
   ("24/10 none"), and clearing a task's date no longer files it under
   "Depois". The local store kept the word 'none', which callers use to mean
