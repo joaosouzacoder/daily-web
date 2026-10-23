@@ -9,6 +9,11 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Added
+- The "Resumo para a daily" dialog has a "Semanal" view next to "Diário":
+  what you delivered or approved since Monday, the pull requests you opened
+  since Monday and are still open, and what blocks you now. Like the daily
+  one it comes from what the dashboard already loaded, and "Copiar" copies
+  whichever view is on screen. It reopens on "Diário".
 - A Dracula choice under "Fundo" in the account menu, next to Gradiente and
   Catppuccin. In the dark theme it applies the full Dracula palette:
   background and sidebar, raised surfaces, text, borders, the accent (Purple)
@@ -96,6 +101,11 @@ Only `main` is maintained; there are no release branches.
   fix.
 
 ### Changed
+- Choosing whose Jira is on screen moved into the panel title: "Jira · Eu"
+  opens a menu with you, the people you follow, "Acompanhar pessoa" and, on a
+  followed person, "Parar de acompanhar". The row of person tabs above the
+  lists is gone, so the panel shows one more line of issues, and a few more
+  when you follow several people.
 - In the dark theme, the Catppuccin choice is now the full Mocha palette
   instead of only a Macchiato page base: background and sidebar (Base,
   Mantle), raised surfaces (Surface 0–2), text (Text, Subtext 1/0), borders,
@@ -113,6 +123,10 @@ Only `main` is maintained; there are no release branches.
   `components/data/EmptyState`.
 
 ### Fixed
+- Creating a focus block now shows the "Bloco de foco criado" confirmation.
+  The provider called `toast()` but no Toaster was ever mounted, so the
+  message was queued and never rendered. The shell now mounts one for every
+  authenticated screen.
 - An AI-drafted e-mail reply no longer speaks as the project's author. The
   prompt named one person, so every other user got drafts written, and
   sometimes signed, in his name. The draft is now written on behalf of the
