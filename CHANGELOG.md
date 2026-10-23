@@ -9,6 +9,18 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Added
+- The "Resumo para a daily" dialog has a "Semanal" view next to "Diário":
+  what you delivered or approved since Monday, the pull requests you opened
+  since Monday and are still open, and what blocks you now. Like the daily
+  one it comes from what the dashboard already loaded, and "Copiar" copies
+  whichever view is on screen. It reopens on "Diário".
+- A Dracula choice under "Fundo" in the account menu, next to Gradiente and
+  Catppuccin. In the dark theme it applies the full Dracula palette:
+  background and sidebar, raised surfaces, text, borders, the accent (Purple)
+  and the status colors (Green, Orange for warnings, Red, Cyan). Like the
+  others it is stored in the `backdrop` cookie and stamped on `<html>` by the
+  server, so it paints on first load without a flash. Dracula is a dark
+  palette, so the light theme keeps the gradient.
 - A "Resumo para a daily" button in the Jira panel header opens a plain-text
   standup summary in three sections: Ontem (issues delivered or approved and
   PRs opened since the previous working day, Friday on a Monday), Hoje
@@ -89,6 +101,11 @@ Only `main` is maintained; there are no release branches.
   fix.
 
 ### Changed
+- Choosing whose Jira is on screen moved into the panel title: "Jira · Eu"
+  opens a menu with you, the people you follow, "Acompanhar pessoa" and, on a
+  followed person, "Parar de acompanhar". The row of person tabs above the
+  lists is gone, so the panel shows one more line of issues, and a few more
+  when you follow several people.
 - In the dark theme, the Catppuccin choice is now the full Mocha palette
   instead of only a Macchiato page base: background and sidebar (Base,
   Mantle), raised surfaces (Surface 0–2), text (Text, Subtext 1/0), borders,
@@ -102,6 +119,10 @@ Only `main` is maintained; there are no release branches.
   The provider called `toast()` but no Toaster was ever mounted, so the
   message was queued and never rendered. The shell now mounts one for every
   authenticated screen.
+- An AI-drafted e-mail reply no longer speaks as the project's author. The
+  prompt named one person, so every other user got drafts written, and
+  sometimes signed, in his name. The draft is now written on behalf of the
+  mailbox the reply goes out from, and leaves the signature to the sender.
 - A delivered or approved story whose epic is still one of your open issues
   now shows under that epic. The server never re-fetches as an ancestor what
   is already in a list, so the tree of each tab now takes its path from every
