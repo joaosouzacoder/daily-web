@@ -18,6 +18,18 @@ Only `main` is maintained; there are no release branches.
   task's own completion, so moving a note there completes it through the
   existing path and moving it out reopens it. Notes move by drag and drop or
   with per-note buttons that work from the keyboard and announce the result.
+- The "Resumo para a daily" dialog has a "Semanal" view next to "Diário":
+  what you delivered or approved since Monday, the pull requests you opened
+  since Monday and are still open, and what blocks you now. Like the daily
+  one it comes from what the dashboard already loaded, and "Copiar" copies
+  whichever view is on screen. It reopens on "Diário".
+- A Dracula choice under "Fundo" in the account menu, next to Gradiente and
+  Catppuccin. In the dark theme it applies the full Dracula palette:
+  background and sidebar, raised surfaces, text, borders, the accent (Purple)
+  and the status colors (Green, Orange for warnings, Red, Cyan). Like the
+  others it is stored in the `backdrop` cookie and stamped on `<html>` by the
+  server, so it paints on first load without a flash. Dracula is a dark
+  palette, so the light theme keeps the gradient.
 - A "Resumo para a daily" button in the Jira panel header opens a plain-text
   standup summary in three sections: Ontem (issues delivered or approved and
   PRs opened since the previous working day, Friday on a Monday), Hoje
@@ -98,6 +110,11 @@ Only `main` is maintained; there are no release branches.
   fix.
 
 ### Changed
+- Choosing whose Jira is on screen moved into the panel title: "Jira · Eu"
+  opens a menu with you, the people you follow, "Acompanhar pessoa" and, on a
+  followed person, "Parar de acompanhar". The row of person tabs above the
+  lists is gone, so the panel shows one more line of issues, and a few more
+  when you follow several people.
 - In the dark theme, the Catppuccin choice is now the full Mocha palette
   instead of only a Macchiato page base: background and sidebar (Base,
   Mantle), raised surfaces (Surface 0–2), text (Text, Subtext 1/0), borders,
@@ -106,7 +123,24 @@ Only `main` is maintained; there are no release branches.
 - The gradient is the default page background again. The Catppuccin base is
   no longer applied to everyone; it is opt-in through the new choice.
 
+### Removed
+- UI primitives that nothing imported: `components/ui/card`, `select`,
+  `separator`, `sheet`, `table` and `tabs`, plus `components/data/Metric`.
+  Panels keep rendering tabs through `ui/legacy-tabs`. Nothing changes on
+  screen.
+- The `components/ui/EmptyState` shim. Every caller already imports
+  `components/data/EmptyState`.
+
 ### Fixed
+- A local task with a date but no time no longer shows "none" after the date
+  ("24/10 none"), and clearing a task's date no longer files it under
+  "Depois". The local store kept the word 'none', which callers use to mean
+  "clear this field", for the date and time; only recurrence was translated.
+  Tasks saved that way before this fix read correctly too.
+- Creating a focus block now shows the "Bloco de foco criado" confirmation.
+  The provider called `toast()` but no Toaster was ever mounted, so the
+  message was queued and never rendered. The shell now mounts one for every
+  authenticated screen.
 - An AI-drafted e-mail reply no longer speaks as the project's author. The
   prompt named one person, so every other user got drafts written, and
   sometimes signed, in his name. The draft is now written on behalf of the

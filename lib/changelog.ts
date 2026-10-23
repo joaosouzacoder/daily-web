@@ -30,6 +30,42 @@ export const RELEASES: Release[] = [
     ],
   },
   {
+    id: '2026-10-23-jira-pessoa',
+    date: '2026-10-23',
+    title: 'Jira: troca de pessoa pelo título',
+    items: [
+      {
+        title: 'De quem é o Jira, no próprio título',
+        detail:
+          'Clique em "Jira · Eu" no topo do painel para ver o Jira de outra pessoa, acompanhar alguém novo ou parar de acompanhar quem está na tela. As abas de pessoa saíram e as listas ganharam espaço.',
+      },
+    ],
+  },
+  {
+    id: '2026-10-23-resumo-semanal',
+    date: '2026-10-23',
+    title: 'Resumo da semana',
+    items: [
+      {
+        title: 'Diário ou Semanal no mesmo resumo',
+        detail:
+          'No resumo para a daily, a opção "Semanal" mostra o que você entregou desde segunda, os PRs abertos na semana e os bloqueios atuais, pronto para copiar na retro ou no 1:1. Ao reabrir, o resumo volta para o "Diário".',
+      },
+    ],
+  },
+  {
+    id: '2026-10-23-dracula',
+    date: '2026-10-23',
+    title: 'Fundo Dracula',
+    items: [
+      {
+        title: 'Uma terceira opção de fundo',
+        detail:
+          'No menu da conta, em Fundo, ao lado de Gradiente e Catppuccin: no tema escuro, a página, os cartões, o texto, as bordas, o destaque e os selos de situação seguem a paleta Dracula. No tema claro o gradiente continua.',
+      },
+    ],
+  },
+  {
     id: '2026-10-21-daily',
     date: '2026-10-21',
     title: 'Resumo para a daily',

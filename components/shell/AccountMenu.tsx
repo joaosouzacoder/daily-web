@@ -18,6 +18,7 @@ import {
   applyBackdrop,
   applyDensity,
   applyTheme,
+  parseBackdrop,
   type Backdrop,
   type Density,
   type ThemePreference,
@@ -39,6 +40,8 @@ const DENSITY_LABEL: Record<Density, string> = {
 const BACKDROP_LABEL: Record<Backdrop, string> = {
   mesh: 'Gradiente',
   catppuccin: 'Catppuccin',
+  // Dracula only remaps the dark theme, so the hint keeps a light-theme pick from looking broken.
+  dracula: 'Dracula (só no tema escuro)',
 };
 
 interface Props {
@@ -79,7 +82,7 @@ export function AccountMenu({
     else if (root.classList.contains('light')) setTheme('light');
     else setTheme('system');
     setDensity(root.dataset.density === 'compact' ? 'compact' : 'comfortable');
-    setBackdrop(root.dataset.backdrop === 'catppuccin' ? 'catppuccin' : 'mesh');
+    setBackdrop(parseBackdrop(root.dataset.backdrop));
   }, []);
 
   const chooseTheme = (pref: ThemePreference) => {
@@ -157,7 +160,7 @@ export function AccountMenu({
           value={backdrop}
           onValueChange={(v) => chooseBackdrop(v as Backdrop)}
         >
-          {(['mesh', 'catppuccin'] as const).map((value) => (
+          {(['mesh', 'catppuccin', 'dracula'] as const).map((value) => (
             <DropdownMenuRadioItem key={value} value={value}>
               {BACKDROP_LABEL[value]}
             </DropdownMenuRadioItem>
