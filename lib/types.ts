@@ -300,6 +300,9 @@ export interface TodoTask {
 /** A task as a provider returns it, before the board overlay is applied. */
 export type ProviderTask = Omit<TodoTask, 'doing'>;
 
+/** How the tasks panel is laid out: the grouped list, or the kanban board. */
+export type TasksView = 'list' | 'board';
+
 /** Uma aba do bloco de notas. Vive no servidor, então acompanha o usuário
  *  entre máquinas. */
 export interface Note {
@@ -402,6 +405,8 @@ export interface DashboardState {
   /** Quantos dias a agenda cobre, contando hoje. Escolha de cada usuário. */
   agendaDays: number;
   agendaCalendars: AgendaCalendarRef[];
+  /** Whether the tasks panel shows the list or the board. Each user's choice. */
+  tasksView: TasksView;
   /** Disposição única, de antes de existir gravação por tamanho de tela.
    *  Vale enquanto `layouts` estiver vazio. */
   layout: { i: string; x: number; y: number; w: number; h: number }[];

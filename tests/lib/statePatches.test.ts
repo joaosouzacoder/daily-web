@@ -58,6 +58,7 @@ function state(over: Partial<DashboardState> = {}): DashboardState {
     mailboxes: [{ id: 'mail-1', label: 'Trabalho' }],
     agendaDays: 2,
     agendaCalendars: [],
+    tasksView: 'list',
     layout: defaultLayout(),
     layouts: [],
     email: { data: [envelope({ id: '1' }), envelope({ id: '2' })], error: null },
