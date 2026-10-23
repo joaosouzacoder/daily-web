@@ -9,6 +9,13 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Added
+- A Dracula choice under "Fundo" in the account menu, next to Gradiente and
+  Catppuccin. In the dark theme it applies the full Dracula palette:
+  background and sidebar, raised surfaces, text, borders, the accent (Purple)
+  and the status colors (Green, Orange for warnings, Red, Cyan). Like the
+  others it is stored in the `backdrop` cookie and stamped on `<html>` by the
+  server, so it paints on first load without a flash. Dracula is a dark
+  palette, so the light theme keeps the gradient.
 - A "Resumo para a daily" button in the Jira panel header opens a plain-text
   standup summary in three sections: Ontem (issues delivered or approved and
   PRs opened since the previous working day, Friday on a Monday), Hoje
@@ -103,6 +110,10 @@ Only `main` is maintained; there are no release branches.
   no longer applied to everyone; it is opt-in through the new choice.
 
 ### Fixed
+- An AI-drafted e-mail reply no longer speaks as the project's author. The
+  prompt named one person, so every other user got drafts written, and
+  sometimes signed, in his name. The draft is now written on behalf of the
+  mailbox the reply goes out from, and leaves the signature to the sender.
 - A delivered or approved story whose epic is still one of your open issues
   now shows under that epic. The server never re-fetches as an ancestor what
   is already in a list, so the tree of each tab now takes its path from every
