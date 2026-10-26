@@ -13,6 +13,7 @@ import {
   neighbours,
   noteCurls,
   notePin,
+  notePinShape,
   notePaper,
   noteTilt,
   type BoardColumn,
@@ -120,7 +121,7 @@ function NoteCard({
     >
       {/* Outside the note: a curled note is masked, and the mask would cut
           away the pin's head, which stands above the paper. */}
-      <PushPin color={notePin(task)} />
+      <PushPin color={notePin(task)} shape={notePinShape(task)} />
       {/* The paper's own shadow lives on this wrapper: a curled note is masked,
           and a shadow on the masked element would be cut with it. Keeping the
           pin outside also keeps it from getting a second shadow. */}

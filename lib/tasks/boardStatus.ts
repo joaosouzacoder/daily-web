@@ -45,6 +45,7 @@ export function withBoardOverlay(userId: string, tasks: ProviderTask[]): TodoTas
       doing: !task.completed && doing.has(task.id),
       paper: style?.paper ?? null,
       pin: style?.pin ?? null,
+      pinShape: style?.pinShape ?? null,
     };
   });
 }

@@ -163,7 +163,7 @@ export function TaskActionsMenu({
       >
         <p className="mb-3 text-sm font-medium text-ink">Cor da nota</p>
         <NoteColourPicker
-          value={{ paper: task.paper, pin: task.pin }}
+          value={{ paper: task.paper, pin: task.pin, pinShape: task.pinShape }}
           automaticPaper={derivedPaper(task)}
           onChange={onStyleChange}
         />

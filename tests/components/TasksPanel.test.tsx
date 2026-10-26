@@ -19,6 +19,7 @@ function task(over: Partial<TodoTask>): TodoTask {
     doing: false,
     paper: null,
     pin: null,
+    pinShape: null,
     ...over,
   };
 }
@@ -977,6 +978,18 @@ describe('cor da nota', () => {
     expect(yellow).toHaveAttribute('aria-checked', 'true');
     expect(within(dialog).getByText('O alfinete amarelo pode sumir neste papel.')).toBeInTheDocument();
     expect(fetchSpy).toHaveBeenCalledWith('/api/tasks/2/board', expect.objectContaining({ body: JSON.stringify({ pin: 'yellow' }) }));
+  });
+
+  it('o alfinete começa clássico e o formato escolhido é gravado sozinho', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch').mockImplementation(async () => new Response('{}'));
+    render(<Panel />);
+    const dialog = await openColours('Revisar PR');
+    expect(within(dialog).getByRole('radio', { name: 'Alfinete clássico' })).toHaveAttribute('aria-checked', 'true');
+    const heart = within(dialog).getByRole('radio', { name: 'Alfinete coração' });
+    fireEvent.click(heart);
+    expect(heart).toHaveAttribute('aria-checked', 'true');
+    expect(fetchSpy).toHaveBeenCalledWith('/api/tasks/2/board', expect.objectContaining({ body: JSON.stringify({ pinShape: 'heart' }) }));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Alfinete coração em Revisar PR.'));
   });
 
   it('pelas setas, o grupo anda entre as cores e escolhe a que recebe o foco', async () => {

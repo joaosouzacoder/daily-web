@@ -261,9 +261,10 @@ purely local agent persistence, whose local failure cases are covered by A/R.
   `tasks:read`, `jira:read` or `github:read`. It does not provide general agenda CRUD.
 - `connections_setup` is a read-only setup-link operation requiring
   `connections:write`; it does not accept or reveal credentials.
-- `tasks_create` and `tasks_edit` accept `boardStyle` paper/pin palettes and null
-  automatic resets; style-only edits are local atomic mutations without a provider
-  write. Task reads expose typed nullable paper/pin values.
+- `tasks_create` and `tasks_edit` accept `boardStyle` paper/pin palettes, a pin
+  shape (`pinShape`: classic, ball, heart) and null automatic resets; style-only
+  edits are local atomic mutations without a provider write. Task reads expose
+  typed nullable paper/pin/pinShape values.
 - `tasks_transition` represents board movement, complete and reopen;
   `tasks_subtask_edit` represents edit, complete, reopen and delete. Jira flag,
   approval, following and watching actions similarly use explicit action enums.

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { cookies } from 'next/headers';
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
+import { Patrick_Hand } from 'next/font/google';
 import { ServiceWorker } from '@/components/ServiceWorker';
 import {
   BACKDROP_COOKIE,
@@ -12,6 +13,15 @@ import {
   parseTheme,
 } from '@/lib/theme';
 import './globals.css';
+
+// The handwriting on the board's notes. next/font downloads it at build time
+// and serves it from this app, so the page never calls Google at runtime.
+const patrickHand = Patrick_Hand({
+  weight: '400',
+  subsets: ['latin', 'latin-ext'],
+  variable: '--font-patrick-hand',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: 'daily-web',
@@ -63,7 +73,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       suppressHydrationWarning
       data-density={density === 'compact' ? 'compact' : undefined}
       data-backdrop={backdrop === 'mesh' ? undefined : backdrop}
-      className={`${GeistSans.variable} ${GeistMono.variable} ${forced}`.trim()}
+      className={`${GeistSans.variable} ${GeistMono.variable} ${patrickHand.variable} ${forced}`.trim()}
     >
       {/* No background utility here: body paints --mesh-base from globals.css,
           and a bg-* class would win over it and hide the page colour. */}

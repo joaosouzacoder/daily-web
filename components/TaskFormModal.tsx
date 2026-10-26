@@ -119,7 +119,7 @@ export function TaskFormModal({ task, onClose, onSaved, onDeleted }: Props) {
       time: day && task?.time && TIME_RE.test(task.time) ? task.time : '',
       recur: day ? initialRecur(task) : ('none' as Recur),
       priority: task?.priority ?? ('normal' as TaskPriority),
-      style: { paper: task?.paper ?? null, pin: task?.pin ?? null } as NoteStyle,
+      style: { paper: task?.paper ?? null, pin: task?.pin ?? null, pinShape: task?.pinShape ?? null } as NoteStyle,
     };
   });
 
@@ -164,7 +164,10 @@ export function TaskFormModal({ task, onClose, onSaved, onDeleted }: Props) {
       ? `Não reconheci "${typed.trim()}". Exemplos: hoje, amanhã 14:30, +3d, 2026-11-05 09:00.`
       : null;
 
-  const styleChanged = style.paper !== initial.style.paper || style.pin !== initial.style.pin;
+  const styleChanged =
+    style.paper !== initial.style.paper ||
+    style.pin !== initial.style.pin ||
+    style.pinShape !== initial.style.pinShape;
   const dirty =
     styleChanged ||
     title !== initial.title ||

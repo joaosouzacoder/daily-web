@@ -2,28 +2,32 @@
 
 import { useId, useRef, type KeyboardEvent, type ReactNode } from 'react';
 import { Check } from 'lucide-react';
-import type { NotePaper, PinColor } from '@/lib/types';
+import type { NotePaper, PinColor, PinShape } from '@/lib/types';
 import {
   NOTE_PAPERS,
   PAPER_LABEL,
   PIN_COLORS,
   PIN_LABEL,
+  PIN_SHAPES,
+  PIN_SHAPE_LABEL,
   pinClashes,
 } from '@/lib/taskBoard';
 import { cn } from '@/lib/utils';
 import { focusRing } from '@/lib/theme';
+import { PushPin } from './PushPin';
 
 export interface NoteStyle {
   paper: NotePaper | null;
   pin: PinColor | null;
+  pinShape: PinShape | null;
 }
 
 interface Props {
   value: NoteStyle;
   /** The paper "Automático" stands for right now, from priority and completion. */
   automaticPaper: NotePaper;
-  /** Only the colour that changed: the board saves it on its own, so a pick
-   *  never sends back a stale value of the other one. */
+  /** Only the choice that changed: the board saves it on its own, so a pick
+   *  never sends back a stale value of the others. */
   onChange: (patch: Partial<NoteStyle>) => void;
   className?: string;
 }
@@ -107,7 +111,7 @@ function SwatchGroup<T extends string>({
 }
 
 /**
- * The paper and pin of one note, each starting with "Automático". Shared by
+ * The paper, pin colour and pin shape of one note. Shared by
  * the board and list menus, which save each pick at once, and by the task
  * form, which saves on "Salvar".
  */
@@ -127,6 +131,15 @@ export function NoteColourPicker({ value, automaticPaper, onChange, className }:
       clashes: pinClashes(c, paper),
     })),
   ];
+  // The classic pin is the default, so it stands for "no choice" (null)
+  // rather than being stored: a note left alone keeps no row at all.
+  const shapeOptions: Option<PinShape>[] = PIN_SHAPES.map((s) => ({
+    value: s === 'classic' ? null : s,
+    label: `Alfinete ${PIN_SHAPE_LABEL[s]}`,
+  }));
+  // Shapes are shown in the pin's own colour when there is one; red stands in
+  // for the automatic colour, which depends on the task and not on this menu.
+  const swatchPin = value.pin ?? 'red';
 
   return (
     <div className={cn('flex flex-col gap-4', className)}>
@@ -168,6 +181,17 @@ export function NoteColourPicker({ value, automaticPaper, onChange, className }:
             : 'Automático evita o alfinete que some no papel.'}
         </p>
       </div>
+      <SwatchGroup
+        label="Formato do alfinete"
+        options={shapeOptions}
+        selected={value.pinShape}
+        onSelect={(next) => onChange({ pinShape: next })}
+        renderSwatch={(s) => (
+          <span className="pin-shape-swatch" aria-hidden="true">
+            <PushPin color={swatchPin} shape={s ?? 'classic'} className="pin-shape-swatch-pin" />
+          </span>
+        )}
+      />
     </div>
   );
 }

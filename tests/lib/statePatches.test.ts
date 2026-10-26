@@ -46,6 +46,7 @@ function task(over: Partial<TodoTask>): TodoTask {
     doing: false,
     paper: null,
     pin: null,
+    pinShape: null,
     ...over,
   };
 }

@@ -1,15 +1,15 @@
 import { NextResponse } from 'next/server';
 import { setDoing, setTaskStyle, type BoardStylePatch } from '@/lib/tasks';
-import { isNotePaper, isPinColor, isValidTaskId } from '@/lib/api/validation';
+import { isNotePaper, isPinColor, isPinShape, isValidTaskId } from '@/lib/api/validation';
 import { getCurrentUser } from '@/lib/auth/currentUser';
 import { patchCachedState, refreshTasks } from '@/lib/refresher';
 import { setTaskStyle as patchTaskStyle } from '@/lib/statePatches';
 
 /**
  * What the board keeps beside the provider's task: the column between "A
- * fazer" and "Fazendo", and the note's paper and pin colour. Any of
- * `status`, `paper` and `pin` may come alone; a colour of null goes back to
- * automatic. "Feito" is not accepted here on purpose: completing goes through
+ * fazer" and "Fazendo", and the note's paper, pin colour and pin shape. Any
+ * of `status`, `paper`, `pin` and `pinShape` may come alone; null goes back
+ * to automatic. "Feito" is not accepted here on purpose: completing goes through
  * PATCH /api/tasks/[id], the same path as the list's checkbox, so a recurring
  * task still rolls over and Microsoft To Do still hears about it.
  */
@@ -34,9 +34,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
     style.pin = fields.pin;
   }
-  const hasStyle = 'paper' in style || 'pin' in style;
+  if ('pinShape' in fields) {
+    if (fields.pinShape !== null && !isPinShape(fields.pinShape)) {
+      return NextResponse.json({ error: 'formato de alfinete inválido' }, { status: 400 });
+    }
+    style.pinShape = fields.pinShape;
+  }
+  const hasStyle = 'paper' in style || 'pin' in style || 'pinShape' in style;
   if (!hasStatus && !hasStyle) {
-    return NextResponse.json({ error: 'informe status, paper ou pin' }, { status: 400 });
+    return NextResponse.json({ error: 'informe status, paper, pin ou pinShape' }, { status: 400 });
   }
   const status = fields.status;
   if (hasStatus && status !== 'todo' && status !== 'doing') {
@@ -63,7 +69,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       // corrected in place, which a refresh already in flight replays too.
       patchCachedState(user.id, (state) => patchTaskStyle(state, id, saved));
     }
-    return NextResponse.json({ ok: true, paper: saved.paper, pin: saved.pin });
+    return NextResponse.json({ ok: true, paper: saved.paper, pin: saved.pin, pinShape: saved.pinShape });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 502 });
   }

@@ -30,7 +30,7 @@ import { SubtaskList } from '@/components/tasks/SubtaskList';
 import { TaskActionsMenu } from '@/components/tasks/TaskActionsMenu';
 import { segmentedGroup, segmentedItem } from '@/components/tasks/segmented';
 import { readErrorMessage } from '@/components/tasks/readErrorMessage';
-import { PAPER_LABEL, PIN_LABEL, columnLabel, planMove, type BoardColumn } from '@/lib/taskBoard';
+import { PAPER_LABEL, PIN_LABEL, PIN_SHAPE_LABEL, columnLabel, planMove, type BoardColumn } from '@/lib/taskBoard';
 import type { NoteStyle } from '@/components/tasks/NoteColourPicker';
 
 /** A failing integration is information, not an alarm: contained block, side marker. */
@@ -319,6 +319,7 @@ export function TasksPanel({
 
   const describeStyle = (patch: Partial<NoteStyle>): string => {
     if ('paper' in patch) return patch.paper ? `Papel ${PAPER_LABEL[patch.paper]}` : 'Papel automático';
+    if ('pinShape' in patch) return `Alfinete ${PIN_SHAPE_LABEL[patch.pinShape ?? 'classic']}`;
     return patch.pin ? `Alfinete ${PIN_LABEL[patch.pin]}` : 'Alfinete automático';
   };
 
@@ -329,6 +330,7 @@ export function TasksPanel({
     const previous: Partial<NoteStyle> = {};
     if ('paper' in patch) previous.paper = task.paper;
     if ('pin' in patch) previous.pin = task.pin;
+    if ('pinShape' in patch) previous.pinShape = task.pinShape;
     onStyleChanged?.(task.id, patch);
     setActionError(null);
     const res = await fetch(`/api/tasks/${encodeURIComponent(task.id)}/board`, {

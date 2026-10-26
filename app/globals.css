@@ -23,6 +23,8 @@
      with no error and the scale only appears to work. */
   --font-body: var(--font-geist-sans);
   --font-code: var(--font-geist-mono);
+  /* Set by next/font in the root layout; only the board's note titles use it. */
+  --font-hand: var(--font-patrick-hand);
 
   /* Surface ramp, 6 levels. Light: depth comes from SHADOW and surfaces climb to
      white. Dark: depth comes from LUMINOSITY, because shadow barely reads on black. */
@@ -1170,7 +1172,9 @@
 
 /* ---------- tasks board ----------
    The notes are drawn by hand because a pin, a curled corner and a lifted
-   shadow are pseudo-elements and composed shadows no utility expresses. Colour
+   shadow are pseudo-elements and composed shadows no utility expresses. The
+   look is a drawing rather than a photo: flat paper, an ink outline and a
+   hard offset shadow, the way a cartoon draws a note. Colour
    comes only from the --postit-* tokens, so every theme and backdrop that sets
    them gets matching paper. */
 @layer components {
@@ -1241,6 +1245,9 @@
   .postit-slot {
     position: relative;
     cursor: grab;
+    /* A hard shadow reads darker than a blurred one of the same alpha. */
+    --postit-drop: oklch(from var(--postit-shadow) l c h / calc(alpha * 0.55));
+    --postit-outline: oklch(from var(--postit-ink) l c h / 55%);
   }
   .postit-slot:active {
     cursor: grabbing;
@@ -1264,20 +1271,10 @@
     gap: 0.5rem;
     padding: 1.1rem 0.9rem 0.6rem;
     color: var(--postit-ink);
-    /* A faint fall-off toward the bottom: paper catches the light at the
-       glued strip and is a touch darker where it lifts off the board. */
-    background: linear-gradient(
-      172deg,
-      var(--postit-paper) 0%,
-      var(--postit-paper) 62%,
-      oklch(from var(--postit-paper) calc(l - 0.035) c h) 100%
-    );
-    border-radius: 2px 2px 2px 2px;
-    /* The curled corner: a long, shallow radius on one corner only. */
-    border-bottom-right-radius: 48px 6px;
-    box-shadow:
-      0 1px 1px var(--postit-shadow),
-      6px 9px 10px -6px var(--postit-shadow);
+    background: var(--postit-paper);
+    border: 1.5px solid var(--postit-outline);
+    border-radius: 2px;
+    box-shadow: 4px 5px 0 var(--postit-drop);
     transform: rotate(var(--note-tilt, 0deg));
     transition:
       transform var(--dur) var(--ease),
@@ -1311,9 +1308,7 @@
   .postit-slot:hover .postit,
   .postit:focus-within {
     transform: rotate(0deg) translateY(-3px);
-    box-shadow:
-      0 2px 2px var(--postit-shadow),
-      8px 16px 18px -8px var(--postit-shadow);
+    box-shadow: 6px 8px 0 var(--postit-drop);
   }
   /* The global reduced-motion rule only shortens transitions; the note would
      still jump. Here it stays put and only the shadow deepens. */
@@ -1327,34 +1322,48 @@
     }
   }
 
-  /* The pushpin leans right with its needle in the paper, its head standing
+  /* The pin leans right with its needle in the paper, its head standing
      above the note's top edge. The SVG draws it; this places and colours it.
-     Plastic does not change with the theme, so the colours are fixed. */
+     A pin's colour does not change with the theme, so the colours are fixed;
+     the outline is the paper's ink, which is dark in every theme. */
   .postit-pin {
     position: absolute;
     z-index: 1;
-    top: -30px;
-    left: calc(50% - 22px);
-    width: 44px;
-    height: 46px;
+    top: -27px;
+    left: calc(50% - 18px);
+    width: 36px;
+    height: 44px;
     overflow: visible;
     pointer-events: none;
-    --pin-light: oklch(from var(--pin) calc(l + 0.24) calc(c * 0.55) h);
-    --pin-shade: oklch(from var(--pin) calc(l - 0.22) c h);
+  }
+  .postit-pin-body {
+    fill: var(--pin);
+    stroke: var(--postit-ink);
+    stroke-width: 2;
+    stroke-linejoin: round;
+  }
+  .postit-pin-needle {
+    fill: none;
+    stroke-width: 2.4;
+    stroke-linecap: round;
   }
   .postit-pin[data-pin='red'],
+  .pin-shape-swatch-pin[data-pin='red'],
   .pin-swatch[data-pin='red'] {
     --pin: oklch(0.6 0.21 27);
   }
   .postit-pin[data-pin='blue'],
+  .pin-shape-swatch-pin[data-pin='blue'],
   .pin-swatch[data-pin='blue'] {
     --pin: oklch(0.6 0.17 255);
   }
   .postit-pin[data-pin='yellow'],
+  .pin-shape-swatch-pin[data-pin='yellow'],
   .pin-swatch[data-pin='yellow'] {
     --pin: oklch(0.82 0.16 85);
   }
   .postit-pin[data-pin='green'],
+  .pin-shape-swatch-pin[data-pin='green'],
   .pin-swatch[data-pin='green'] {
     --pin: oklch(0.7 0.19 142);
   }
@@ -1415,16 +1424,14 @@
     border: 1px solid oklch(from var(--postit-ink) l c h / 22%);
     background: var(--postit-paper);
     color: var(--postit-ink);
-    box-shadow: 1px 2px 3px -1px var(--postit-shadow);
+    box-shadow: 1.5px 2px 0 var(--postit-shadow);
   }
   .pin-swatch {
     width: 1.25rem;
     height: 1.25rem;
     border-radius: 9999px;
-    --pin-light: oklch(from var(--pin) calc(l + 0.24) calc(c * 0.55) h);
-    --pin-shade: oklch(from var(--pin) calc(l - 0.22) c h);
-    background: radial-gradient(circle at 35% 30%, var(--pin-light), var(--pin) 55%, var(--pin-shade));
-    box-shadow: 0 0 0 1px var(--pin-shade);
+    background: var(--pin);
+    box-shadow: 0 0 0 1.5px var(--postit-ink);
   }
   .pin-swatch[data-auto] {
     background: none;
@@ -1441,14 +1448,20 @@
     background: var(--postit-paper);
     box-shadow: 0 0 0 1px oklch(from var(--postit-ink) l c h / 35%);
   }
-  .postit-pin-shadow {
-    stroke: var(--postit-shadow);
+  /* The shape choices, each pin drawn on a scrap of white paper: the ink
+     outline would vanish on the popover in a dark theme. */
+  .pin-shape-swatch {
+    display: grid;
+    width: 1.75rem;
+    height: 1.75rem;
+    place-items: center;
+    border-radius: 9999px;
+    background: var(--postit-white);
   }
-  /* A yellow head on pale paper has almost no luminance contrast; a thin rim
-     in its own shade keeps the outline without changing the colour. */
-  .postit-pin-head {
-    stroke: var(--pin-shade);
-    stroke-width: 0.6;
+  .pin-shape-swatch-pin {
+    width: 1.25rem;
+    height: 1.5rem;
+    overflow: visible;
   }
   .postit-pin {
     transition: transform var(--dur) var(--ease);
@@ -1474,7 +1487,7 @@
      slot as a drop-shadow, since a box-shadow would still paint the corner
      the mask took away. */
   .postit-slot[data-curl] .postit-paper {
-    filter: drop-shadow(0 1px 1px var(--postit-shadow)) drop-shadow(5px 8px 6px var(--postit-shadow));
+    filter: drop-shadow(4px 5px 0 var(--postit-drop));
   }
   /* The flap covers the corner, which is where the forward move button sits. */
   .postit-slot[data-curl] .postit-moves {
@@ -1493,11 +1506,12 @@
     bottom: 0;
     width: var(--curl);
     height: var(--curl);
-    border-top-left-radius: 3px;
+    /* Flat, like the rest: the back of the paper, a shade darker, with an
+       ink line on the fold's free edge, where the mask cut the outline. */
     background: linear-gradient(
       135deg,
-      oklch(from var(--postit-paper) calc(l + 0.03) c h) 0%,
-      oklch(from var(--postit-paper) calc(l - 0.09) c h) 50%,
+      oklch(from var(--postit-paper) calc(l - 0.08) c h) calc(50% - 1.5px),
+      var(--postit-outline) calc(50% - 1.5px) 50%,
       transparent 50%
     );
   }
@@ -1507,14 +1521,16 @@
     align-items: flex-start;
     gap: 0.25rem;
   }
+  /* Only the title is handwritten: the date, tags and controls stay in the
+     body face, where a hand font would cost legibility at small sizes. */
   .postit-title {
     display: block;
     min-width: 0;
     flex: 1;
-    font-size: 0.9375rem;
-    font-weight: 500;
-    line-height: 1.4;
-    letter-spacing: 0.005em;
+    font-family: var(--font-hand), var(--font-body), cursive;
+    font-size: 1.0625rem;
+    font-weight: 400;
+    line-height: 1.25;
     overflow-wrap: anywhere;
   }
   .postit-title-text {

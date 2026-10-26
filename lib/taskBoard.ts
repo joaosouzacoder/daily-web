@@ -1,6 +1,6 @@
-import type { NotePaper, PinColor, TodoTask } from '@/lib/types';
+import type { NotePaper, PinColor, PinShape, TodoTask } from '@/lib/types';
 
-export type { NotePaper, PinColor };
+export type { NotePaper, PinColor, PinShape };
 
 export type BoardColumn = 'todo' | 'doing' | 'done';
 
@@ -85,6 +85,15 @@ export const PAPER_LABEL: Record<NotePaper, string> = {
   grey: 'cinza',
 };
 
+/** The classic pushpin first: it is what a note without a choice gets. */
+export const PIN_SHAPES: PinShape[] = ['classic', 'ball', 'heart'];
+
+export const PIN_SHAPE_LABEL: Record<PinShape, string> = {
+  classic: 'clássico',
+  ball: 'bolinha',
+  heart: 'coração',
+};
+
 export const PIN_LABEL: Record<PinColor, string> = {
   red: 'vermelho',
   blue: 'azul',
@@ -135,6 +144,12 @@ export function notePin(task: TodoTask): PinColor {
   const options = PIN_COLORS.filter((c) => !pinClashes(c, paper));
   // A different stride from the tilt, so pin and angle do not move together.
   return options[Math.floor(idHash(task.id) / 7) % options.length];
+}
+
+/** Unlike the colour, the shape does not vary on its own: the classic pin
+ *  is the board's look, and the others are something a person picks. */
+export function notePinShape(task: TodoTask): PinShape {
+  return task.pinShape ?? 'classic';
 }
 
 /** About one note in three has its bottom corner peeling off the board. */

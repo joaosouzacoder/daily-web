@@ -10,6 +10,7 @@ import {
   noteCurls,
   notePaper,
   notePin,
+  notePinShape,
   noteTilt,
   planMove,
 } from '@/lib/taskBoard';
@@ -18,7 +19,7 @@ import type { TodoTask } from '@/lib/types';
 function task(over: Partial<TodoTask>): TodoTask {
   return {
     id: 'x', title: 't', completed: false, due: '', priority: 'normal', time: '', recur: '',
-    notes: '', subtasks: [], doing: false, paper: null, pin: null, ...over,
+    notes: '', subtasks: [], doing: false, paper: null, pin: null, pinShape: null, ...over,
   };
 }
 
@@ -152,6 +153,11 @@ describe('cores escolhidas para a nota', () => {
   it('o alfinete escolhido é respeitado, mesmo quando some no papel', () => {
     expect(notePin(task({ pin: 'yellow' }))).toBe('yellow');
     expect(notePin(task({ paper: 'pink', pin: 'red' }))).toBe('red');
+  });
+
+  it('sem escolha, o alfinete é o clássico; escolhido, é o formato da tarefa', () => {
+    for (const id of ids) expect(notePinShape(task({ id }))).toBe('classic');
+    expect(notePinShape(task({ pinShape: 'heart' }))).toBe('heart');
   });
 
   it('a tabela de conflitos cobre todo papel e deixa sempre alfinete disponível', () => {

@@ -65,7 +65,7 @@ export function setDoing(userId: string, id: string, doing: boolean): void {
   else clearBoardStatus(userId, id);
 }
 
-/** The note's paper and pin colour. Like "Fazendo" it lives beside the
+/** The note's paper, pin colour and pin shape. Like "Fazendo" it lives beside the
  *  provider's task, so it never costs a call to Microsoft To Do. */
 export function setTaskStyle(userId: string, id: string, patch: BoardStylePatch): BoardStyle {
   return setBoardStyle(userId, id, patch);
