@@ -14,6 +14,7 @@ import {
   applyContentWidth,
   applyDensity,
   applyTheme,
+  parseBackdrop,
   type Backdrop,
   type ContentWidth,
   type Density,
@@ -41,6 +42,8 @@ const DENSITY_OPTIONS: { value: Density; label: string }[] = [
 const BACKDROP_OPTIONS: { value: Backdrop; label: string }[] = [
   { value: 'mesh', label: 'Gradiente' },
   { value: 'catppuccin', label: 'Catppuccin' },
+  // Only remaps the dark theme, so the hint keeps a light-theme pick from looking broken.
+  { value: 'wezterm', label: 'WezTerm (só no tema escuro)' },
 ];
 
 /**
@@ -66,7 +69,7 @@ export function AppearancePanel({
     else if (root.classList.contains('light')) setTheme('light');
     else setTheme('system');
     setDensity(root.dataset.density === 'compact' ? 'compact' : 'comfortable');
-    setBackdrop(root.dataset.backdrop === 'catppuccin' ? 'catppuccin' : 'mesh');
+    setBackdrop(parseBackdrop(root.dataset.backdrop));
     setWidth(root.dataset.width === 'limited' ? 'limited' : 'full');
   }, []);
 

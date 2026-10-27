@@ -1,7 +1,7 @@
 export type ThemePreference = 'system' | 'light' | 'dark';
 export type Density = 'comfortable' | 'compact';
-/** The page background: the iridescent mesh, or a flat Catppuccin or Dracula base. */
-export type Backdrop = 'mesh' | 'catppuccin' | 'dracula';
+/** The page background: the iridescent mesh, a flat Catppuccin or Dracula base, or the WezTerm purple. */
+export type Backdrop = 'mesh' | 'catppuccin' | 'dracula' | 'wezterm';
 /** How wide the page content may get: the whole window, or at most LIMITED_CONTENT_WIDTH. */
 export type ContentWidth = 'full' | 'limited';
 
@@ -67,7 +67,7 @@ export const isThemePreference = (v: unknown): v is ThemePreference =>
   v === 'system' || v === 'light' || v === 'dark';
 export const isDensity = (v: unknown): v is Density => v === 'comfortable' || v === 'compact';
 export const isBackdrop = (v: unknown): v is Backdrop =>
-  v === 'mesh' || v === 'catppuccin' || v === 'dracula';
+  v === 'mesh' || v === 'catppuccin' || v === 'dracula' || v === 'wezterm';
 export const isContentWidth = (v: unknown): v is ContentWidth => v === 'full' || v === 'limited';
 
 /**
@@ -91,7 +91,7 @@ export function parseAppearancePatch(raw: unknown): AppearancePatch | null {
 
 /** The mesh is the absence of the cookie, like "comfortable" and "system". */
 export function parseBackdrop(raw: string | undefined): Backdrop {
-  return raw === 'catppuccin' || raw === 'dracula' ? raw : 'mesh';
+  return raw === 'catppuccin' || raw === 'dracula' || raw === 'wezterm' ? raw : 'mesh';
 }
 
 export function applyBackdrop(b: Backdrop, root: HTMLElement = document.documentElement): void {
