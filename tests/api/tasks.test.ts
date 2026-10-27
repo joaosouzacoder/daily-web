@@ -20,10 +20,13 @@ vi.mock('@/lib/tasks', () => ({
   deleteSubtask: vi.fn(),
   checkSubtask: vi.fn(),
   setDoing: vi.fn(),
-  setTaskStyle: vi.fn((_user: string, _id: string, patch: { paper?: string | null; pin?: string | null }) => ({
-    paper: patch.paper ?? null,
-    pin: patch.pin ?? null,
-  })),
+  setTaskStyle: vi.fn(
+    (_user: string, _id: string, patch: { paper?: string | null; pin?: string | null; pinShape?: string | null }) => ({
+      paper: patch.paper ?? null,
+      pin: patch.pin ?? null,
+      pinShape: patch.pinShape ?? null,
+    }),
+  ),
 }));
 
 // Medir que uma troca de cor não recarrega as tarefas: no Microsoft To Do
@@ -300,7 +303,7 @@ describe('PATCH /api/tasks/[id]/board: cor da nota', () => {
   it('papel válido grava e devolve o estilo salvo', async () => {
     const res = await boardRoute(req({ paper: 'pink' }), params({ id: 'T1' }));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, paper: 'pink', pin: null });
+    expect(await res.json()).toEqual({ ok: true, paper: 'pink', pin: null, pinShape: null });
     expect(setTaskStyle).toHaveBeenCalledWith('u-1', 'T1', { paper: 'pink' });
     expect(setDoing).not.toHaveBeenCalled();
   });
@@ -316,6 +319,19 @@ describe('PATCH /api/tasks/[id]/board: cor da nota', () => {
     expect(res.status).toBe(400);
     expect(setTaskStyle).not.toHaveBeenCalled();
     expect(setDoing).not.toHaveBeenCalled();
+  });
+
+  it('formato de alfinete fora da lista devolve 400 sem gravar nada', async () => {
+    const res = await boardRoute(req({ pinShape: 'star' }), params({ id: 'T1' }));
+    expect(res.status).toBe(400);
+    expect(setTaskStyle).not.toHaveBeenCalled();
+  });
+
+  it('o formato do alfinete vem sozinho, é gravado e devolvido', async () => {
+    const res = await boardRoute(req({ pinShape: 'heart' }), params({ id: 'T1' }));
+    expect(res.status).toBe(200);
+    expect(setTaskStyle).toHaveBeenCalledWith('u-1', 'T1', { pinShape: 'heart' });
+    expect(await res.json()).toEqual({ ok: true, paper: null, pin: null, pinShape: 'heart' });
   });
 
   it('corpo vazio devolve 400', async () => {

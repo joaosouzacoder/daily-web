@@ -1,5 +1,5 @@
-import type { NotePaper, PinColor, TaskPriority } from '@/lib/types';
-import { NOTE_PAPERS, PIN_COLORS } from '@/lib/taskBoard';
+import type { NotePaper, PinColor, PinShape, TaskPriority } from '@/lib/types';
+import { NOTE_PAPERS, PIN_COLORS, PIN_SHAPES } from '@/lib/taskBoard';
 import type { Recur } from '@/lib/tasks/types';
 
 const ID_PATTERN = /^[A-Za-z0-9_-]+$/;
@@ -58,6 +58,10 @@ export function isNotePaper(value: unknown): value is NotePaper {
 
 export function isPinColor(value: unknown): value is PinColor {
   return typeof value === 'string' && (PIN_COLORS as string[]).includes(value);
+}
+
+export function isPinShape(value: unknown): value is PinShape {
+  return typeof value === 'string' && (PIN_SHAPES as string[]).includes(value);
 }
 
 // Guarda mínima para valores de texto livre (ex.: title) que acabam como

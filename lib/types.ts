@@ -288,6 +288,9 @@ export type NotePaper = 'yellow' | 'pink' | 'blue' | 'green' | 'white' | 'grey';
 
 export type PinColor = 'red' | 'blue' | 'yellow' | 'green';
 
+/** How the pin holding a note is drawn. */
+export type PinShape = 'classic' | 'ball' | 'heart';
+
 export interface TodoTask {
   id: string;
   title: string;
@@ -307,10 +310,12 @@ export interface TodoTask {
    *  clashing). Overlaid from this app's database like `doing`. */
   paper: NotePaper | null;
   pin: PinColor | null;
+  /** The pin's shape, or null for the classic pushpin. */
+  pinShape: PinShape | null;
 }
 
 /** A task as a provider returns it, before the board overlay is applied. */
-export type ProviderTask = Omit<TodoTask, 'doing' | 'paper' | 'pin'>;
+export type ProviderTask = Omit<TodoTask, 'doing' | 'paper' | 'pin' | 'pinShape'>;
 
 /** How the tasks panel is laid out: the grouped list, or the kanban board. */
 export type TasksView = 'list' | 'board';

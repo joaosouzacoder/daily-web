@@ -196,7 +196,7 @@ describe('task note colour parity',()=>{
     vi.spyOn(styles,'setBoardStyle').mockImplementationOnce(()=>{throw new Error('write failure');});
     await expect(run('tasks_edit',{provider:'local',id,title:'Changed',boardStyle:{pin:'blue'},...mutation()})).rejects.toMatchObject({code:'upstream_failed'});
     expect(local.listTasks('owner')[0]).toMatchObject({title:'Original'});
-    expect(styles.boardStyleOf('owner',id)).toEqual({paper:null,pin:null});
+    expect(styles.boardStyleOf('owner',id)).toEqual({paper:null,pin:null,pinShape:null});
   });
 
   it.each(['local','mstodo'] as const)('creates %s tasks with typed paper and pin colours and stable replay',async provider=>{
@@ -222,10 +222,12 @@ describe('task note colour parity',()=>{
     expect(await run('tasks_get',target)).toMatchObject({task:{paper:null,pin:'green'}});
     await run('tasks_edit',{...target,boardStyle:{pin:null},...mutation()});
     expect(await run('tasks_get',target)).toMatchObject({task:{paper:null,pin:null}});
+    await run('tasks_edit',{...target,boardStyle:{pinShape:'ball'},...mutation()});
+    expect(await run('tasks_get',target)).toMatchObject({task:{paper:null,pin:null,pinShape:'ball'}});
     expect(edit).not.toHaveBeenCalled();
     expect(getDb().prepare('SELECT DISTINCT typ_class AS kind FROM tb_mutation_receipt').all()).toEqual([{kind:'local'}]);
   });
-  it.each([{paper:'purple'},{pin:'pink'},{paper:42},{unknown:'red'},{}])('rejects invalid colours before effects (%j)',async boardStyle=>{
+  it.each([{paper:'purple'},{pin:'pink'},{pinShape:'star'},{paper:42},{unknown:'red'},{}])('rejects invalid colours before effects (%j)',async boardStyle=>{
     const add=vi.spyOn(mstodo,'addTask').mockResolvedValue('created-style');
     for(const name of ['tasks_create','tasks_edit'])await expect(run(name,{provider:'mstodo',connectionId,...(name==='tasks_create'?{title:'New'}:{id:'T1'}),boardStyle,...mutation()})).rejects.toMatchObject({status:400});
     expect(add).not.toHaveBeenCalled();expect(mstodo.fetchTasks).not.toHaveBeenCalled();
@@ -265,7 +267,7 @@ describe('task note colour parity',()=>{
     styles.setBoardStyle('other',id,{paper:'blue'});
     vi.spyOn(mstodo,'deleteTask').mockResolvedValue(undefined);
     await run('tasks_delete',{provider,...(provider==='mstodo'?{connectionId}:{}),id,...mutation()});
-    expect(styles.boardStyleOf('owner',id)).toEqual({paper:null,pin:null});
-    expect(styles.boardStyleOf('other',id)).toEqual({paper:'blue',pin:null});
+    expect(styles.boardStyleOf('owner',id)).toEqual({paper:null,pin:null,pinShape:null});
+    expect(styles.boardStyleOf('other',id)).toEqual({paper:'blue',pin:null,pinShape:null});
   });
 });

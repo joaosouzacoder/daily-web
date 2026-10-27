@@ -37,6 +37,21 @@ export const RELEASES: Release[] = [
     ],
   },
   {
+    id: '2026-10-26-alfinetes-desenhados',
+    date: '2026-10-26',
+    title: 'Quadro com cara de desenho',
+    items: [
+      {
+        title: 'Notas desenhadas à mão',
+        detail: 'As notas do quadro agora parecem um desenho: papel de cor lisa, contorno de caneta e título em letra de mão. O cantinho dobrado continua lá.',
+      },
+      {
+        title: 'Escolha o formato do alfinete',
+        detail: 'Em "Cor da nota…", além da cor, escolha o formato do alfinete: clássico, bolinha ou coração. Sem escolha, a nota usa o clássico.',
+      },
+    ],
+  },
+  {
     id: '2026-10-23-agent-workspace',
     date: '2026-10-23',
     title: 'Seu trabalho com agentes, em um só lugar',

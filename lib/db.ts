@@ -430,6 +430,12 @@ function addTaskBoardStyle(instance: Database.Database): void {
   `);
 }
 
+// The pin's shape, beside its colour. No CHECK, for the same reason as the
+// colours: the API validates and the read drops unknown values.
+function addTaskBoardPinShape(instance: Database.Database): void {
+  instance.exec(`ALTER TABLE task_board_style ADD COLUMN pin_shape TEXT;`);
+}
+
 function addAgentWorkspace(instance: Database.Database): void {
   instance.exec(`
     CREATE TABLE main.tb_agent (
@@ -612,6 +618,7 @@ const MIGRATIONS: ((instance: Database.Database) => void)[] = [
   addPushNotifications,
   addUserAvatar,
   addUserProfileFields,
+  addTaskBoardPinShape,
 ];
 
 function migrate(instance: Database.Database): void {

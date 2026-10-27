@@ -266,7 +266,7 @@ describe('coluna Fazendo do quadro de tarefas', () => {
     const { markDoing } = await import('@/lib/tasks/boardStatus');
     markDoing('u-1', 't-1');
     const version = getDb().pragma('user_version', { simple: true });
-    expect(version).toBe(22);
+    expect(version).toBe(23);
 
     vi.resetModules();
     const { getDb: reopen } = await import('@/lib/db');
@@ -318,7 +318,7 @@ describe('cor das notas do quadro de tarefas', () => {
   it('as tarefas e a marcação de Fazendo continuam, todas com cor automática', async () => {
     seedBoardDatabase();
     const { getDb } = await import('@/lib/db');
-    expect(getDb().pragma('user_version', { simple: true })).toBe(22);
+    expect(getDb().pragma('user_version', { simple: true })).toBe(23);
     const { listTasks } = await import('@/lib/tasks/local');
     const { withBoardOverlay } = await import('@/lib/tasks/boardStatus');
 
@@ -336,9 +336,9 @@ describe('cor das notas do quadro de tarefas', () => {
 
     vi.resetModules();
     const { getDb: reopen } = await import('@/lib/db');
-    expect(reopen().pragma('user_version', { simple: true })).toBe(22);
+    expect(reopen().pragma('user_version', { simple: true })).toBe(23);
     const { boardStyleOf } = await import('@/lib/tasks/boardStyle');
-    expect(boardStyleOf('u-1', 't-1')).toEqual({ paper: 'grey', pin: 'red' });
+    expect(boardStyleOf('u-1', 't-1')).toEqual({ paper: 'grey', pin: 'red', pinShape: null });
   });
 
   // CREATE TABLE IF NOT EXISTS: um banco que já tem a tabela (uma migração
@@ -355,9 +355,9 @@ describe('cor das notas do quadro de tarefas', () => {
     `);
     half.close();
     const { getDb } = await import('@/lib/db');
-    expect(getDb().pragma('user_version', { simple: true })).toBe(22);
+    expect(getDb().pragma('user_version', { simple: true })).toBe(23);
     const { boardStyleOf } = await import('@/lib/tasks/boardStyle');
-    expect(boardStyleOf('u-1', 't-2')).toEqual({ paper: 'white', pin: null });
+    expect(boardStyleOf('u-1', 't-2')).toEqual({ paper: 'white', pin: null, pinShape: null });
   });
   it('upgrades production version 15 with note colours to subtask version 17 without resetting tasks', async () => {
     seedBoardDatabase();
@@ -371,10 +371,29 @@ describe('cor das notas do quadro de tarefas', () => {
     previous.close();
     const {getDb} = await import('@/lib/db');
     const current = getDb();
-    expect(current.pragma('user_version', {simple:true})).toBe(22);
+    expect(current.pragma('user_version', {simple:true})).toBe(23);
     expect(current.prepare('SELECT COUNT(1) AS count FROM main.tb_agent').get()).toEqual({count:0});
     expect(current.prepare('SELECT paper, pin FROM main.task_board_style WHERE user_id=? AND task_id=?').get('u-1','t-2')).toEqual({paper:'white',pin:'blue'});
     expect(current.prepare('SELECT COUNT(1) AS count FROM main.tasks').get()).toEqual({count:2});
+  });
+
+  it('a nota que já tinha cor ganha o alfinete clássico, e o formato escolhido fica gravado', async () => {
+    seedBoardDatabase();
+    const previous = new Database(dbFile);
+    previous.exec(`CREATE TABLE task_board_style (
+      user_id TEXT NOT NULL, task_id TEXT NOT NULL, paper TEXT, pin TEXT,
+      updated_at TEXT NOT NULL, PRIMARY KEY (user_id, task_id)
+    );`);
+    previous.prepare('INSERT INTO task_board_style VALUES (?, ?, ?, ?, ?)').run('u-1', 't-2', 'white', 'blue', '2026-10-23');
+    previous.pragma('user_version = 20');
+    previous.close();
+    const { getDb } = await import('@/lib/db');
+    expect(getDb().pragma('user_version', { simple: true })).toBe(23);
+    const { boardStyleOf, setBoardStyle } = await import('@/lib/tasks/boardStyle');
+    expect(boardStyleOf('u-1', 't-2')).toEqual({ paper: 'white', pin: 'blue', pinShape: null });
+
+    setBoardStyle('u-1', 't-2', { pinShape: 'heart' });
+    expect(boardStyleOf('u-1', 't-2')).toEqual({ paper: 'white', pin: 'blue', pinShape: 'heart' });
   });
 
 });
@@ -385,6 +404,10 @@ it('adds subtasks to a version 16 database while preserving old task reads and w
   uid_session TEXT PRIMARY KEY, uid_user TEXT NOT NULL, uid_agent TEXT NOT NULL,
   ref_external TEXT NOT NULL, num_version INTEGER NOT NULL DEFAULT 1,
   tsz_insert TEXT NOT NULL, tsz_update TEXT NOT NULL
+ );
+ CREATE TABLE task_board_style (
+  user_id TEXT NOT NULL, task_id TEXT NOT NULL, paper TEXT, pin TEXT,
+  updated_at TEXT NOT NULL, PRIMARY KEY (user_id, task_id)
  );
  CREATE TABLE tb_agent_task (
   uid_task TEXT PRIMARY KEY, uid_user TEXT NOT NULL, ref_external TEXT NOT NULL,
@@ -397,7 +420,7 @@ it('adds subtasks to a version 16 database while preserving old task reads and w
  const oldInsert="INSERT INTO tb_agent_task(uid_task,uid_user,ref_external,nam_title,txt_description,typ_status,tsz_insert,tsz_update) VALUES(?,?,?,?,?,'queued',?,?)";
  const at=new Date().toISOString();legacy.prepare(oldInsert).run('root','owner','root-external','Preserved root','Description',at,at);legacy.pragma('user_version = 16');legacy.close();
  const {getDb}=await import('@/lib/db');const current=getDb();
- expect(current.pragma('user_version',{simple:true})).toBe(22);
+ expect(current.pragma('user_version',{simple:true})).toBe(23);
  expect(current.prepare('SELECT nam_title,txt_description,num_version,uid_parent_task FROM tb_agent_task WHERE uid_task=?').get('root')).toEqual({nam_title:'Preserved root',txt_description:'Description',num_version:1,uid_parent_task:null});
  current.prepare(oldInsert).run('child','owner','child-external','Child','',at,at);
  current.prepare('UPDATE tb_agent_task SET uid_parent_task=? WHERE uid_task=?').run('root','child');
@@ -415,6 +438,10 @@ it('rebuilds the version 17 task table for holds without losing parent links or 
   uid_session TEXT PRIMARY KEY, uid_user TEXT NOT NULL, uid_agent TEXT NOT NULL,
   ref_external TEXT NOT NULL, num_version INTEGER NOT NULL DEFAULT 1,
   tsz_insert TEXT NOT NULL, tsz_update TEXT NOT NULL
+ );
+ CREATE TABLE task_board_style (
+  user_id TEXT NOT NULL, task_id TEXT NOT NULL, paper TEXT, pin TEXT,
+  updated_at TEXT NOT NULL, PRIMARY KEY (user_id, task_id)
  );
  CREATE TABLE tb_agent_task (
   uid_task TEXT PRIMARY KEY, uid_user TEXT NOT NULL, ref_external TEXT NOT NULL,
@@ -436,7 +463,7 @@ it('rebuilds the version 17 task table for holds without losing parent links or 
  insert.run('child','owner','child-external','Child','','blocked',3,at,at,'root');
  legacy.pragma('user_version = 17');legacy.close();
  const {getDb}=await import('@/lib/db');const current=getDb();
- expect(current.pragma('user_version',{simple:true})).toBe(22);
+ expect(current.pragma('user_version',{simple:true})).toBe(23);
  expect(current.prepare('SELECT uid_task,typ_status,num_version,uid_parent_task,typ_hold_reason,txt_hold_note FROM tb_agent_task ORDER BY uid_task').all()).toEqual([
   {uid_task:'child',typ_status:'blocked',num_version:3,uid_parent_task:'root',typ_hold_reason:null,txt_hold_note:null},
   {uid_task:'root',typ_status:'working',num_version:2,uid_parent_task:null,typ_hold_reason:null,txt_hold_note:null},
@@ -455,7 +482,7 @@ it('rebuilds the version 17 task table for holds without losing parent links or 
 
 it('adds session attention columns whose kind and time are set together',async()=>{
  const {getDb}=await import('@/lib/db');const current=getDb();
- expect(current.pragma('user_version',{simple:true})).toBe(22);
+ expect(current.pragma('user_version',{simple:true})).toBe(23);
  const at=new Date().toISOString();
  current.prepare("INSERT INTO tb_agent (uid_agent,uid_user,ref_external,typ_provider,nam_display,tsz_insert,tsz_update) VALUES('agent','owner','agent','claude','Claude',?,?)").run(at,at);
  current.prepare("INSERT INTO tb_agent_session (uid_session,uid_user,uid_agent,ref_external,tsz_insert,tsz_update) VALUES('session','owner','agent','session',?,?)").run(at,at);
@@ -469,7 +496,7 @@ it('adds session attention columns whose kind and time are set together',async()
 
 it('adds push subscriptions with unique endpoints and an outbox restricted to known kinds and states',async()=>{
  const {getDb}=await import('@/lib/db');const current=getDb();
- expect(current.pragma('user_version',{simple:true})).toBe(22);
+ expect(current.pragma('user_version',{simple:true})).toBe(23);
  const at=new Date().toISOString();
  const subscribe=current.prepare('INSERT INTO tb_push_subscription (uid_subscription,uid_user,txt_endpoint,txt_p256dh,txt_auth,tsz_insert,tsz_update) VALUES(?,?,?,?,?,?,?)');
  subscribe.run('s1','owner','https://fcm.googleapis.com/x','p','a',at,at);

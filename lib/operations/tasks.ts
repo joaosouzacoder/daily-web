@@ -8,7 +8,7 @@ import * as local from '@/lib/tasks/local';
 import * as mstodo from '@/lib/cli/mstodo';
 import { withBoardOverlay, markDoing, clearBoardStatus } from '@/lib/tasks/boardStatus';
 import { setBoardStyle, clearBoardStyle, type BoardStylePatch } from '@/lib/tasks/boardStyle';
-import { NOTE_PAPERS, PIN_COLORS } from '@/lib/taskBoard';
+import { NOTE_PAPERS, PIN_COLORS, PIN_SHAPES } from '@/lib/taskBoard';
 import { dropCache } from '@/lib/refresher';
 import { isValidTaskId, isSafePositionalValue } from '@/lib/api/validation';
 import { isCalendarDate } from '@/lib/integrations/jira/parse';
@@ -18,7 +18,7 @@ import type { Principal } from '@/lib/access/principal';
 const sourceShape={provider:z.enum(['local','mstodo']),connectionId:z.string().min(1).optional()};
 const taskShape={...sourceShape,id:z.string().refine(isValidTaskId)};
 const title=z.string().trim().min(1).max(500).refine(isSafePositionalValue);
-const boardStyleSchema=z.object({paper:z.enum(NOTE_PAPERS).nullable().optional(),pin:z.enum(PIN_COLORS).nullable().optional()}).strict().refine(value=>value.paper!==undefined||value.pin!==undefined);
+const boardStyleSchema=z.object({paper:z.enum(NOTE_PAPERS).nullable().optional(),pin:z.enum(PIN_COLORS).nullable().optional(),pinShape:z.enum(PIN_SHAPES).nullable().optional()}).strict().refine(value=>value.paper!==undefined||value.pin!==undefined||value.pinShape!==undefined);
 const metadataShape={
   due:z.string().refine(value=>value===''||isCalendarDate(value)).optional(),
   time:z.string().regex(/^(|([01]\d|2[0-3]):[0-5]\d)$/).optional(),
@@ -111,7 +111,7 @@ export const taskOperations=[
       return {ok:true,id};
     });
   }),
-  operation('tasks_edit','Edit task details or the note paper and pin colours','tasks:write','write',{...taskShape,...mutationShape,title:title.optional(),...metadataShape,boardStyle:boardStyleSchema.optional()},async(p,i)=>{
+  operation('tasks_edit','Edit task details or the note paper, pin colour and pin shape','tasks:write','write',{...taskShape,...mutationShape,title:title.optional(),...metadataShape,boardStyle:boardStyleSchema.optional()},async(p,i)=>{
     const details={title:i.title,due:i.due,time:i.time,priority:i.priority,recur:i.recur};
     if(i.boardStyle&&Object.values(details).every(value=>value===undefined))return writeStyle(p,{...i,boardStyle:i.boardStyle});
     const edit=(task:ProviderTask|null)=>({...metadataEdit(i,task),title:i.title});

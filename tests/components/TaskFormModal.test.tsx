@@ -23,6 +23,7 @@ const tarefa = (overrides: Partial<TodoTask> = {}): TodoTask => ({
   doing: false,
   paper: null,
   pin: null,
+  pinShape: null,
   ...overrides,
 });
 
@@ -428,7 +429,7 @@ describe('cor da nota no formulário', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(undefined));
     expect(urls(fetchSpy)).toEqual(['/api/tasks/T1', '/api/tasks/T1/board']);
-    expect(sentBody(fetchSpy, 1)).toEqual({ paper: 'pink', pin: 'blue' });
+    expect(sentBody(fetchSpy, 1)).toEqual({ paper: 'pink', pin: 'blue', pinShape: null });
   });
 
   it('ao criar, grava a cor no id que a criação devolveu', async () => {
@@ -442,7 +443,7 @@ describe('cor da nota no formulário', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(urls(fetchSpy)).toEqual(['/api/tasks', '/api/tasks/NOVA/board']);
-    expect(sentBody(fetchSpy, 1)).toEqual({ paper: 'green', pin: null });
+    expect(sentBody(fetchSpy, 1)).toEqual({ paper: 'green', pin: null, pinShape: null });
   });
 
   it('se a tarefa não for salva, a cor nem é enviada', async () => {

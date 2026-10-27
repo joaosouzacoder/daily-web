@@ -1,4 +1,4 @@
-import type { DashboardState, EmailEnvelope, NotePaper, NotificationItem, PinColor, TodoTask } from './types';
+import type { DashboardState, EmailEnvelope, NotePaper, NotificationItem, PinColor, PinShape, TodoTask } from './types';
 
 // Depois de uma ação, o painel não pode continuar mostrando o estado
 // anterior. Refazer o `refreshAll` inteiro custa uma ida ao IMAP, ao Jira e ao
@@ -99,7 +99,7 @@ export function setTaskDoing(state: DashboardState, id: string, doing: boolean):
 export function setTaskStyle(
   state: DashboardState,
   id: string,
-  style: { paper?: NotePaper | null; pin?: PinColor | null },
+  style: { paper?: NotePaper | null; pin?: PinColor | null; pinShape?: PinShape | null },
 ): DashboardState {
   return mapTasks(state, (list) =>
     list.map((task) =>
@@ -108,6 +108,7 @@ export function setTaskStyle(
             ...task,
             paper: style.paper === undefined ? task.paper : style.paper,
             pin: style.pin === undefined ? task.pin : style.pin,
+            pinShape: style.pinShape === undefined ? task.pinShape : style.pinShape,
           }
         : task,
     ),

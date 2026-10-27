@@ -9,6 +9,10 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Changed
+- The board's notes and pins are drawn like a cartoon instead of a photo:
+  flat paper with an ink outline and a hard offset shadow, a flat folded
+  corner, and the note title in a handwriting face (Patrick Hand, served by
+  `next/font` from the app itself). Pins lost their gradients and gloss.
 - The board is now the default view of the tasks panel. Anyone who already
   chose "Lista" keeps it; only people who never picked see the board.
 - Moving a note with its buttons or the menu keeps the focus on the note, in
@@ -82,6 +86,12 @@ Only `main` is maintained; there are no release branches.
 - A per-user sign-in counter in the existing `preferences` table (`loginCount`,
   incremented in SQL on each successful sign-in; no schema change), which drives
   the home greeting.
+- Each note's pin can have its own shape: classic (the default), ball or
+  heart. "Cor da nota…" and the task form have a "Formato do alfinete"
+  choice; `PATCH /api/tasks/[id]/board` and the `boardStyle` of the
+  `tasks_create`/`tasks_edit` MCP operations accept `pinShape`, and task reads
+  expose it. Stored in a new nullable `pin_shape` column of
+  `task_board_style` (migration 23).
 - A task-based home kanban for agent work, with a detailed agents workspace,
   reporting API, personal API credentials and generated onboarding instructions.
   Agent history expires 30 days after its last accepted activity; the original

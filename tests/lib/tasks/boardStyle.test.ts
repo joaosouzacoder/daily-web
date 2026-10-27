@@ -36,7 +36,7 @@ describe('cor da nota no quadro', () => {
   it('a cor escolhida aparece na listagem', async () => {
     const { addTask, fetchTasks, setTaskStyle } = await import('@/lib/tasks');
     const id = await addTask(USER, 'Escrever relatório');
-    expect(setTaskStyle(USER, id, { paper: 'pink', pin: 'blue' })).toEqual({ paper: 'pink', pin: 'blue' });
+    expect(setTaskStyle(USER, id, { paper: 'pink', pin: 'blue' })).toEqual({ paper: 'pink', pin: 'blue', pinShape: null });
     expect((await fetchTasks(USER))[0]).toMatchObject({ paper: 'pink', pin: 'blue' });
   });
 
@@ -46,10 +46,13 @@ describe('cor da nota no quadro', () => {
     const id = await addTask(USER, 'Escrever relatório');
     setTaskStyle(USER, id, { paper: 'grey' });
     setTaskStyle(USER, id, { pin: 'green' });
-    expect(boardStyleOf(USER, id)).toEqual({ paper: 'grey', pin: 'green' });
+    expect(boardStyleOf(USER, id)).toEqual({ paper: 'grey', pin: 'green', pinShape: null });
 
     setTaskStyle(USER, id, { paper: null });
-    expect(boardStyleOf(USER, id)).toEqual({ paper: null, pin: 'green' });
+    expect(boardStyleOf(USER, id)).toEqual({ paper: null, pin: 'green', pinShape: null });
+
+    setTaskStyle(USER, id, { pinShape: 'ball' });
+    expect(boardStyleOf(USER, id)).toEqual({ paper: null, pin: 'green', pinShape: 'ball' });
     expect(await rows()).toBe(1);
   });
 
@@ -87,7 +90,7 @@ describe('cor da nota no quadro', () => {
     const { setBoardStyle, boardStyles } = await import('@/lib/tasks/boardStyle');
     setBoardStyle(USER, 'T1', { paper: 'green' });
     expect(boardStyles(OTHER).size).toBe(0);
-    expect(boardStyles(USER).get('T1')).toEqual({ paper: 'green', pin: null });
+    expect(boardStyles(USER).get('T1')).toEqual({ paper: 'green', pin: null, pinShape: null });
   });
 
   // Sem CHECK no banco, uma cor que saiu da paleta (ou gravada à mão) ainda
@@ -96,12 +99,16 @@ describe('cor da nota no quadro', () => {
     const { getDb } = await import('@/lib/db');
     const { boardStyles } = await import('@/lib/tasks/boardStyle');
     getDb()
-      .prepare("INSERT INTO task_board_style VALUES (?, 'T1', 'teal', 'purple', '2026-10-23')")
+      .prepare(
+        "INSERT INTO task_board_style (user_id, task_id, paper, pin, pin_shape, updated_at) VALUES (?, 'T1', 'teal', 'purple', 'star', '2026-10-23')",
+      )
       .run(USER);
     getDb()
-      .prepare("INSERT INTO task_board_style VALUES (?, 'T2', 'pink', 'magenta', '2026-10-23')")
+      .prepare(
+        "INSERT INTO task_board_style (user_id, task_id, paper, pin, pin_shape, updated_at) VALUES (?, 'T2', 'pink', 'magenta', 'heart', '2026-10-23')",
+      )
       .run(USER);
-    expect(boardStyles(USER).get('T1')).toEqual({ paper: null, pin: null });
-    expect(boardStyles(USER).get('T2')).toEqual({ paper: 'pink', pin: null });
+    expect(boardStyles(USER).get('T1')).toEqual({ paper: null, pin: null, pinShape: null });
+    expect(boardStyles(USER).get('T2')).toEqual({ paper: 'pink', pin: null, pinShape: 'heart' });
   });
 });
