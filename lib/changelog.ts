@@ -13,6 +13,18 @@ export interface Release {
 /** Newest first. A new release is one more entry at the top. */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-28-dark-dracula',
+    date: '2026-10-28',
+    title: 'Dracula de volta, mais escuro',
+    items: [
+      {
+        title: 'Dark Dracula',
+        detail:
+          'O fundo Dracula voltou para Configurações e para a busca. Agora ele segue o tema Dark Dracula do VS Code: as cores do Dracula sobre um cinza neutro, mais escuro que o azulado de antes. Como antes, só vale no tema escuro.',
+      },
+    ],
+  },
+  {
     id: '2026-10-27-autores-github',
     date: '2026-10-27',
     title: 'Acompanhe só quem importa no GitHub',

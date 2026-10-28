@@ -9,6 +9,9 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Changed
+- The Dracula background now follows the "Dark Dracula" VS Code theme: the
+  Dracula accents and text on a neutral grey base (#202020, line highlight
+  #353535) instead of the official blue-grey #282a36.
 - The board's notes and pins are drawn like a cartoon instead of a photo:
   flat paper with an ink outline and a hard offset shadow, a flat folded
   corner, and the note title in a handwriting face (Patrick Hand, served by
@@ -275,6 +278,9 @@ Only `main` is maintained; there are no release branches.
   `components/data/EmptyState`.
 
 ### Fixed
+- Dracula is back under "Fundo" in Configuração and in the search. It was
+  left out when the appearance moved there from the account menu, which only
+  shows it on a phone now, so on a computer it could no longer be picked.
 - Empty states (no tasks, no notes, nothing in a panel) no longer show as a
   black box inside the cards in the dark theme: they use the same translucent,
   dashed well as an empty column of the tasks board.

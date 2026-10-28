@@ -42,7 +42,8 @@ const DENSITY_OPTIONS: { value: Density; label: string }[] = [
 const BACKDROP_OPTIONS: { value: Backdrop; label: string }[] = [
   { value: 'mesh', label: 'Gradiente' },
   { value: 'catppuccin', label: 'Catppuccin' },
-  // Only remaps the dark theme, so the hint keeps a light-theme pick from looking broken.
+  // Only remap the dark theme, so the hint keeps a light-theme pick from looking broken.
+  { value: 'dracula', label: 'Dracula (só no tema escuro)' },
   { value: 'wezterm', label: 'WezTerm (só no tema escuro)' },
 ];
 
