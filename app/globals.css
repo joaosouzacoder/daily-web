@@ -511,25 +511,27 @@
   --postit-ink-mid: var(--ctp-base);
 }
 
-/* Dracula, dark theme only. The official palette names one background and one
-   "current line"; the darker and lighter surfaces fill the other surface
-   steps. Comment (#6272a4) is 3:1 on the background, too dim for text, so it
-   only draws strong lines and the top surface; the two dimmer text tones are
-   lightened from it and from Foreground to stay at least 4.5:1 on surface-0
-   to surface-2, where body text sits (#a4add0 drops to 4.13:1 on Current
-   Line). Unlike Catppuccin there is no light base: on a light page the mesh
-   stays, since Dracula is a dark palette. The mapping is written twice, as
-   the dark theme is (system preference and explicit choice). */
+/* Dracula, dark theme only, in its "Dark Dracula" cut (the VS Code theme
+   gerane.Theme-Dark-Dracula): the official accents and foreground on a
+   neutral grey base instead of the official blue-grey #282a36. The page is
+   the theme's background #202020, current line is its line highlight #353535
+   and the top surface its selection #44475a; the other steps are greys around
+   them. Comment (#6272a4) is 3:1 on the base, too dim for text, so it only
+   draws strong lines; the dim text tone is lightened from it to stay at least
+   4.5:1 on surface-0 to surface-3, and the mid tone is the theme's #cfcfc2.
+   Unlike Catppuccin there is no light base: on a light page the mesh stays,
+   since Dracula is a dark palette. The mapping is written twice, as the dark
+   theme is (system preference and explicit choice). */
 :root[data-backdrop='dracula'] {
-  --drc-darkest: oklch(0.22 0.014 278.803); /* #191a21 */
-  --drc-darker: oklch(0.255 0.019 280.488); /* #21222c */
-  --drc-background: oklch(0.288 0.022 277.509); /* #282a36 */
-  --drc-surface: oklch(0.34 0.027 276.046); /* #343746 */
-  --drc-current-line: oklch(0.403 0.032 277.832); /* #44475a */
-  --drc-surface-high: oklch(0.473 0.036 276.867); /* #565a70 */
+  --drc-darkest: oklch(0.2 0 0); /* #161616 */
+  --drc-darker: oklch(0.218 0 0); /* #1a1a1a */
+  --drc-background: oklch(0.244 0 0); /* #202020 */
+  --drc-surface: oklch(0.285 0 0); /* #2a2a2a */
+  --drc-current-line: oklch(0.329 0 0); /* #353535 */
+  --drc-surface-high: oklch(0.403 0.032 277.832); /* #44475a */
   --drc-comment: oklch(0.56 0.08 270.086); /* #6272a4 */
   --drc-foreground-dim: oklch(0.752 0.051 273.789); /* #a4add0 */
-  --drc-foreground-mid: oklch(0.868 0.008 106.568); /* #d4d4ce */
+  --drc-foreground-mid: oklch(0.851 0.018 106.769); /* #cfcfc2 */
   --drc-foreground: oklch(0.977 0.008 106.545); /* #f8f8f2 */
   --drc-purple: oklch(0.742 0.149 301.883); /* #bd93f9 */
   --drc-pink: oklch(0.755 0.183 346.812); /* #ff79c6 */
@@ -562,7 +564,7 @@
     --line: var(--drc-current-line);
     --line-soft: var(--drc-surface);
     --line-strong: var(--drc-comment);
-    --glass-line: oklch(0.403 0.032 277.832 / 70%);
+    --glass-line: oklch(0.329 0 0 / 70%);
 
     --brand: var(--drc-purple);
     --brand-ink: var(--drc-darkest);
@@ -614,7 +616,7 @@
   --line: var(--drc-current-line);
   --line-soft: var(--drc-surface);
   --line-strong: var(--drc-comment);
-  --glass-line: oklch(0.403 0.032 277.832 / 70%);
+  --glass-line: oklch(0.329 0 0 / 70%);
 
   --brand: var(--drc-purple);
   --brand-ink: var(--drc-darkest);
