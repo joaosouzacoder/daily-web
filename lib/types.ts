@@ -319,6 +319,8 @@ export type ProviderTask = Omit<TodoTask, 'doing' | 'paper' | 'pin' | 'pinShape'
 
 /** How the tasks panel is laid out: the grouped list, or the kanban board. */
 export type TasksView = 'list' | 'board';
+/** How the home page arranges the panels: the grid, or tabs in a Trellis workspace. */
+export type HomeView = 'grid' | 'workspace';
 
 /** Uma aba do bloco de notas. Vive no servidor, então acompanha o usuário
  *  entre máquinas. */
@@ -424,6 +426,8 @@ export interface DashboardState {
   agendaCalendars: AgendaCalendarRef[];
   /** Whether the tasks panel shows the list or the board. Each user's choice. */
   tasksView: TasksView;
+  /** Whether the home page draws the grid or the workspace. Each user's choice. */
+  homeView: HomeView;
   /** Disposição única, de antes de existir gravação por tamanho de tela.
    *  Vale enquanto `layouts` estiver vazio. */
   layout: { i: string; x: number; y: number; w: number; h: number }[];

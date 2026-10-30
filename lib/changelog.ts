@@ -13,6 +13,18 @@ export interface Release {
 /** Newest first. A new release is one more entry at the top. */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-30-abas-no-inicio',
+    date: '2026-10-30',
+    title: 'Abas no Início',
+    items: [
+      {
+        title: 'Grade ou abas, você escolhe',
+        detail:
+          'O que estava na Teste Home agora fica no próprio Início. Acima dos painéis, escolha Grade, como sempre foi, ou Abas, em que você arrasta os painéis para dividir, agrupar ou soltar. A escolha fica salva na sua conta.',
+      },
+    ],
+  },
+  {
     id: '2026-10-30-teste-home',
     date: '2026-10-30',
     title: 'Teste Home',

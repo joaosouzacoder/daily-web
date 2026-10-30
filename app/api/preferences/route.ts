@@ -4,8 +4,10 @@ import { isAgendaRange } from '@/lib/agendaWindow';
 import { parseLayout, putSizedLayout } from '@/lib/dashboardLayout';
 import {
   dashboardLayouts,
+  isHomeView,
   isTasksView,
   setAgendaDays,
+  setHomeView,
   setTasksView,
   setDashboardLayout,
   setDashboardLayouts,
@@ -114,6 +116,17 @@ export async function PATCH(request: NextRequest) {
     setTasksView(userId, view);
     patchCachedState(userId, (state) => ({ ...state, tasksView: view }));
     return NextResponse.json({ tasksView: view });
+  }
+
+  // Same as the tasks view: the panels stay, only how the home page arranges them changes.
+  if ('homeView' in body) {
+    if (!isHomeView(body.homeView)) {
+      return NextResponse.json({ error: 'visualização do início inválida' }, { status: 400 });
+    }
+    const view = body.homeView;
+    setHomeView(userId, view);
+    patchCachedState(userId, (state) => ({ ...state, homeView: view }));
+    return NextResponse.json({ homeView: view });
   }
 
   // Only how the page looks: nothing on the dashboard changes, so no cache to patch.

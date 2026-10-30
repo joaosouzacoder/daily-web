@@ -20,6 +20,7 @@ import {
   jiraWatchedKeys,
   jiraFollowedPeople,
   tasksView,
+  homeView,
 } from './preferences';
 import type { Connection } from './vault/connections';
 import { fetchSlack, SlackDigestError } from './integrations/slack/digest';
@@ -371,6 +372,7 @@ async function buildState(
     agendaDays: days,
     agendaCalendars,
     tasksView: tasksView(userId),
+    homeView: homeView(userId),
     layout: dashboardLayout(userId),
     layouts: dashboardLayouts(userId),
     email: emailReconciliado,

@@ -145,6 +145,28 @@ describe('visualização das tarefas', () => {
   });
 });
 
+describe('disposição do Início', () => {
+  it('começa na grade e grava as abas para o usuário logado', async () => {
+    const { homeView } = await import('@/lib/preferences');
+    expect(homeView('u-1')).toBe('grid');
+
+    const res = await route(req({ homeView: 'workspace' }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ homeView: 'workspace' });
+    expect(homeView('u-1')).toBe('workspace');
+    expect(homeView('u-2')).toBe('grid');
+  });
+
+  it('recusa uma disposição que o Início não oferece', async () => {
+    for (const homeView of ['abas', true, null]) {
+      const res = await route(req({ homeView }));
+      expect(res.status, String(homeView)).toBe(400);
+    }
+    const { homeView } = await import('@/lib/preferences');
+    expect(homeView('u-1')).toBe('grid');
+  });
+});
+
 describe('aparência', () => {
   it('grava só o que veio e devolve o que está guardado', async () => {
     const res = await route(req({ appearance: { width: 'limited' } }));

@@ -109,6 +109,7 @@ function state(over: Partial<DashboardState> = {}): DashboardState {
     agendaDays: 2,
     agendaCalendars: [],
     tasksView: 'list',
+    homeView: 'grid',
     layout: [],
     layouts: [],
     email: { data: [], error: null },

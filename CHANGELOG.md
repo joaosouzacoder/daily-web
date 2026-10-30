@@ -9,6 +9,12 @@ Only `main` is maintained; there are no release branches.
 ## [Unreleased]
 
 ### Added
+- The home page can draw its panels as tabs: a **Grade | Abas** switch above
+  them picks the grid (the default) or the Trellis workspace, saved on the
+  account as the `homeView` preference (`PATCH /api/preferences`, `grid` or
+  `workspace`, anything else is a 400). "Restaurar abas" clears that browser's
+  tab arrangement. The Teste Home menu item is gone and `/teste-home`
+  redirects to `/`; tab arrangements saved there are kept.
 - A "Teste Home" page (`/teste-home`, in the header) that draws the home
   panels in a Trellis workspace (`@danfessler/trellis` and
   `@danfessler/trellis-react` 0.3.0, non-commercial license): one tab per

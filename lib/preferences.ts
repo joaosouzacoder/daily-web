@@ -9,7 +9,7 @@ import {
 } from './dashboardLayout';
 import type { PanelPlacement, SizedLayout } from './dashboardLayout';
 import { isJiraAccountId } from './jiraAccount';
-import type { JiraPerson, TasksView } from './types';
+import type { HomeView, JiraPerson, TasksView } from './types';
 import { isJiraKey } from './jiraKey';
 import type { WelcomeKind } from './greeting';
 import {
@@ -27,6 +27,7 @@ export const AGENDA_DAYS = 'agendaDays';
 export const DASHBOARD_LAYOUT = 'dashboardLayout';
 export const DASHBOARD_LAYOUTS = 'dashboardLayouts';
 export const TASKS_VIEW = 'tasksView';
+export const HOME_VIEW = 'homeView';
 export const LOGIN_COUNT = 'loginCount';
 export const APPEARANCE_KEYS = {
   theme: 'theme',
@@ -78,6 +79,20 @@ export function tasksView(userId: string): TasksView {
 
 export function setTasksView(userId: string, view: TasksView): void {
   setPreference(userId, TASKS_VIEW, view);
+}
+
+export function isHomeView(value: unknown): value is HomeView {
+  return value === 'grid' || value === 'workspace';
+}
+
+/** The grid stays the default; the workspace is opt-in, chosen on the home page. */
+export function homeView(userId: string): HomeView {
+  const stored = read(userId, HOME_VIEW);
+  return isHomeView(stored) ? stored : 'grid';
+}
+
+export function setHomeView(userId: string, view: HomeView): void {
+  setPreference(userId, HOME_VIEW, view);
 }
 
 /** Disposição dos painéis na grade. Um JSON ilegível — de uma versão antiga

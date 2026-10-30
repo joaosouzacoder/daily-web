@@ -7,10 +7,13 @@ import { useShellUser } from '@/components/shell/ShellUser';
 import { NowBand } from '@/components/NowBand';
 import { FocusBlockProvider } from '@/components/FocusBlockProvider';
 import { DashboardGrid } from '@/components/DashboardGrid';
+import { HomeViewSwitch } from '@/components/dashboard/HomeViewSwitch';
+import { WorkspaceHome, clearWorkspaceLayout } from '@/components/dashboard/WorkspaceHome';
+import type { HomeView } from '@/lib/types';
 import { EmptyState } from '@/components/data/EmptyState';
 import { ErrorState } from '@/components/data/ErrorState';
 import { Button } from '@/components/ui/button';
-import { Plug } from 'lucide-react';
+import { Plug, RotateCcw } from 'lucide-react';
 import {
   defaultLayout,
   nearestLayout,
@@ -22,6 +25,10 @@ export default function DashboardPage() {
   const { state, reload, mutate, nothingOn, panels } = useDashboardPanels();
   const { greetingName, welcome } = useShellUser();
   const [layoutError, setLayoutError] = useState<string | null>(null);
+  const [viewError, setViewError] = useState<string | null>(null);
+  // A cached state from before this preference existed has no homeView.
+  const view: HomeView = state?.homeView ?? 'grid';
+  const [workspaceGeneration, setWorkspaceGeneration] = useState(0);
   const layouts = (state?.layouts as SizedLayout[] | undefined) ?? [];
   const legado = (state?.layout as PanelPlacement[] | undefined) ?? defaultLayout();
 
@@ -66,6 +73,31 @@ export default function DashboardPage() {
     [mutate, reload],
   );
 
+  // The switch answers at once; the server only remembers the choice, and a
+  // failure says so and brings back what is saved.
+  const chooseView = useCallback(
+    async (next: HomeView) => {
+      if (next === view) return;
+      mutate((s) => ({ ...s, homeView: next }));
+      setViewError(null);
+      const res = await fetch('/api/preferences', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ homeView: next }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setViewError(data.error ?? 'Falha ao guardar a disposição do Início');
+        reload();
+      }
+    },
+    [view, mutate, reload],
+  );
+
+  const resetWorkspace = () => {
+    clearWorkspaceLayout();
+    setWorkspaceGeneration((g) => g + 1);
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -77,6 +109,19 @@ export default function DashboardPage() {
       />
 
       {layoutError && <ErrorState title="Não deu para guardar a disposição" description={layoutError} />}
+      {viewError && <ErrorState title="Não deu para trocar a disposição" description={viewError} />}
+
+      {state !== null && !nothingOn && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <HomeViewSwitch view={view} onChange={(next) => void chooseView(next)} />
+          {view === 'workspace' && (
+            <Button variant="outline" size="sm" onClick={resetWorkspace}>
+              <RotateCcw className="size-4" />
+              Restaurar abas
+            </Button>
+          )}
+        </div>
+      )}
 
       {nothingOn ? (
         <EmptyState
@@ -89,6 +134,12 @@ export default function DashboardPage() {
             </Button>
           }
         />
+      ) : view === 'workspace' ? (
+        state !== null && (
+          <FocusBlockProvider calendars={state.agendaCalendars ?? []} onCreated={reload}>
+            <WorkspaceHome panels={panels} generation={workspaceGeneration} />
+          </FocusBlockProvider>
+        )
       ) : layout === null ? null : (
         <FocusBlockProvider calendars={state?.agendaCalendars ?? []} onCreated={reload}>
           <DashboardGrid layout={layout} panels={panels} onSave={saveLayout} />
