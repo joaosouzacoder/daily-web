@@ -14,7 +14,7 @@
     "build:oauth": "tsc -p tsconfig.oauth.json && node scripts/build-oauth.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.135.0",
+    "@anthropic-ai/sdk": "^1.3.0",
     "@danfessler/trellis": "0.3.0",
     "@danfessler/trellis-react": "0.3.0",
     "@modelcontextprotocol/server": "2.4.0",
