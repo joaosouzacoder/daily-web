@@ -1103,6 +1103,40 @@
   box-shadow: var(--elevation-5);
 }
 
+/* The home page's tabs (Trellis) take the app's theme instead of their own:
+   the page backdrop shows in the gaps and panels are the same glass cards as
+   the grid's, so every background (Gradiente, Catppuccin, Dracula, WezTerm)
+   and the light and dark themes carry over. Trellis's own rules sit in
+   :where(), so this selector wins without !important. */
+.home-workspace .trellis {
+  --trellis-bg: transparent;
+  --trellis-stage: transparent;
+  --trellis-panel: var(--card);
+  --trellis-tabbar: transparent;
+  --trellis-tab-hover: var(--accent);
+  --trellis-tab-active: var(--glass-strong);
+  --trellis-text: var(--foreground);
+  --trellis-text-muted: var(--muted-foreground);
+  --trellis-border: var(--border);
+  --trellis-accent: var(--primary);
+  --trellis-accent-contrast: var(--primary-foreground);
+  --trellis-slot: var(--brand-tint);
+  --trellis-menu: var(--popover);
+  --trellis-menu-hover: var(--accent);
+  --trellis-shadow-float: var(--elevation-4);
+  --trellis-shadow-lifted: var(--elevation-5);
+  --trellis-focus-ring: 0 0 0 2px var(--ring);
+  --trellis-radius: calc(var(--radius) + 5px);
+  --trellis-font: var(--font-sans);
+  --trellis-font-size: 0.8125rem;
+  --trellis-gap: 0.75rem;
+}
+.home-workspace .trellis [data-trellis-part='panel'] {
+  border: 1px solid var(--border);
+  box-shadow: var(--elevation-2);
+  backdrop-filter: blur(24px) saturate(150%);
+}
+
 /* O retângulo que mostra onde o painel vai cair. */
 .react-grid-item.react-grid-placeholder {
   background: var(--brand-tint);

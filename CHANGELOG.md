@@ -15,6 +15,11 @@ Only `main` is maintained; there are no release branches.
   `workspace`, anything else is a 400). "Restaurar abas" clears that browser's
   tab arrangement. The Teste Home menu item is gone and `/teste-home`
   redirects to `/`; tab arrangements saved there are kept.
+- The home page's tabs follow the app's theme: Trellis's colour tokens map to
+  the app's (`--card`, `--border`, `--primary`, `--popover`…), the page
+  background shows in the gaps, and each panel is the same glass card as on the
+  grid, so every background and the light and dark themes carry over. Panels
+  inside a tab are framed like the grid's and no longer draw a second card.
 - A "Teste Home" page (`/teste-home`, in the header) that draws the home
   panels in a Trellis workspace (`@danfessler/trellis` and
   `@danfessler/trellis-react` 0.3.0, non-commercial license): one tab per

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Workspace, ViewType, layout as L, type WorkspaceHandle } from '@danfessler/trellis-react';
 import '@danfessler/trellis/style.css';
 import type { DashboardPanel } from '@/components/dashboard/useDashboardPanels';
+import { PanelFrame } from '@/components/data/Panel';
 
 // Named after the Teste Home page where this view was first tried: renaming it
 // would drop the arrangements already saved in those browsers.
@@ -95,7 +96,7 @@ export function WorkspaceHome({ panels, generation }: Props) {
   );
 
   return (
-    <div className="h-[calc(100dvh-14rem)] min-h-[480px] overflow-hidden rounded-xl border">
+    <div className="home-workspace h-[calc(100dvh-14rem)] min-h-[480px]">
       <Workspace
         key={`${generation}:${panelIds}`}
         ref={openMissing}
@@ -109,7 +110,11 @@ export function WorkspaceHome({ panels, generation }: Props) {
       >
         {panels.map((panel) => (
           <ViewType key={panel.id} id={panel.id} title={TITLES[panel.id] ?? panel.id} singleton closable={false}>
-            <div className="h-full overflow-auto p-2">{panel.node}</div>
+            {/* Framed like the grid's panels: the tab is the card, so the panel
+                drops its own and the two do not stack. */}
+            <div className="flex h-full min-w-0 flex-col overflow-hidden">
+              <PanelFrame>{panel.node}</PanelFrame>
+            </div>
           </ViewType>
         ))}
       </Workspace>
