@@ -31,13 +31,22 @@ vi.mock('next/navigation', async () => {
 // modo de organizar liga, o que é passado para a grade e o que acontece numa
 // tela estreita.
 const props: Record<string, unknown>[] = [];
-vi.mock('react-grid-layout', () => ({
+// A grade de verdade emite a disposição num efeito ao montar e a cada troca de
+// `layout`. Os testes que precisam disso ligam este interruptor.
+const grade = vi.hoisted(() => ({ emiteAoMontar: false }));
+vi.mock('react-grid-layout', async () => {
+  const { useEffect } = await import('react');
+  return {
   default: (p: Record<string, unknown>) => {
     props.push(p);
+    useEffect(() => {
+      if (grade.emiteAoMontar) (p.onLayoutChange as (l: unknown) => void)(p.layout);
+    }, [p.layout]);
     return <div data-testid="grade">{p.children as React.ReactNode}</div>;
   },
   useContainerWidth: () => ({ width: 1440, mounted: true, containerRef: { current: null } }),
-}));
+  };
+});
 
 import { DashboardGrid } from '@/components/DashboardGrid';
 import { defaultLayout } from '@/lib/dashboardLayout';
@@ -58,6 +67,7 @@ function larguraDaJanela(px: number) {
 
 beforeEach(() => {
   props.length = 0;
+  grade.emiteAoMontar = false;
   nav.search = '';
   nav.history = [];
   larguraDaJanela(1440);
@@ -653,5 +663,22 @@ describe('salvar para esta tela', () => {
     expect(screen.getByRole('status')).toHaveTextContent(
       `${window.innerWidth} × ${window.innerHeight}`,
     );
+  });
+});
+
+describe('a disposição que chega depois da montagem', () => {
+  // Na volta para a tela inicial a grade monta com uma disposição e recebe a
+  // gravada logo em seguida. A emissão da montagem não pode virar rascunho.
+  it('segue a disposição nova em vez de prender a da montagem', () => {
+    grade.emiteAoMontar = true;
+    const antiga = defaultLayout();
+    const gravada = antiga.map((p) => ({ ...p, x: p.x === 0 ? 1 : 0 }));
+    const { rerender } = render(<DashboardGrid layout={antiga} panels={painéis} onSave={() => {}} />);
+    rerender(<DashboardGrid layout={gravada} panels={painéis} onSave={() => {}} />);
+
+    const mostrada = (ultimasProps().layout as { i: string; x: number }[]).map(({ i, x }) => ({ i, x }));
+    const esperada = gravada.filter((p) => ['email', 'jira'].includes(p.i)).map(({ i, x }) => ({ i, x }));
+    expect(mostrada).toEqual(esperada);
+    expect(screen.queryByRole('button', { name: /Salvar/ })).toBeNull();
   });
 });

@@ -103,24 +103,22 @@ export function DashboardGrid({ layout, panels, onSave }: Props) {
   // A grade emite mudança também ao montar e ao medir a largura. Tratar isso
   // como edição marcaria a disposição como mexida sem ninguém ter arrastado.
   //
-  // A comparação usa `serializeLayout` dos dois lados: comparar JSON.stringify
-  // direto dava diferença por ordem de chaves — o objeto vindo da grade e o
-  // do estado têm os mesmos valores em ordem distinta — e toda montagem
-  // parecia uma mudança.
-  const ultimo = useRef<string>('');
-  useEffect(() => {
-    ultimo.current = serializeLayout(layoutFor(layout, panelIds.split(',')));
-  }, [layout, panelIds]);
+  // A comparação é com o que esta renderização entregou à grade, capturado no
+  // próprio callback. Um ref atualizado por efeito chegava tarde: o efeito da
+  // grade (filho) roda antes do nosso, então ao voltar para a tela inicial a
+  // emissão da montagem virava rascunho e prendia a disposição antiga.
+  //
+  // Os dois lados passam por `serializeLayout`: comparar JSON.stringify direto
+  // dava diferença por ordem de chaves e toda montagem parecia uma mudança.
+  const mostrado = useMemo(() => serializeLayout(visible), [visible]);
 
   const handleChange = useCallback(
     (next: Layout) => {
       const limpo = parseLayout(next);
-      const serializado = serializeLayout(layoutFor(limpo, panelIds.split(',')));
-      if (serializado === ultimo.current) return;
-      ultimo.current = serializado;
+      if (serializeLayout(layoutFor(limpo, panelIds.split(','))) === mostrado) return;
       setRascunho(limpo);
     },
-    [panelIds],
+    [panelIds, mostrado],
   );
 
   const salvar = async () => {

@@ -8,6 +8,14 @@ Only `main` is maintained; there are no release branches.
 
 ## [Unreleased]
 
+### Fixed
+- Going back to the home page without a full reload no longer loses the panel
+  arrangement saved for the window size. The grid mounted with the old single
+  layout and its mount-time change was taken for an edit, which pinned that
+  layout as an unsaved draft. The home page now waits for the window size
+  before drawing the grid, and the grid compares changes with what it was given
+  in that same render.
+
 ### Changed
 - The Dracula background now follows the "Dark Dracula" VS Code theme: the
   Dracula accents and text on a neutral grey base (#202020, line highlight

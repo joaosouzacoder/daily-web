@@ -65,8 +65,11 @@ export default function DashboardPage() {
     return () => window.removeEventListener('resize', medir);
   }, []);
 
+  // Sem a medida não há disposição: a grade montaria com a antiga e trocaria
+  // logo depois. Na volta para a tela inicial o estado já está carregado, e
+  // essa troca aparecia como os painéis perdendo o lugar.
   const layout = useMemo(() => {
-    if (!janela) return legado;
+    if (!janela) return null;
     return nearestLayout(layouts, janela.width, janela.height)?.layout ?? legado;
   }, [layouts, legado, janela]);
 
@@ -207,7 +210,7 @@ export default function DashboardPage() {
             </Button>
           }
         />
-      ) : (
+      ) : layout === null ? null : (
         <FocusBlockProvider calendars={state?.agendaCalendars ?? []} onCreated={reload}>
           <DashboardGrid layout={layout} panels={panels} onSave={saveLayout} />
         </FocusBlockProvider>
