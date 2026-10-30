@@ -24,14 +24,14 @@ function header() {
 }
 
 describe('Header navigation', () => {
-  it('links Início, Kanban and Ferramentas, and no longer Agentes', () => {
+  it('links Início, Kanban, Ferramentas and Teste Home, and no longer Agentes', () => {
     render(header());
 
     const nav = screen.getByRole('navigation', { name: 'Principal' });
     const labels = within(nav)
       .getAllByRole('link')
       .map((link) => link.getAttribute('aria-label'));
-    expect(labels).toEqual(['Início', 'Kanban', 'Ferramentas']);
+    expect(labels).toEqual(['Início', 'Kanban', 'Ferramentas', 'Teste Home']);
     expect(within(nav).queryByRole('link', { name: 'Agentes' })).toBeNull();
   });
 

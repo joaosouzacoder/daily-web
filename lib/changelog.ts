@@ -13,6 +13,18 @@ export interface Release {
 /** Newest first. A new release is one more entry at the top. */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-30-teste-home',
+    date: '2026-10-30',
+    title: 'Teste Home',
+    items: [
+      {
+        title: 'Os painéis do Início, em abas',
+        detail:
+          'Uma tela de teste no menu: os mesmos painéis do Início viram abas que você arrasta para dividir, agrupar ou soltar. A disposição fica salva no navegador, e o Início continua como estava.',
+      },
+    ],
+  },
+  {
     id: '2026-10-28-dark-dracula',
     date: '2026-10-28',
     title: 'Dracula de volta, mais escuro',

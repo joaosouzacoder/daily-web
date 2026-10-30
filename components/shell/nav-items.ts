@@ -1,4 +1,4 @@
-import { Columns3, House, KeyRound, Plug, Settings2 } from 'lucide-react';
+import { Columns3, House, KeyRound, LayoutPanelLeft, Plug, Settings2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 /** Where an item is reachable: in the desktop header, or only from the mobile menu, the palette and the places that link to it. */
@@ -17,6 +17,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/', label: 'Início', icon: House, placement: 'header' },
   { href: '/kanban', label: 'Kanban', icon: Columns3, placement: 'header' },
   { href: '/tools', label: 'Ferramentas', icon: Plug, placement: 'header' },
+  { href: '/teste-home', label: 'Teste Home', icon: LayoutPanelLeft, placement: 'header' },
   {
     href: '/access',
     label: 'Acesso dos agentes',

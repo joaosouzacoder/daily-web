@@ -202,6 +202,15 @@ Panels have a fixed height on the grid and scroll internally, which is what
 makes resizing mean anything. Below 1024px the grid gives way to a single
 column in the order the panels are arranged.
 
+### Teste Home
+
+**Teste Home**, in the header, is an experiment: the same panels in a
+[Trellis](https://trellisui.com/) workspace instead of the grid. Each module is
+a tab that can be dragged to split, group or float it. The arrangement is saved
+in the browser (`localStorage`), not on the account, and **Restaurar
+disposição** on that page brings back the two-column default. The home page is
+unchanged.
+
 ## Installing as an app
 
 The page ships a manifest and a service worker, so Chrome offers **Install**
@@ -301,6 +310,11 @@ research, nonprofits and public institutions; commercial use is not permitted.
 
 This is **not an open source license** in the OSI sense, which does not allow
 field-of-use restrictions. It is source-available.
+
+The Teste Home page uses [Trellis](https://github.com/DanFessler/trellis) by
+Dan Fessler (`@danfessler/trellis`, `@danfessler/trellis-react`), under the
+Trellis Public License v1.0 — Non-Commercial. Its license files ship with the
+packages in `node_modules/@danfessler/`.
 
 
 ## Agent workspace and MCP

@@ -8,6 +8,16 @@ Only `main` is maintained; there are no release branches.
 
 ## [Unreleased]
 
+### Added
+- A "Teste Home" page (`/teste-home`, in the header) that draws the home
+  panels in a Trellis workspace (`@danfessler/trellis` and
+  `@danfessler/trellis-react` 0.3.0, non-commercial license): one tab per
+  module that can be dragged to split, group or float, saved per browser in
+  `localStorage`, with a button to restore the default two columns. A module
+  turned on after the layout was saved opens on its own; one the person hid
+  stays hidden. The home page's panels move to `useDashboardPanels` so both
+  pages draw the same ones.
+
 ### Fixed
 - Going back to the home page without a full reload no longer loses the panel
   arrangement saved for the window size. The grid mounted with the old single
